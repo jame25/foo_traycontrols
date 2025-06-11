@@ -1,0 +1,566 @@
+// tray_manager.cpp - Implementation of the system tray functionality
+
+#include "stdafx.h"
+#include "tray_manager.h"
+#include "resource.h"
+#include "preferences.h"
+
+// External declaration from main.cpp
+extern HINSTANCE g_hIns;
+
+// Tray icon message constants
+const UINT WM_TRAYICON = WM_USER + 1;
+const UINT TRAY_ID = 1;
+
+// Menu command IDs
+const UINT IDM_PLAY = 1001;
+const UINT IDM_PAUSE = 1002;
+const UINT IDM_PREV = 1003;
+const UINT IDM_NEXT = 1004;
+const UINT IDM_RESTORE = 1005;
+const UINT IDM_UPDATE_TOOLTIP = 1006;
+const UINT IDM_EXIT = 1007;
+
+// Static instance
+tray_manager* tray_manager::s_instance = nullptr;
+
+tray_manager& tray_manager::get_instance() {
+    if (!s_instance) {
+        s_instance = new tray_manager();
+    }
+    return *s_instance;
+}
+
+tray_manager::tray_manager() 
+    : m_main_window(nullptr)
+    , m_tray_window(nullptr)
+    , m_tray_added(false)
+    , m_initialized(false)
+    , m_was_visible(true)
+    , m_was_minimized(false)
+    , m_processing_minimize(false)
+    , m_original_wndproc(nullptr)
+{
+    memset(&m_nid, 0, sizeof(m_nid));
+}
+
+tray_manager::~tray_manager() {
+    cleanup();
+}
+
+void tray_manager::initialize() {
+    if (m_initialized) return;
+    
+    // Find foobar2000 main window
+    m_main_window = find_main_window();
+    
+    if (!m_main_window) {
+        m_initialized = true;
+        return;
+    }
+
+    // Create hidden window for tray messages
+    if (!create_tray_window()) {
+        m_initialized = true;
+        return;
+    }
+
+    // Set up tray icon
+    m_nid.cbSize = sizeof(NOTIFYICONDATA);
+    m_nid.hWnd = m_tray_window;  // Use our dedicated window
+    m_nid.uID = TRAY_ID;
+    m_nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
+    m_nid.uCallbackMessage = WM_TRAYICON;
+    // Try to load our custom icon first, fallback to default if it fails
+    m_nid.hIcon = LoadIcon(g_hIns, MAKEINTRESOURCE(IDI_TRAY_ICON));
+    if (!m_nid.hIcon) {
+        // Fallback to default application icon
+        m_nid.hIcon = LoadIcon(nullptr, IDI_APPLICATION);
+    }
+    wcscpy_s(m_nid.szTip, L"foobar2000 - Tray Controls");
+
+    // Add tray icon immediately - always visible
+    Shell_NotifyIcon(NIM_ADD, &m_nid);
+    m_tray_added = true;
+
+    // Use window subclassing for minimize detection only
+    m_original_wndproc = (WNDPROC)SetWindowLongPtr(m_main_window, GWLP_WNDPROC, (LONG_PTR)window_proc);
+    
+    
+    // Store the initial window state
+    m_was_visible = IsWindowVisible(m_main_window);
+    m_was_minimized = IsIconic(m_main_window);
+
+    // Try to get current playing track for initial tooltip
+    try {
+        static_api_ptr_t<playback_control> pc;
+        if (pc->is_playing()) {
+            metadb_handle_ptr track;
+            if (pc->get_now_playing(track) && track.is_valid()) {
+                update_tooltip(track);
+            } else {
+                // If no track info available, show playback state
+                update_playback_state("Playing");
+            }
+        } else {
+            // Not playing, show stopped state
+            update_playback_state("Stopped");
+        }
+    } catch (...) {
+        // Keep default tooltip if anything fails
+    }
+
+    // Start timer to periodically check for track changes and window visibility (every 500ms)
+    if (m_tray_window) {
+        SetTimer(m_tray_window, TOOLTIP_TIMER_ID, 500, tooltip_timer_proc);
+    }
+
+    m_initialized = true;
+}
+
+void tray_manager::cleanup() {
+    // Kill the tooltip update timer
+    if (m_tray_window) {
+        KillTimer(m_tray_window, TOOLTIP_TIMER_ID);
+    }
+    
+    if (m_tray_added) {
+        Shell_NotifyIcon(NIM_DELETE, &m_nid);
+        m_tray_added = false;
+    }
+    
+    if (m_main_window && m_original_wndproc) {
+        SetWindowLongPtr(m_main_window, GWLP_WNDPROC, (LONG_PTR)m_original_wndproc);
+        m_original_wndproc = nullptr;
+    }
+    
+    if (m_tray_window) {
+        DestroyWindow(m_tray_window);
+        m_tray_window = nullptr;
+    }
+    
+    m_initialized = false;
+}
+
+bool tray_manager::create_tray_window() {
+    // Register window class
+    WNDCLASSEX wcex = {0};
+    wcex.cbSize = sizeof(WNDCLASSEX);
+    wcex.lpfnWndProc = tray_window_proc;
+    wcex.hInstance = g_hIns;
+    wcex.lpszClassName = L"TrayControlsWindow";
+    
+    RegisterClassEx(&wcex);
+    
+    // Create hidden window
+    m_tray_window = CreateWindowEx(
+        0,
+        L"TrayControlsWindow",
+        L"Tray Controls",
+        0,
+        0, 0, 0, 0,
+        HWND_MESSAGE,  // Message-only window
+        nullptr,
+        g_hIns,
+        nullptr);
+        
+    return m_tray_window != nullptr;
+}
+
+void tray_manager::update_tooltip(metadb_handle_ptr p_track) {
+    if (!m_initialized || !p_track.is_valid()) {
+        // Default tooltip if no valid track
+        wcscpy_s(m_nid.szTip, L"foobar2000 - No Track");
+        if (m_tray_added) {
+            Shell_NotifyIcon(NIM_MODIFY, &m_nid);
+        }
+        return;
+    }
+    
+    try {
+        // Get track info
+        file_info_impl info;
+        p_track->get_info(info);
+        
+        // Build tooltip string with artist and title
+        pfc::string8 artist, title, tooltip;
+        if (info.meta_exists("ARTIST")) {
+            artist = info.meta_get("ARTIST", 0);
+        }
+        if (info.meta_exists("TITLE")) {
+            title = info.meta_get("TITLE", 0);
+        }
+        
+        if (!artist.is_empty() && !title.is_empty()) {
+            tooltip = artist;
+            tooltip += " - ";
+            tooltip += title;
+        } else if (!title.is_empty()) {
+            tooltip = title;
+        } else {
+            // Use filename if no metadata
+            tooltip = p_track->get_path();
+            const char* filename = strrchr(tooltip.get_ptr(), '\\');
+            if (filename) {
+                tooltip = filename + 1;
+            } else {
+                tooltip = "Unknown Track";
+            }
+        }
+        
+        // Ensure we have some text
+        if (tooltip.is_empty()) {
+            tooltip = "foobar2000 - Playing";
+        }
+        
+        // Convert to wide string and update tooltip
+        pfc::stringcvt::string_wide_from_utf8 wide_tooltip(tooltip.get_ptr());
+        wcscpy_s(m_nid.szTip, wide_tooltip.get_ptr());
+        
+        if (m_tray_added) {
+            Shell_NotifyIcon(NIM_MODIFY, &m_nid);
+        }
+    }
+    catch (...) {
+        // Fallback tooltip
+        wcscpy_s(m_nid.szTip, L"foobar2000 - Error");
+        if (m_tray_added) {
+            Shell_NotifyIcon(NIM_MODIFY, &m_nid);
+        }
+    }
+}
+
+void tray_manager::update_playback_state(const char* state) {
+    if (!m_initialized) return;
+    
+    // Update tooltip with playback state
+    pfc::string8 tooltip = "foobar2000 - ";
+    tooltip += state;
+    
+    pfc::stringcvt::string_wide_from_utf8 wide_tooltip(tooltip.get_ptr());
+    wcscpy_s(m_nid.szTip, wide_tooltip.get_ptr());
+    
+    if (m_tray_added) {
+        Shell_NotifyIcon(NIM_MODIFY, &m_nid);
+    }
+}
+
+HWND tray_manager::find_main_window() {
+    HWND result = nullptr;
+    
+    // First try direct window title search
+    result = FindWindow(nullptr, L"foobar2000");
+    if (result && IsWindowVisible(result) && !GetParent(result)) {
+        return result;
+    }
+    
+    // Enumerate all windows to find foobar2000
+    EnumWindows(find_window_callback, (LPARAM)&result);
+    return result;
+}
+
+BOOL CALLBACK tray_manager::find_window_callback(HWND hwnd, LPARAM lparam) {
+    HWND* result = (HWND*)lparam;
+    
+    wchar_t title[256];
+    wchar_t class_name[256];
+    
+    if (GetWindowText(hwnd, title, sizeof(title) / sizeof(wchar_t)) &&
+        GetClassName(hwnd, class_name, sizeof(class_name) / sizeof(wchar_t))) {
+        
+        // Skip dialog windows
+        if (wcscmp(class_name, L"#32770") == 0) {
+            return TRUE;
+        }
+        
+        // Look for foobar2000 main window
+        if ((wcsstr(title, L"foobar2000") && !wcsstr(title, L"crashed")) ||
+            wcscmp(class_name, L"{E7076D1C-A7BF-4f39-B771-BCBE88F2A2A8}") == 0) {
+            
+            if (IsWindowVisible(hwnd) && !GetParent(hwnd)) {
+                *result = hwnd;
+                return FALSE;
+            }
+        }
+    }
+    return TRUE;
+}
+
+void tray_manager::minimize_to_tray() {
+    if (m_main_window && m_initialized) {
+        ShowWindow(m_main_window, SW_HIDE);
+        // Tray icon is already added, just update tooltip if needed
+        m_was_visible = false;
+    }
+}
+
+void tray_manager::restore_from_tray() {
+    if (m_main_window && m_initialized) {
+        ShowWindow(m_main_window, SW_RESTORE);
+        SetForegroundWindow(m_main_window);
+        // Keep tray icon visible, just update state
+        m_was_visible = true;
+    }
+}
+
+void tray_manager::show_context_menu(int x, int y) {
+    HMENU menu = CreatePopupMenu();
+    if (!menu) return;
+    
+    // Get current playback state to enable/disable menu items appropriately
+    static_api_ptr_t<playback_control> pc;
+    bool is_playing = pc->is_playing();
+    bool is_paused = pc->is_paused();
+    
+    // Add playback control menu items
+    AppendMenu(menu, is_playing && !is_paused ? MF_GRAYED : MF_STRING, IDM_PLAY, L"Play");
+    AppendMenu(menu, is_playing && !is_paused ? MF_STRING : MF_GRAYED, IDM_PAUSE, L"Pause");
+    AppendMenu(menu, MF_STRING, IDM_PREV, L"Previous Track");
+    AppendMenu(menu, MF_STRING, IDM_NEXT, L"Next Track");
+    AppendMenu(menu, MF_SEPARATOR, 0, nullptr);
+    
+    // Show appropriate menu item based on window visibility
+    bool is_visible = IsWindowVisible(m_main_window);
+    AppendMenu(menu, MF_STRING, IDM_RESTORE, is_visible ? L"Hide foobar2000" : L"Show foobar2000");
+    AppendMenu(menu, MF_STRING, IDM_EXIT, L"Exit");
+    
+    // Ensure the menu appears in front
+    SetForegroundWindow(m_main_window);
+    int cmd = TrackPopupMenu(menu, TPM_RIGHTBUTTON | TPM_RETURNCMD | TPM_NONOTIFY, x, y, 0, m_main_window, nullptr);
+    PostMessage(m_main_window, WM_NULL, 0, 0); // Required for proper menu dismissal
+    
+    if (cmd > 0) {
+        handle_menu_command(cmd);
+    }
+    DestroyMenu(menu);
+}
+
+void tray_manager::handle_menu_command(int cmd) {
+    static_api_ptr_t<playback_control> pc;
+    
+    switch (cmd) {
+    case IDM_PLAY:
+        if (!pc->is_playing() || pc->is_paused()) {
+            pc->play_or_unpause();
+        }
+        break;
+        
+    case IDM_PAUSE:
+        if (pc->is_playing() && !pc->is_paused()) {
+            pc->pause(true);
+        }
+        break;
+        
+    case IDM_PREV:
+        pc->previous();
+        break;
+        
+    case IDM_NEXT:
+        pc->next();
+        break;
+        
+    case IDM_RESTORE:
+        // Toggle window visibility
+        if (IsWindowVisible(m_main_window)) {
+            minimize_to_tray();
+        } else {
+            restore_from_tray();
+        }
+        break;
+        
+    case IDM_EXIT:
+        if (m_main_window) {
+            PostMessage(m_main_window, WM_CLOSE, 0, 0);
+        }
+        break;
+    }
+}
+
+void tray_manager::force_update_tooltip() {
+    if (!m_initialized) return;
+    
+    try {
+        static_api_ptr_t<playback_control> pc;
+        
+        // Try multiple approaches to get current track info
+        if (pc->is_playing()) {
+            metadb_handle_ptr track;
+            if (pc->get_now_playing(track) && track.is_valid()) {
+                // Method 1: Direct track info update
+                update_tooltip(track);
+                return;
+            }
+        }
+        
+        // Method 2: Get playback state and show that
+        if (pc->is_playing()) {
+            if (pc->is_paused()) {
+                update_playback_state("Paused");
+            } else {
+                update_playback_state("Playing");
+            }
+        } else {
+            update_playback_state("Stopped");
+        }
+        
+        // Method 3: Show debug info
+        pfc::string8 debug_info = "Debug: Playing=";
+        debug_info += pc->is_playing() ? "true" : "false";
+        debug_info += ", Paused=";
+        debug_info += pc->is_paused() ? "true" : "false";
+        
+        pfc::stringcvt::string_wide_from_utf8 wide_debug(debug_info.get_ptr());
+        wcscpy_s(m_nid.szTip, wide_debug.get_ptr());
+        
+        if (m_tray_added) {
+            Shell_NotifyIcon(NIM_MODIFY, &m_nid);
+        }
+        
+    } catch (...) {
+        wcscpy_s(m_nid.szTip, L"Debug: Exception occurred");
+        if (m_tray_added) {
+            Shell_NotifyIcon(NIM_MODIFY, &m_nid);
+        }
+    }
+}
+
+LRESULT CALLBACK tray_manager::window_proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
+    // Debug: Show important messages that we do receive
+    if (msg == WM_SYSCOMMAND || msg == WM_CLOSE) {
+        wchar_t debug_msg[256];
+        swprintf_s(debug_msg, L"window_proc: msg=0x%X, wparam=0x%X", msg, wparam);
+        MessageBox(nullptr, debug_msg, L"Important Message", MB_OK);
+    }
+    
+    if (s_instance && s_instance->m_initialized) {
+        switch (msg) {
+        case WM_SIZE:
+            if (wparam == SIZE_MINIMIZED) {
+                s_instance->minimize_to_tray();
+                return 0;
+            }
+            break;
+            
+        case WM_SYSCOMMAND:
+            if (wparam == SC_MINIMIZE) {
+                // Check if "always minimize to tray" is enabled
+                bool minimize_setting = get_always_minimize_to_tray();
+                MessageBox(nullptr, minimize_setting ? L"Minimize setting: ENABLED" : L"Minimize setting: DISABLED", L"Debug", MB_OK);
+                if (minimize_setting) {
+                    s_instance->minimize_to_tray();
+                    return 0;  // Prevent default minimize behavior
+                }
+                // Otherwise let the default processing happen, then we'll catch it in WM_SIZE
+                break;
+            }
+            break;
+            
+        }
+    }
+    
+    if (s_instance && s_instance->m_original_wndproc) {
+        return CallWindowProc(s_instance->m_original_wndproc, hwnd, msg, wparam, lparam);
+    }
+    return DefWindowProc(hwnd, msg, wparam, lparam);
+}
+
+// Dedicated window procedure for tray messages
+LRESULT CALLBACK tray_manager::tray_window_proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
+    if (s_instance && s_instance->m_initialized) {
+        switch (msg) {
+        case WM_TRAYICON: // Tray icon message
+            switch (LOWORD(lparam)) {
+            case WM_RBUTTONUP:
+            case WM_CONTEXTMENU:
+                {
+                    POINT pt;
+                    GetCursorPos(&pt);
+                    s_instance->show_context_menu(pt.x, pt.y);
+                }
+                return 0;
+                
+            case WM_LBUTTONDBLCLK:
+                if (IsWindowVisible(s_instance->m_main_window)) {
+                    s_instance->minimize_to_tray();
+                } else {
+                    s_instance->restore_from_tray();
+                }
+                return 0;
+            }
+            return 0;
+        }
+    }
+    
+    return DefWindowProc(hwnd, msg, wparam, lparam);
+}
+
+// Timer procedure for periodic tooltip updates and window monitoring
+VOID CALLBACK tray_manager::tooltip_timer_proc(HWND hwnd, UINT msg, UINT_PTR timer_id, DWORD time) {
+    if (s_instance && timer_id == TOOLTIP_TIMER_ID && s_instance->m_initialized) {
+        s_instance->check_for_track_changes();
+        s_instance->check_window_visibility();
+    }
+}
+
+// Check if the current track has changed and update tooltip accordingly
+void tray_manager::check_for_track_changes() {
+    if (!m_initialized) return;
+    
+    try {
+        static_api_ptr_t<playback_control> pc;
+        
+        if (pc->is_playing()) {
+            metadb_handle_ptr track;
+            if (pc->get_now_playing(track) && track.is_valid()) {
+                pfc::string8 current_path = track->get_path();
+                
+                // Check if track has changed
+                if (current_path != m_last_track_path) {
+                    m_last_track_path = current_path;
+                    update_tooltip(track);
+                }
+            }
+        } else {
+            // Not playing - clear last track and update state
+            if (!m_last_track_path.is_empty()) {
+                m_last_track_path = "";
+                update_playback_state("Stopped");
+            }
+        }
+    } catch (...) {
+        // Ignore timer errors
+    }
+}
+
+// Check for window visibility changes and handle minimize behavior
+void tray_manager::check_window_visibility() {
+    if (!m_initialized || !m_main_window || m_processing_minimize) return;
+    
+    bool current_visible = IsWindowVisible(m_main_window);
+    bool is_minimized = IsIconic(m_main_window);
+    
+    // Only trigger on actual state changes
+    if (current_visible != m_was_visible || is_minimized != m_was_minimized) {
+        wchar_t debug_msg[256];
+        swprintf_s(debug_msg, L"Window state changed: visible=%s->%s, minimized=%s->%s", 
+                  m_was_visible ? L"true" : L"false", current_visible ? L"true" : L"false",
+                  m_was_minimized ? L"true" : L"false", is_minimized ? L"true" : L"false");
+        OutputDebugString(debug_msg);
+        
+        // Check if user just minimized the window and setting is enabled
+        if (!m_was_minimized && is_minimized && get_always_minimize_to_tray()) {
+            m_processing_minimize = true;
+            
+            // Hide the window to tray
+            ShowWindow(m_main_window, SW_HIDE);
+            
+            m_processing_minimize = false;
+        }
+        
+        
+        // Update stored state
+        m_was_visible = current_visible;
+        m_was_minimized = is_minimized;
+    }
+}
+

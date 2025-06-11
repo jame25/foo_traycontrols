@@ -1,0 +1,25 @@
+#include "resource.h"
+#include <windows.h>
+
+// Tray icon
+IDI_TRAY_ICON           ICON    "tray_icon.ico"
+
+// PNG version as binary resource (fallback)
+IDR_TRAY_PNG            RCDATA  "tray_icon.png"
+
+// Preferences dialog
+IDD_PREFERENCES_TRAY DIALOGEX 0, 0, 300, 170
+STYLE DS_SETFONT | DS_FIXEDSYS | WS_CHILD | WS_VISIBLE | DS_CONTROL
+EXSTYLE WS_EX_CONTROLPARENT
+FONT 8, "MS Shell Dlg", 400, 0, 0x1
+BEGIN
+    GROUPBOX        "Tray Behavior", IDC_STATIC, 7, 7, 286, 60
+    CONTROL         "Always minimize to system tray", IDC_ALWAYS_MINIMIZE_TO_TRAY, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 15, 25, 200, 10
+    LTEXT           "When enabled, clicking minimize will go directly to the system tray.", IDC_STATIC, 15, 45, 270, 8
+    
+    GROUPBOX        "Information", IDC_STATIC, 7, 75, 286, 80
+    LTEXT           "Tray Controls v1.0.0", IDC_STATIC, 15, 90, 100, 8
+    LTEXT           "Right-click the tray icon for playback controls.", IDC_STATIC, 15, 105, 200, 8
+    LTEXT           "Double-click the tray icon to show/hide foobar2000.", IDC_STATIC, 15, 120, 200, 8
+    LTEXT           "Note: 'Minimize on close' functionality is not supported due to foobar2000 SDK limitations.", IDC_STATIC, 15, 135, 270, 8
+END
