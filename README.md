@@ -21,9 +21,10 @@ A foobar2000 64-bit component that provides system tray functionality with playb
 - `tray_manager.h/cpp` - Main tray functionality implementation
 - `stdafx.h/cpp` - Precompiled headers
 - `resource.h` - Resource definitions for menu items and icons
+- 'preferences.h/cpp' - Preferences tab implementation
 - `foo_traycontrols.rc` - Resource script
 - `foo_traycontrols.vcxproj` - Visual Studio project file
-- `tray_icon.ico` - Tray icon (placeholder - needs actual icon file)
+- `tray_icon.ico` - Tray icon
 
 ## Building
 
