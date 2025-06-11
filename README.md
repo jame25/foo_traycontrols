@@ -4,8 +4,6 @@ A foobar2000 64-bit component that provides system tray functionality with playb
 
 ![foo_traycontrols](https://github.com/user-attachments/assets/80c43e91-53b6-4f83-a872-de01108735f3)
 
-A foobar2000 64-bit component that provides comprehensive system tray functionality with playback controls, track information, and minimize-to-tray behavior.
-
 ## Features
 
 ### Core Functionality
