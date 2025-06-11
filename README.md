@@ -2,8 +2,7 @@
 
 A foobar2000 64-bit component that provides system tray functionality with playback controls.
 
-![foo_traycontrols](https://github.com/user-attachments/assets/0ea2d58d-979d-46cc-b26e-4b9f3f09cc91)
-
+![foo_traycontrols](https://github.com/user-attachments/assets/4dd555a2-fc98-420c-9f3d-f21829322f19)
 
 ## Features
 
