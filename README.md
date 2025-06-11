@@ -115,21 +115,6 @@ build-simple-traycontrols-x64.bat
 - Preferences dialog implemented using Win32 dialog resources
 - Proper change detection and Apply button state management
 
-### Error Handling
-- Graceful fallbacks for missing metadata
-- Safe window handle management
-- Resource cleanup on component unload
-
-## Version History
-
-**v1.0.1** - Initial Release
-- Always-visible system tray icon
-- Minimize to tray functionality
-- Real-time track information tooltips
-- Complete playback control context menu
-- Integrated preferences page
-- Timer-based window state detection
-
 ## License
 
 This component is provided as-is for educational and personal use. Built using the foobar2000 SDK which has its own licensing terms.
