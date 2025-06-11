@@ -35,10 +35,6 @@ A foobar2000 64-bit component that provides system tray functionality with playb
 3. Build for x64 platform (Debug or Release configuration)
 4. Copy the resulting `foo_traycontrols.dll` to your foobar2000 components folder
 
-### Option 3: Complete Rebuild
-1. Run `rebuild-all-x64.bat` to rebuild all dependencies and the component
-2. This is useful if you've modified SDK files or need a clean build
-
 ## Implementation Notes
 
 - Uses the foobar2000 SDK `initquit` service for initialization
