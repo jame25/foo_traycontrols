@@ -26,3 +26,4 @@
 #include "lib/foobar2000_SDK/foobar2000/SDK/metadb_handle.h"
 #include "lib/foobar2000_SDK/foobar2000/SDK/file_info.h"
 #include "lib/foobar2000_SDK/foobar2000/SDK/file_info_impl.h"
+#include "lib/foobar2000_SDK/foobar2000/SDK/coreDarkMode.h"
