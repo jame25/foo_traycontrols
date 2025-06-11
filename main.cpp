@@ -29,7 +29,7 @@ DECLARE_COMPONENT_VERSION(
     "- Minimize to system tray\n"
     "- Right-click context menu with playback controls\n"
     "- Track information tooltips\n\n"
-    "Author: Claude Code\n"
+    "Author: jame25\n"
     "Build date: " __DATE__ "\n\n"
     "This component adds system tray functionality to foobar2000."
 );
