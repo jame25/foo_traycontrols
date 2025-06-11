@@ -2,6 +2,9 @@
 
 A foobar2000 64-bit component that provides system tray functionality with playback controls.
 
+![foo_traycontrols](https://github.com/user-attachments/assets/0ea2d58d-979d-46cc-b26e-4b9f3f09cc91)
+
+
 ## Features
 
 - **Minimize to System Tray**: Minimize the foobar2000 main window to the system tray instead of the taskbar
