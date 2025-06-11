@@ -21,5 +21,4 @@ BEGIN
     LTEXT           "Tray Controls v1.0.0", IDC_STATIC, 15, 90, 100, 8
     LTEXT           "Right-click the tray icon for playback controls.", IDC_STATIC, 15, 105, 200, 8
     LTEXT           "Double-click the tray icon to show/hide foobar2000.", IDC_STATIC, 15, 120, 200, 8
-    LTEXT           "Note: 'Minimize on close' functionality is not supported due to foobar2000 SDK limitations.", IDC_STATIC, 15, 135, 270, 8
 END
