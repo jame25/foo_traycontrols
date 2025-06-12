@@ -6,6 +6,7 @@
 #define IDD_PREFERENCES_TRAY    200
 #define IDC_ALWAYS_MINIMIZE_TO_TRAY  201
 #define IDC_ALWAYS_MINIMIZE_ON_CLOSE 202
+#define IDC_MOUSE_WHEEL_VOLUME       203
 #define IDC_STATIC              -1
 
 #define IDM_TRAY_PLAY           1001
