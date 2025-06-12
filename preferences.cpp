@@ -1,15 +1,21 @@
 #include "stdafx.h"
 #include "preferences.h"
+#include "tray_manager.h"
 
 // External declaration from main.cpp
 extern HINSTANCE g_hIns;
 
 // Configuration variables - stored in foobar2000's config system
 static cfg_int cfg_always_minimize_to_tray(GUID{0x12345679, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0);
+static cfg_int cfg_mouse_wheel_volume(GUID{0x12345680, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 1);
 
 // Access functions for the configuration
 bool get_always_minimize_to_tray() {
     return cfg_always_minimize_to_tray != 0;
+}
+
+bool get_mouse_wheel_volume_enabled() {
+    return cfg_mouse_wheel_volume != 0;
 }
 
 // GUID for our preferences page
@@ -61,6 +67,7 @@ INT_PTR CALLBACK tray_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, LP
         
         // Initialize checkbox states
         CheckDlgButton(hwnd, IDC_ALWAYS_MINIMIZE_TO_TRAY, cfg_always_minimize_to_tray != 0 ? BST_CHECKED : BST_UNCHECKED);
+        CheckDlgButton(hwnd, IDC_MOUSE_WHEEL_VOLUME, cfg_mouse_wheel_volume != 0 ? BST_CHECKED : BST_UNCHECKED);
         p_this->m_has_changes = false;
     } else {
         p_this = reinterpret_cast<tray_preferences*>(GetWindowLongPtr(hwnd, GWLP_USERDATA));
@@ -70,7 +77,7 @@ INT_PTR CALLBACK tray_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, LP
     
     switch (msg) {
     case WM_COMMAND:
-        if (HIWORD(wp) == BN_CLICKED && LOWORD(wp) == IDC_ALWAYS_MINIMIZE_TO_TRAY) {
+        if (HIWORD(wp) == BN_CLICKED && (LOWORD(wp) == IDC_ALWAYS_MINIMIZE_TO_TRAY || LOWORD(wp) == IDC_MOUSE_WHEEL_VOLUME)) {
             p_this->on_changed();
         }
         break;
@@ -92,19 +99,25 @@ bool tray_preferences::has_changed() {
     if (!m_hwnd) return false;
     
     int current_minimize_to_tray = (IsDlgButtonChecked(m_hwnd, IDC_ALWAYS_MINIMIZE_TO_TRAY) == BST_CHECKED) ? 1 : 0;
+    int current_mouse_wheel_volume = (IsDlgButtonChecked(m_hwnd, IDC_MOUSE_WHEEL_VOLUME) == BST_CHECKED) ? 1 : 0;
     
-    return current_minimize_to_tray != cfg_always_minimize_to_tray;
+    return (current_minimize_to_tray != cfg_always_minimize_to_tray) || (current_mouse_wheel_volume != cfg_mouse_wheel_volume);
 }
 
 void tray_preferences::apply_settings() {
     if (m_hwnd) {
         cfg_always_minimize_to_tray = (IsDlgButtonChecked(m_hwnd, IDC_ALWAYS_MINIMIZE_TO_TRAY) == BST_CHECKED) ? 1 : 0;
+        cfg_mouse_wheel_volume = (IsDlgButtonChecked(m_hwnd, IDC_MOUSE_WHEEL_VOLUME) == BST_CHECKED) ? 1 : 0;
+        
+        // Notify tray manager of settings change
+        tray_manager::get_instance().on_settings_changed();
     }
 }
 
 void tray_preferences::reset_settings() {
     if (m_hwnd) {
         CheckDlgButton(m_hwnd, IDC_ALWAYS_MINIMIZE_TO_TRAY, cfg_always_minimize_to_tray != 0 ? BST_CHECKED : BST_UNCHECKED);
+        CheckDlgButton(m_hwnd, IDC_MOUSE_WHEEL_VOLUME, cfg_mouse_wheel_volume != 0 ? BST_CHECKED : BST_UNCHECKED);
     }
 }
 
