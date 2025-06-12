@@ -2,7 +2,7 @@
 
 A foobar2000 64-bit component that provides system tray functionality with playback controls and track information.
 
-![foo_traycontrols](https://github.com/user-attachments/assets/80c43e91-53b6-4f83-a872-de01108735f3)
+![foo_traycontrols](https://github.com/user-attachments/assets/d0a9caef-61e9-40b8-ae63-f39fff59396a)
 
 ## Features
 
@@ -10,6 +10,7 @@ A foobar2000 64-bit component that provides system tray functionality with playb
 - **Always Visible Tray Icon**: System tray icon is always present for quick access
 - **Smart Minimize to Tray**: Optional setting to hide to system tray when minimizing instead of taskbar
 - **Real-time Track Information**: Hover tooltips show current artist and track information
+- **Mouse Wheel Volume Control**: Scroll mouse wheel over tray icon to adjust volume up/down
 - **Comprehensive Playback Controls**: Right-click context menu provides:
   - Play/Pause track
   - Previous Track  
@@ -21,6 +22,7 @@ A foobar2000 64-bit component that provides system tray functionality with playb
 ### Preferences
 - **Settings Integration**: Accessible via foobar2000's Preferences → Tools → Tray Controls
 - **Always Minimize to Tray**: When enabled, clicking the minimize button hides the window to the system tray
+- **Mouse Wheel Volume Control**: Enable/disable mouse wheel volume adjustment over tray icon
 - **Persistent Configuration**: Settings are saved in foobar2000's configuration system
 
 ## Technical Implementation
