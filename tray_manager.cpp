@@ -40,6 +40,7 @@ tray_manager::tray_manager()
     , m_was_minimized(false)
     , m_processing_minimize(false)
     , m_original_wndproc(nullptr)
+    , m_mouse_hook(nullptr)
 {
     memset(&m_nid, 0, sizeof(m_nid));
 }
@@ -110,6 +111,11 @@ void tray_manager::initialize() {
         // Keep default tooltip if anything fails
     }
 
+    // Install global mouse hook for mouse wheel detection over tray icon
+    if (get_mouse_wheel_volume_enabled()) {
+        m_mouse_hook = SetWindowsHookEx(WH_MOUSE_LL, mouse_hook_proc, g_hIns, 0);
+    }
+
     // Start timer to periodically check for track changes and window visibility (every 500ms)
     if (m_tray_window) {
         SetTimer(m_tray_window, TOOLTIP_TIMER_ID, 500, tooltip_timer_proc);
@@ -122,6 +128,12 @@ void tray_manager::cleanup() {
     // Kill the tooltip update timer
     if (m_tray_window) {
         KillTimer(m_tray_window, TOOLTIP_TIMER_ID);
+    }
+    
+    // Remove mouse hook
+    if (m_mouse_hook) {
+        UnhookWindowsHookEx(m_mouse_hook);
+        m_mouse_hook = nullptr;
     }
     
     if (m_tray_added) {
@@ -301,6 +313,11 @@ void tray_manager::restore_from_tray() {
         // Keep tray icon visible, just update state
         m_was_visible = true;
     }
+}
+
+void tray_manager::on_settings_changed() {
+    // Update mouse hook when settings change
+    update_mouse_hook();
 }
 
 void tray_manager::show_context_menu(int x, int y) {
@@ -486,12 +503,88 @@ LRESULT CALLBACK tray_manager::tray_window_proc(HWND hwnd, UINT msg, WPARAM wpar
                     s_instance->restore_from_tray();
                 }
                 return 0;
+                
             }
             return 0;
         }
     }
     
     return DefWindowProc(hwnd, msg, wparam, lparam);
+}
+
+bool tray_manager::is_cursor_over_tray_icon() {
+    if (!m_initialized || !m_tray_added) return false;
+    
+    // Get cursor position
+    POINT cursor_pos;
+    if (!GetCursorPos(&cursor_pos)) return false;
+    
+    // Get tray area bounds
+    RECT tray_rect;
+    HWND tray_wnd = FindWindow(L"Shell_TrayWnd", nullptr);
+    if (!tray_wnd) return false;
+    
+    HWND notification_area = FindWindowEx(tray_wnd, nullptr, L"TrayNotifyWnd", nullptr);
+    if (!notification_area) return false;
+    
+    if (!GetWindowRect(notification_area, &tray_rect)) return false;
+    
+    // Check if cursor is within tray area (with some tolerance)
+    return (cursor_pos.x >= tray_rect.left && cursor_pos.x <= tray_rect.right &&
+            cursor_pos.y >= tray_rect.top && cursor_pos.y <= tray_rect.bottom);
+}
+
+LRESULT CALLBACK tray_manager::mouse_hook_proc(int code, WPARAM wparam, LPARAM lparam) {
+    if (code >= 0 && s_instance && s_instance->m_initialized) {
+        if (wparam == WM_MOUSEWHEEL) {
+            if (s_instance->is_cursor_over_tray_icon()) {
+                MSLLHOOKSTRUCT* mouse_struct = (MSLLHOOKSTRUCT*)lparam;
+                int delta = GET_WHEEL_DELTA_WPARAM(mouse_struct->mouseData);
+                s_instance->handle_mouse_wheel(delta);
+                return 1; // Consume the message
+            }
+        }
+    }
+    return CallNextHookEx(s_instance ? s_instance->m_mouse_hook : nullptr, code, wparam, lparam);
+}
+
+void tray_manager::handle_mouse_wheel(int delta) {
+    if (!m_initialized) return;
+    
+    // Check if mouse wheel volume control is enabled
+    if (!get_mouse_wheel_volume_enabled()) {
+        return;
+    }
+    
+    try {
+        static_api_ptr_t<playback_control> pc;
+        
+        // Use the built-in volume step functions for consistent behavior
+        if (delta > 0) {
+            // Wheel up = volume up
+            pc->volume_up();
+        } else if (delta < 0) {
+            // Wheel down = volume down
+            pc->volume_down();
+        }
+    } catch (...) {
+        // Ignore volume control errors
+    }
+}
+
+void tray_manager::update_mouse_hook() {
+    if (!m_initialized) return;
+    
+    // Remove existing hook
+    if (m_mouse_hook) {
+        UnhookWindowsHookEx(m_mouse_hook);
+        m_mouse_hook = nullptr;
+    }
+    
+    // Install hook if feature is enabled
+    if (get_mouse_wheel_volume_enabled()) {
+        m_mouse_hook = SetWindowsHookEx(WH_MOUSE_LL, mouse_hook_proc, g_hIns, 0);
+    }
 }
 
 // Timer procedure for periodic tooltip updates and window monitoring
