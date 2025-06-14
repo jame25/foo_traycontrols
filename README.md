@@ -2,6 +2,7 @@
 
 A foobar2000 64-bit component that provides comprehensive system tray functionality with popup controls, notifications, and minimize-to-tray behavior.
 
+![foo_traycontrols02](https://github.com/user-attachments/assets/934437af-efea-4b15-ba91-dfdff81ff097)
 ![foo_traycontrols](https://github.com/user-attachments/assets/b48e4b99-15a5-49a7-a101-73f6f764a8cf)
 
 
