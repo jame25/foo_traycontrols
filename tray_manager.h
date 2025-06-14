@@ -2,6 +2,8 @@
 
 #include "stdafx.h"
 #include "resource.h"
+#include "popup_window.h"
+#include "control_panel.h"
 
 // Tray manager class - singleton that handles all tray functionality
 class tray_manager {
