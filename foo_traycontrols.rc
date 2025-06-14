@@ -13,15 +13,13 @@ STYLE DS_SETFONT | DS_FIXEDSYS | WS_CHILD | WS_VISIBLE | DS_CONTROL
 EXSTYLE WS_EX_CONTROLPARENT
 FONT 8, "MS Shell Dlg", 400, 0, 0x1
 BEGIN
-    GROUPBOX        "Tray Behavior", IDC_STATIC, 7, 7, 286, 85
+    GROUPBOX        "Tray Behavior", IDC_STATIC, 7, 7, 286, 100
     CONTROL         "Always minimize to system tray", IDC_ALWAYS_MINIMIZE_TO_TRAY, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 15, 25, 200, 10
     LTEXT           "When enabled, clicking minimize sends foobar2000 directly to the system tray.", IDC_STATIC, 15, 40, 270, 8
-    CONTROL         "Enable mouse wheel volume control", IDC_MOUSE_WHEEL_VOLUME, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 15, 55, 200, 10
-    LTEXT           "Scroll mouse wheel over tray icon to adjust volume.", IDC_STATIC, 15, 70, 270, 8
+    CONTROL         "Show popup notification on track change", IDC_SHOW_POPUP_NOTIFICATION, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 15, 55, 200, 10
     
-    GROUPBOX        "Information", IDC_STATIC, 7, 100, 286, 80
-    LTEXT           "Tray Controls v1.0.3", IDC_STATIC, 15, 115, 100, 8
-    LTEXT           "Right-click the tray icon for playback controls.", IDC_STATIC, 15, 130, 200, 8
-    LTEXT           "Single-click the tray icon to show/hide foobar2000.", IDC_STATIC, 15, 145, 200, 8
+    GROUPBOX        "Information", IDC_STATIC, 7, 115, 286, 80
+    LTEXT           "Tray Controls v1.0.4", IDC_STATIC, 15, 130, 100, 8
+    LTEXT           "Single-click the tray icon for playback controls.", IDC_STATIC, 15, 145, 200, 8
     LTEXT           "Mouse wheel over tray icon controls volume.", IDC_STATIC, 15, 160, 200, 8
 END
