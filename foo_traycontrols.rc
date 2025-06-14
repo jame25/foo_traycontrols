@@ -22,6 +22,6 @@ BEGIN
     GROUPBOX        "Information", IDC_STATIC, 7, 100, 286, 80
     LTEXT           "Tray Controls v1.0.2", IDC_STATIC, 15, 115, 100, 8
     LTEXT           "Right-click the tray icon for playback controls.", IDC_STATIC, 15, 130, 200, 8
-    LTEXT           "Double-click the tray icon to show/hide foobar2000.", IDC_STATIC, 15, 145, 200, 8
+    LTEXT           "Single-click the tray icon to show/hide foobar2000.", IDC_STATIC, 15, 145, 200, 8
     LTEXT           "Mouse wheel over tray icon controls volume.", IDC_STATIC, 15, 160, 200, 8
 END
