@@ -3,6 +3,8 @@
 #include "stdafx.h"
 #include "tray_manager.h"
 #include "preferences.h"
+#include "popup_window.h"
+#include "control_panel.h"
 
 // Component's DLL instance handle
 HINSTANCE g_hIns = NULL;
@@ -23,7 +25,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 // Component version declaration using the proper SDK macro
 DECLARE_COMPONENT_VERSION(
     "Tray Controls",
-    "1.0.2",
+    "1.0.4",
     "System tray controls for foobar2000.\n"
     "Features:\n"
     "- Minimize to system tray\n"
@@ -46,8 +48,10 @@ public:
     }
     
     void on_quit() override {
-        // Clean up the tray manager
+        // Clean up the tray manager, popup window, and control panel
         tray_manager::get_instance().cleanup();
+        popup_window::get_instance().cleanup();
+        control_panel::get_instance().cleanup();
     }
 };
 
