@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|x64">
@@ -63,7 +63,7 @@
       <RandomizedBaseAddress>false</RandomizedBaseAddress>
       <DataExecutionPrevention>
       </DataExecutionPrevention>
-      <AdditionalDependencies>foobar2000_SDK.lib;pfc.lib;shared.lib;shell32.lib;user32.lib;winmm.lib;ole32.lib</AdditionalDependencies>
+      <AdditionalDependencies>foobar2000_SDK.lib;pfc.lib;shared.lib;shell32.lib;user32.lib;winmm.lib;ole32.lib;gdi32.lib;gdiplus.lib;shlwapi.lib</AdditionalDependencies>
       <AdditionalLibraryDirectories>lib/foobar2000_SDK/foobar2000/SDK/x64/$(Configuration);lib/foobar2000_SDK/pfc/x64/$(Configuration);lib/foobar2000_SDK/foobar2000/shared/x64/$(Configuration)</AdditionalLibraryDirectories>
       <ModuleDefinitionFile>foo_traycontrols.def</ModuleDefinitionFile>
     </Link>
@@ -93,7 +93,7 @@
       <RandomizedBaseAddress>false</RandomizedBaseAddress>
       <DataExecutionPrevention>
       </DataExecutionPrevention>
-      <AdditionalDependencies>foobar2000_SDK.lib;pfc.lib;shared.lib;shell32.lib;user32.lib;winmm.lib;ole32.lib</AdditionalDependencies>
+      <AdditionalDependencies>foobar2000_SDK.lib;pfc.lib;shared.lib;shell32.lib;user32.lib;winmm.lib;ole32.lib;gdi32.lib;gdiplus.lib;shlwapi.lib</AdditionalDependencies>
       <AdditionalLibraryDirectories>lib/foobar2000_SDK/foobar2000/SDK/x64/$(Configuration);lib/foobar2000_SDK/pfc/x64/$(Configuration);lib/foobar2000_SDK/foobar2000/shared/x64/$(Configuration)</AdditionalLibraryDirectories>
       <ModuleDefinitionFile>foo_traycontrols.def</ModuleDefinitionFile>
     </Link>
@@ -123,11 +123,21 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Use</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Use</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="popup_window.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Use</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Use</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="control_panel.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Use</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Use</PrecompiledHeader>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="tray_manager.h" />
     <ClInclude Include="preferences.h" />
+    <ClInclude Include="popup_window.h" />
+    <ClInclude Include="control_panel.h" />
     <ClInclude Include="resource.h" />
   </ItemGroup>
   <ItemGroup>
