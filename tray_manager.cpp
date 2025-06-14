@@ -496,7 +496,7 @@ LRESULT CALLBACK tray_manager::tray_window_proc(HWND hwnd, UINT msg, WPARAM wpar
                 }
                 return 0;
                 
-            case WM_LBUTTONDBLCLK:
+            case WM_LBUTTONUP:
                 if (IsWindowVisible(s_instance->m_main_window)) {
                     s_instance->minimize_to_tray();
                 } else {
@@ -656,4 +656,3 @@ void tray_manager::check_window_visibility() {
         m_was_minimized = is_minimized;
     }
 }
-
