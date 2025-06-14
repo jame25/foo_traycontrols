@@ -4,6 +4,8 @@
 #include "tray_manager.h"
 #include "resource.h"
 #include "preferences.h"
+#include "popup_window.h"
+#include "control_panel.h"
 
 // External declaration from main.cpp
 extern HINSTANCE g_hIns;
@@ -116,6 +118,10 @@ void tray_manager::initialize() {
         m_mouse_hook = SetWindowsHookEx(WH_MOUSE_LL, mouse_hook_proc, g_hIns, 0);
     }
 
+    // Initialize popup window and control panel
+    popup_window::get_instance().initialize();
+    control_panel::get_instance().initialize();
+    
     // Start timer to periodically check for track changes and window visibility (every 500ms)
     if (m_tray_window) {
         SetTimer(m_tray_window, TOOLTIP_TIMER_ID, 500, tooltip_timer_proc);
@@ -125,6 +131,10 @@ void tray_manager::initialize() {
 }
 
 void tray_manager::cleanup() {
+    // Cleanup popup window and control panel
+    popup_window::get_instance().cleanup();
+    control_panel::get_instance().cleanup();
+    
     // Kill the tooltip update timer
     if (m_tray_window) {
         KillTimer(m_tray_window, TOOLTIP_TIMER_ID);
@@ -232,6 +242,9 @@ void tray_manager::update_tooltip(metadb_handle_ptr p_track) {
         if (m_tray_added) {
             Shell_NotifyIcon(NIM_MODIFY, &m_nid);
         }
+        
+        // Show popup notification if enabled
+        popup_window::get_instance().show_track_info(p_track);
     }
     catch (...) {
         // Fallback tooltip
@@ -318,23 +331,14 @@ void tray_manager::restore_from_tray() {
 void tray_manager::on_settings_changed() {
     // Update mouse hook when settings change
     update_mouse_hook();
+    
+    // Update popup window settings
+    popup_window::get_instance().on_settings_changed();
 }
 
 void tray_manager::show_context_menu(int x, int y) {
     HMENU menu = CreatePopupMenu();
     if (!menu) return;
-    
-    // Get current playback state to enable/disable menu items appropriately
-    static_api_ptr_t<playback_control> pc;
-    bool is_playing = pc->is_playing();
-    bool is_paused = pc->is_paused();
-    
-    // Add playback control menu items
-    AppendMenu(menu, is_playing && !is_paused ? MF_GRAYED : MF_STRING, IDM_PLAY, L"Play");
-    AppendMenu(menu, is_playing && !is_paused ? MF_STRING : MF_GRAYED, IDM_PAUSE, L"Pause");
-    AppendMenu(menu, MF_STRING, IDM_PREV, L"Previous Track");
-    AppendMenu(menu, MF_STRING, IDM_NEXT, L"Next Track");
-    AppendMenu(menu, MF_SEPARATOR, 0, nullptr);
     
     // Show appropriate menu item based on window visibility
     bool is_visible = IsWindowVisible(m_main_window);
@@ -353,29 +357,7 @@ void tray_manager::show_context_menu(int x, int y) {
 }
 
 void tray_manager::handle_menu_command(int cmd) {
-    static_api_ptr_t<playback_control> pc;
-    
     switch (cmd) {
-    case IDM_PLAY:
-        if (!pc->is_playing() || pc->is_paused()) {
-            pc->play_or_unpause();
-        }
-        break;
-        
-    case IDM_PAUSE:
-        if (pc->is_playing() && !pc->is_paused()) {
-            pc->pause(true);
-        }
-        break;
-        
-    case IDM_PREV:
-        pc->previous();
-        break;
-        
-    case IDM_NEXT:
-        pc->next();
-        break;
-        
     case IDM_RESTORE:
         // Toggle window visibility
         if (IsWindowVisible(m_main_window)) {
@@ -497,11 +479,12 @@ LRESULT CALLBACK tray_manager::tray_window_proc(HWND hwnd, UINT msg, WPARAM wpar
                 return 0;
                 
             case WM_LBUTTONUP:
-                if (IsWindowVisible(s_instance->m_main_window)) {
-                    s_instance->minimize_to_tray();
-                } else {
-                    s_instance->restore_from_tray();
-                }
+                // Single-click shows control panel
+                control_panel::get_instance().toggle_control_panel();
+                return 0;
+                
+            case WM_LBUTTONDBLCLK:
+                // Double-click functionality removed - no action
                 return 0;
                 
             }
@@ -656,3 +639,4 @@ void tray_manager::check_window_visibility() {
         m_was_minimized = is_minimized;
     }
 }
+
