@@ -1,28 +1,34 @@
 # Tray Controls Component for foobar2000
 
-A foobar2000 64-bit component that provides system tray functionality with playback controls and track information.
+A foobar2000 64-bit component that provides comprehensive system tray functionality with popup controls, notifications, and minimize-to-tray behavior.
 
-![foo_traycontrols](https://github.com/user-attachments/assets/d0a9caef-61e9-40b8-ae63-f39fff59396a)
+![foo_traycontrols](https://github.com/user-attachments/assets/b48e4b99-15a5-49a7-a101-73f6f764a8cf)
+
 
 ## Features
 
 ### Core Functionality
 - **Always Visible Tray Icon**: System tray icon is always present for quick access
 - **Smart Minimize to Tray**: Optional setting to hide to system tray when minimizing instead of taskbar
-- **Real-time Track Information**: Hover tooltips show current artist and track information
 - **Mouse Wheel Volume Control**: Scroll mouse wheel over tray icon to adjust volume up/down
-- **Comprehensive Playback Controls**: Right-click context menu provides:
-  - Play/Pause track
-  - Previous Track  
-  - Next Track
+- **Real-time Track Information**: Hover tooltips show current artist and track information
+- **Popup Control Panel**: Single-click the tray icon to show/hide an elegant control panel with:
+  - High-quality album artwork display (80x80 pixels)
+  - Current track title and artist information
+  - Playback time display
+  - Previous, Play/Pause, and Next control buttons with sharp icon rendering
+- **Popup Track Notifications**: Optional popup notifications on track changes featuring:
+  - Album artwork display (60x60 pixels) 
+  - Track and artist information
+  - Positioned at top-left corner with smooth slide-in animation
+- **Simple Tray Menu**: Right-click context menu provides:
   - Show/Hide foobar2000 window
   - Exit application
-- **Quick Window Toggle**: Double-click the tray icon to show/hide the main window
 
 ### Preferences
 - **Settings Integration**: Accessible via foobar2000's Preferences → Tools → Tray Controls
 - **Always Minimize to Tray**: When enabled, clicking the minimize button hides the window to the system tray
-- **Mouse Wheel Volume Control**: Enable/disable mouse wheel volume adjustment over tray icon
+- **Show Popup Notification**: Enable/disable popup notifications on track changes
 - **Persistent Configuration**: Settings are saved in foobar2000's configuration system
 
 ## Technical Implementation
@@ -30,22 +36,29 @@ A foobar2000 64-bit component that provides system tray functionality with playb
 ### Architecture
 - **Timer-based Detection**: Uses 500ms polling to detect window state changes (necessary due to foobar2000's custom window handling)
 - **Window Subclassing**: Intercepts window messages for minimize detection
+- **Global Mouse Hook**: Low-level mouse hook (`WH_MOUSE_LL`) for mouse wheel detection over tray icon
 - **Service Integration**: Properly integrates with foobar2000's service system:
   - `initquit` service for component lifecycle
-  - `play_callback_static` for real-time playbook events
+  - `play_callback_static` for real-time playback events
   - `preferences_page_v3` for settings UI
-- **Singleton Pattern**: Uses singleton tray manager for reliable state management
+- **Singleton Pattern**: Uses singleton managers for reliable state management
+- **GDI+ Image Processing**: High-quality album art rendering with aspect ratio preservation
+- **Animation System**: Smooth slide-out animations with easing curves for enhanced user experience
 
 ### Real-time Updates
-- **Track Change Detection**: Automatically updates tooltip when songs change
+- **Track Change Detection**: Automatically updates tooltips, control panel, and popup notifications when songs change
 - **Playback State Monitoring**: Shows current playback state (Playing/Paused/Stopped)
 - **Metadata Integration**: Extracts artist and title from track metadata, with fallback to filename
+- **Album Art Processing**: Dynamically loads and processes album artwork with high-quality scaling
+- **Position Updates**: Real-time playback position display in control panel
 
 ## Files Structure
 
 ### Core Implementation
 - `main.cpp` - Component entry point, service factories, and version declaration
 - `tray_manager.h/cpp` - Main tray functionality and window management
+- `control_panel.h/cpp` - Popup control panel with album art and playback controls
+- `popup_window.h/cpp` - Track change notification popup with slide animations
 - `preferences.h/cpp` - Settings page implementation with persistent storage
 - `stdafx.h/cpp` - Precompiled headers for faster compilation
 
@@ -54,6 +67,7 @@ A foobar2000 64-bit component that provides system tray functionality with playb
 - `resource.h` - Resource ID definitions
 - `tray_icon.ico` - Custom tray icon (16x16 and 32x32 sizes)
 - `tray_icon.png` - Source icon image
+- `play_icon.ico`, `pause_icon.ico`, `previous_icon.ico`, `next_icon.ico` - Control button icons
 
 ### Build System
 - `foo_traycontrols.vcxproj` - Visual Studio project file
@@ -62,7 +76,7 @@ A foobar2000 64-bit component that provides system tray functionality with playb
 
 ## Building
 
-### Quick Build
+### Quick Build (Recommended)
 ```bash
 # Run the automated build script
 build-simple-traycontrols-x64.bat
@@ -70,6 +84,12 @@ build-simple-traycontrols-x64.bat
 # Output will be in x64\Release\foo_traycontrols.dll
 # Copy to your foobar2000\components\ folder
 ```
+
+### Manual Build
+1. Open `foo_traycontrols.vcxproj` in Visual Studio 2022+
+2. Ensure foobar2000 SDK is in `foobar2000_SDK\` directory  
+3. Build for x64 platform (Release configuration recommended)
+4. Copy resulting DLL to foobar2000 components folder
 
 ## Installation
 
@@ -82,9 +102,12 @@ build-simple-traycontrols-x64.bat
 
 ### Basic Operation
 1. The tray icon appears automatically when the component loads
-2. Right-click the tray icon for playback controls
-3. Double-click the tray icon to show/hide the main window
-4. Hover over the icon to see current track information
+2. Single-click the tray icon to show/hide the popup control panel
+3. Right-click the tray icon for window controls (Show/Hide foobar2000, Exit)
+4. Scroll mouse wheel over the tray icon to adjust volume (always enabled)
+5. Hover over the icon to see current track information
+6. Control panel automatically hides after 7 seconds of inactivity (with gliding animation)
+7. Optional popup notifications appear on track changes (if enabled in preferences)
 
 ### Minimize to Tray
 1. Go to Preferences → Tools → Tray Controls
@@ -92,12 +115,19 @@ build-simple-traycontrols-x64.bat
 3. Click Apply
 4. Now clicking the minimize button will hide to tray instead of taskbar
 
+### Popup Notifications
+1. Go to Preferences → Tools → Tray Controls
+2. Enable "Show popup notification on track change"
+3. Click Apply
+4. Popup notifications will appear at top-left corner when tracks change
+5. Each notification displays album art, track title, and artist information
+
 ## Requirements
 
 - **foobar2000**: Version 1.6+ (64-bit)
 - **Windows**: 7 or later (Windows 10+ recommended)
 - **Build Tools**: Visual Studio 2022+ with v143 toolset and Windows 10/11 SDK
-- **Dependencies**: No external dependencies (ATL/MFC not required)
+- **Dependencies**: GDI+ (included with Windows), shlwapi.lib
 
 ## Limitations
 
@@ -116,6 +146,11 @@ build-simple-traycontrols-x64.bat
 - Settings stored in foobar2000's internal configuration using `cfg_int` with unique GUIDs
 - Preferences dialog implemented using Win32 dialog resources
 - Proper change detection and Apply button state management
+
+### Error Handling
+- Graceful fallbacks for missing metadata
+- Safe window handle management
+- Resource cleanup on component unload
 
 ## License
 
