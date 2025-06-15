@@ -99,8 +99,8 @@ void control_panel::show_control_panel() {
     // Start update timer
     SetTimer(m_control_window, UPDATE_TIMER_ID, 1000, update_timer_proc);
     
-    // Start timeout timer (7 seconds)
-    SetTimer(m_control_window, TIMEOUT_TIMER_ID, 7000, update_timer_proc);
+    // Start timeout timer (5 seconds)
+    SetTimer(m_control_window, TIMEOUT_TIMER_ID, 5000, update_timer_proc);
 }
 
 void control_panel::hide_control_panel() {
@@ -596,7 +596,7 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                 // Reset timeout timer on user interaction (only if not animating)
                 if (panel && panel->m_visible && panel->m_control_window && !panel->m_animating) {
                     KillTimer(panel->m_control_window, TIMEOUT_TIMER_ID);
-                    SetTimer(panel->m_control_window, TIMEOUT_TIMER_ID, 7000, update_timer_proc);
+                    SetTimer(panel->m_control_window, TIMEOUT_TIMER_ID, 5000, update_timer_proc);
                 }
                 
                 // Check which button was clicked - updated for new positions and sizes (21x21 icons)
@@ -605,6 +605,14 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                     else if (pt.x >= 181 && pt.x < 201) panel->handle_button_click(BTN_PLAYPAUSE); // Play/Pause (191 ± 10)
                     else if (pt.x >= 231 && pt.x < 251) panel->handle_button_click(BTN_NEXT);   // Next (241 ± 10)
                 }
+                // Check if click is in album art area (cover area is 15,15 to 95,95 - see paint_control_panel)
+                else if (pt.x >= 15 && pt.x < 95 && pt.y >= 15 && pt.y < 95) {
+                    // Click on album art - slide the panel away
+                    if (panel && panel->m_visible && !panel->m_animating) {
+                        panel->hide_control_panel();
+                    }
+                }
+                
                 return 0;
             }
             
@@ -612,7 +620,7 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
             // Reset timeout timer on mouse movement over the panel (only if not animating)
             if (panel && panel->m_visible && panel->m_control_window && !panel->m_animating) {
                 KillTimer(panel->m_control_window, TIMEOUT_TIMER_ID);
-                SetTimer(panel->m_control_window, TIMEOUT_TIMER_ID, 7000, update_timer_proc);
+                SetTimer(panel->m_control_window, TIMEOUT_TIMER_ID, 5000, update_timer_proc);
             }
             break;
             
