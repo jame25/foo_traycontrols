@@ -14,6 +14,7 @@ public:
     // Show popup with track information
     void show_track_info(metadb_handle_ptr p_track);
     void hide_popup();
+    void refresh_track_info();
     
     // Settings
     void on_settings_changed();
@@ -42,9 +43,10 @@ private:
     static const UINT ANIMATION_DURATION = 300; // 300ms slide animation
     static const UINT ANIMATION_STEPS = 20; // Number of animation frames
     
-    // Cover art
+    // Cover art and track info
     HBITMAP m_cover_art_bitmap;
     pfc::string8 m_last_track_path;
+    metadb_handle_ptr m_current_track;
     
     // Window management
     void create_popup_window();
