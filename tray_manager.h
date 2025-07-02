@@ -17,6 +17,7 @@ public:
     
     // Playback event handlers
     void update_tooltip(metadb_handle_ptr p_track);
+    void update_tooltip_with_dynamic_info(const file_info & p_info);
     void update_playback_state(const char* state);
     
     // Tray functionality - public interface
