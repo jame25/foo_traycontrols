@@ -31,3 +31,4 @@
 #include "lib/foobar2000_SDK/foobar2000/SDK/file_info_impl.h"
 #include "lib/foobar2000_SDK/foobar2000/SDK/album_art.h"
 #include "lib/foobar2000_SDK/foobar2000/SDK/coreDarkMode.h"
+#include "lib/foobar2000_SDK/foobar2000/SDK/titleformat.h"
