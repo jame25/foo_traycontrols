@@ -145,13 +145,59 @@ void control_panel::update_track_info() {
         // Get current track
         metadb_handle_ptr track;
         if (playback->get_now_playing(track) && track.is_valid()) {
-            file_info_impl info;
-            if (track->get_info(info)) {
-                const char* artist_str = info.meta_get("ARTIST", 0);
-                const char* title_str = info.meta_get("TITLE", 0);
-                
-                m_current_artist = artist_str ? artist_str : "Unknown Artist";
-                m_current_title = title_str ? title_str : "Unknown Title";
+            // Check if this is a stream
+            pfc::string8 path = track->get_path();
+            bool is_stream = strstr(path.get_ptr(), "://") != nullptr;
+            
+            m_current_artist = "Unknown Artist";
+            m_current_title = "Unknown Title";
+            
+            if (is_stream) {
+                // For streaming sources, use titleformat to get what foobar2000 displays
+                try {
+                    static_api_ptr_t<titleformat_compiler> compiler;
+                    service_ptr_t<titleformat_object> script;
+                    
+                    if (compiler->compile(script, "[%artist%]|[%title%]")) {
+                        pfc::string8 formatted_title;
+                        if (playback->playback_format_title(nullptr, formatted_title, script, nullptr, playback_control::display_level_all)) {
+                            const char* separator = strstr(formatted_title.get_ptr(), "|");
+                            if (separator && strlen(formatted_title.get_ptr()) > 1) {
+                                pfc::string8 tf_artist(formatted_title.get_ptr(), separator - formatted_title.get_ptr());
+                                pfc::string8 tf_title(separator + 1);
+                                
+                                if (!tf_artist.is_empty() && !tf_title.is_empty()) {
+                                    m_current_artist = tf_artist.c_str();
+                                    m_current_title = tf_title.c_str();
+                                }
+                            }
+                        }
+                    }
+                } catch (...) {
+                    // Fall through to basic metadata extraction
+                }
+            }
+            
+            // If titleformat didn't work or not a stream, try basic metadata
+            if (m_current_artist == "Unknown Artist" || m_current_title == "Unknown Title") {
+                file_info_impl info;
+                if (track->get_info(info)) {
+                    const char* artist_str = info.meta_get("ARTIST", 0);
+                    const char* title_str = info.meta_get("TITLE", 0);
+                    
+                    if (artist_str && *artist_str) m_current_artist = artist_str;
+                    if (title_str && *title_str) m_current_title = title_str;
+                    
+                    // For streams, try additional fallbacks
+                    if (is_stream) {
+                        if (m_current_title == "Unknown Title" && info.meta_exists("server")) {
+                            m_current_title = info.meta_get("server", 0);
+                        }
+                        if (m_current_title == "Unknown Title" && info.meta_exists("SERVER")) {
+                            m_current_title = info.meta_get("SERVER", 0);
+                        }
+                    }
+                }
             }
             
             // Get track length
