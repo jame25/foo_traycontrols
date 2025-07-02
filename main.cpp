@@ -25,7 +25,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 // Component version declaration using the proper SDK macro
 DECLARE_COMPONENT_VERSION(
     "Tray Controls",
-    "1.0.5",
+    "1.0.6",
     "System tray controls for foobar2000.\n"
     "Features:\n"
     "- Minimize to system tray\n"
@@ -93,14 +93,17 @@ public:
         // Update tooltip when track metadata is edited
         tray_manager::get_instance().update_tooltip(p_track);
     }
-    void on_playback_dynamic_info(const file_info & p_info) override {}
+    void on_playback_dynamic_info(const file_info & p_info) override {
+        // Update tooltip with dynamic metadata info (for streaming sources)
+        tray_manager::get_instance().update_tooltip_with_dynamic_info(p_info);
+        // Also refresh popup if it's visible
+        popup_window::get_instance().refresh_track_info();
+    }
     void on_playback_dynamic_info_track(const file_info & p_info) override {
-        // Try to update tooltip when dynamic info changes
-        static_api_ptr_t<playback_control> pc;
-        metadb_handle_ptr track;
-        if (pc->get_now_playing(track) && track.is_valid()) {
-            tray_manager::get_instance().update_tooltip(track);
-        }
+        // Update tooltip with track-specific dynamic info (for streaming sources)
+        tray_manager::get_instance().update_tooltip_with_dynamic_info(p_info);
+        // Also refresh popup if it's visible
+        popup_window::get_instance().refresh_track_info();
     }
     void on_playback_time(double p_time) override {}
     void on_volume_change(float p_new_val) override {}
