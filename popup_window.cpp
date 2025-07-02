@@ -90,6 +90,14 @@ void popup_window::hide_popup() {
     start_slide_out_animation();
 }
 
+void popup_window::refresh_track_info() {
+    if (!m_initialized || !m_visible || !m_popup_window) return;
+    
+    // Force repaint to update displayed info with current metadata
+    InvalidateRect(m_popup_window, nullptr, TRUE);
+    UpdateWindow(m_popup_window);
+}
+
 void popup_window::on_settings_changed() {
     if (!get_show_popup_notification() && m_visible) {
         hide_popup();
@@ -177,8 +185,14 @@ void popup_window::update_track_info(metadb_handle_ptr p_track) {
     // Store track path for comparison
     m_last_track_path = p_track->get_path();
     
+    // Store track handle for use during painting
+    m_current_track = p_track;
+    
     // Force repaint to update displayed info
-    InvalidateRect(m_popup_window, nullptr, TRUE);
+    if (m_popup_window) {
+        InvalidateRect(m_popup_window, nullptr, TRUE);
+        UpdateWindow(m_popup_window);
+    }
 }
 
 void popup_window::load_cover_art(metadb_handle_ptr p_track) {
@@ -358,6 +372,7 @@ VOID CALLBACK popup_window::animation_timer_proc(HWND hwnd, UINT msg, UINT_PTR t
 }
 
 void popup_window::paint_popup(HDC hdc) {
+    
     if (!hdc) return;
     
     RECT client_rect;
@@ -417,17 +432,60 @@ void popup_window::paint_popup(HDC hdc) {
 }
 
 void popup_window::draw_track_info(HDC hdc, const RECT& client_rect) {
+    
     if (!hdc) return;
     
-    // Get current track info
+    // Get track info from stored track or current playing track
     pfc::string8 artist = "Unknown Artist";
     pfc::string8 title = "Unknown Title";
     
     try {
-        auto playback = playback_control::get();
-        if (playback->is_playing()) {
-            metadb_handle_ptr track;
-            if (playback->get_now_playing(track) && track.is_valid()) {
+        metadb_handle_ptr track = m_current_track;
+        
+        // If no stored track, get current playing track
+        if (!track.is_valid()) {
+            auto playback = playback_control::get();
+            if (playback->is_playing()) {
+                playback->get_now_playing(track);
+            }
+        }
+        
+        if (track.is_valid()) {
+            // Check if this is a stream
+            pfc::string8 path = track->get_path();
+            bool is_stream = strstr(path.get_ptr(), "://") != nullptr;
+            
+            
+            if (is_stream) {
+                // For streaming sources, use titleformat to get what foobar2000 displays
+                try {
+                    auto playback = playback_control::get();
+                    static_api_ptr_t<titleformat_compiler> compiler;
+                    service_ptr_t<titleformat_object> script;
+                    
+                    
+                    if (compiler->compile(script, "[%artist%]|[%title%]")) {
+                        pfc::string8 formatted_title;
+                        if (playback->playback_format_title(nullptr, formatted_title, script, nullptr, playback_control::display_level_all)) {
+                            const char* separator = strstr(formatted_title.get_ptr(), "|");
+                            if (separator && strlen(formatted_title.get_ptr()) > 1) {
+                                pfc::string8 tf_artist(formatted_title.get_ptr(), separator - formatted_title.get_ptr());
+                                pfc::string8 tf_title(separator + 1);
+                                
+                                if (!tf_artist.is_empty() && !tf_title.is_empty()) {
+                                    artist = tf_artist;
+                                    title = tf_title;
+                                }
+                            }
+                        }
+                    }
+                } catch (...) {
+                    // Fall through to basic metadata extraction
+                }
+            }
+            
+            // If titleformat didn't work or not a stream, try basic metadata
+            if ((artist == "Unknown Artist" || title == "Unknown Title")) {
                 file_info_impl info;
                 if (track->get_info(info)) {
                     const char* artist_str = info.meta_get("ARTIST", 0);
@@ -435,6 +493,16 @@ void popup_window::draw_track_info(HDC hdc, const RECT& client_rect) {
                     
                     if (artist_str && *artist_str) artist = artist_str;
                     if (title_str && *title_str) title = title_str;
+                    
+                    // For streams, try additional fallbacks
+                    if (is_stream) {
+                        if (title == "Unknown Title" && info.meta_exists("server")) {
+                            title = info.meta_get("server", 0);
+                        }
+                        if (title == "Unknown Title" && info.meta_exists("SERVER")) {
+                            title = info.meta_get("SERVER", 0);
+                        }
+                    }
                 }
             }
         }
