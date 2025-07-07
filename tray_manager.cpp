@@ -42,7 +42,6 @@ tray_manager::tray_manager()
     , m_was_minimized(false)
     , m_processing_minimize(false)
     , m_original_wndproc(nullptr)
-    , m_mouse_hook(nullptr)
 {
     memset(&m_nid, 0, sizeof(m_nid));
 }
@@ -113,10 +112,7 @@ void tray_manager::initialize() {
         // Keep default tooltip if anything fails
     }
 
-    // Install global mouse hook for mouse wheel detection over tray icon
-    if (get_mouse_wheel_volume_enabled()) {
-        m_mouse_hook = SetWindowsHookEx(WH_MOUSE_LL, mouse_hook_proc, g_hIns, 0);
-    }
+    // Mouse hook removed - was causing system freezing conflicts with artwork downloading components
 
     // Initialize popup window and control panel
     popup_window::get_instance().initialize();
@@ -140,11 +136,7 @@ void tray_manager::cleanup() {
         KillTimer(m_tray_window, TOOLTIP_TIMER_ID);
     }
     
-    // Remove mouse hook
-    if (m_mouse_hook) {
-        UnhookWindowsHookEx(m_mouse_hook);
-        m_mouse_hook = nullptr;
-    }
+    // Mouse hook removed - no cleanup needed
     
     if (m_tray_added) {
         Shell_NotifyIcon(NIM_DELETE, &m_nid);
@@ -498,8 +490,7 @@ void tray_manager::restore_from_tray() {
 }
 
 void tray_manager::on_settings_changed() {
-    // Update mouse hook when settings change
-    update_mouse_hook();
+    // Mouse hook removed - no longer needed
     
     // Update popup window settings
     popup_window::get_instance().on_settings_changed();
@@ -686,58 +677,9 @@ bool tray_manager::is_cursor_over_tray_icon() {
             cursor_pos.y >= tray_rect.top && cursor_pos.y <= tray_rect.bottom);
 }
 
-LRESULT CALLBACK tray_manager::mouse_hook_proc(int code, WPARAM wparam, LPARAM lparam) {
-    if (code >= 0 && s_instance && s_instance->m_initialized) {
-        if (wparam == WM_MOUSEWHEEL) {
-            if (s_instance->is_cursor_over_tray_icon()) {
-                MSLLHOOKSTRUCT* mouse_struct = (MSLLHOOKSTRUCT*)lparam;
-                int delta = GET_WHEEL_DELTA_WPARAM(mouse_struct->mouseData);
-                s_instance->handle_mouse_wheel(delta);
-                return 1; // Consume the message
-            }
-        }
-    }
-    return CallNextHookEx(s_instance ? s_instance->m_mouse_hook : nullptr, code, wparam, lparam);
-}
+// Mouse hook functionality removed - was causing system freezing conflicts with artwork downloading
 
-void tray_manager::handle_mouse_wheel(int delta) {
-    if (!m_initialized) return;
-    
-    // Check if mouse wheel volume control is enabled
-    if (!get_mouse_wheel_volume_enabled()) {
-        return;
-    }
-    
-    try {
-        static_api_ptr_t<playback_control> pc;
-        
-        // Use the built-in volume step functions for consistent behavior
-        if (delta > 0) {
-            // Wheel up = volume up
-            pc->volume_up();
-        } else if (delta < 0) {
-            // Wheel down = volume down
-            pc->volume_down();
-        }
-    } catch (...) {
-        // Ignore volume control errors
-    }
-}
-
-void tray_manager::update_mouse_hook() {
-    if (!m_initialized) return;
-    
-    // Remove existing hook
-    if (m_mouse_hook) {
-        UnhookWindowsHookEx(m_mouse_hook);
-        m_mouse_hook = nullptr;
-    }
-    
-    // Install hook if feature is enabled
-    if (get_mouse_wheel_volume_enabled()) {
-        m_mouse_hook = SetWindowsHookEx(WH_MOUSE_LL, mouse_hook_proc, g_hIns, 0);
-    }
-}
+// Mouse hook update function removed - was causing system freezing conflicts
 
 // Timer procedure for periodic tooltip updates and window monitoring
 VOID CALLBACK tray_manager::tooltip_timer_proc(HWND hwnd, UINT msg, UINT_PTR timer_id, DWORD time) {
