@@ -5,7 +5,6 @@
 
 // Configuration access functions
 bool get_always_minimize_to_tray();
-bool get_mouse_wheel_volume_enabled();
 bool get_show_popup_notification();
 
 // Preferences page instance - the actual dialog
