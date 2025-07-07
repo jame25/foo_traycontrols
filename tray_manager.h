@@ -41,7 +41,7 @@ private:
     bool m_was_minimized;
     bool m_processing_minimize;
     WNDPROC m_original_wndproc;
-    HHOOK m_mouse_hook;
+    // Mouse hook removed - was causing conflicts with artwork downloading
     
     // Timer for periodic tooltip updates
     static const UINT TOOLTIP_TIMER_ID = 2001;
@@ -57,10 +57,8 @@ private:
     // Tray functionality
     void show_context_menu(int x, int y);
     void handle_menu_command(int cmd);
-    void handle_mouse_wheel(int delta);
     bool is_cursor_over_tray_icon();
-    void update_mouse_hook();
-    static LRESULT CALLBACK mouse_hook_proc(int code, WPARAM wparam, LPARAM lparam);
+    // Mouse wheel and hook functions removed - were causing conflicts with artwork downloading
     void force_update_tooltip();
     void check_for_track_changes();
     void check_window_visibility();
