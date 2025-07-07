@@ -14,9 +14,7 @@ bool get_always_minimize_to_tray() {
     return cfg_always_minimize_to_tray != 0;
 }
 
-bool get_mouse_wheel_volume_enabled() {
-    return true; // Always enabled
-}
+// Mouse wheel volume control removed - was causing system conflicts
 
 bool get_show_popup_notification() {
     return cfg_show_popup_notification != 0;
