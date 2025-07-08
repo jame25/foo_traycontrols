@@ -433,54 +433,11 @@ HBITMAP control_panel::convert_album_art_to_bitmap(album_art_data_ptr art_data) 
 void control_panel::load_control_icons() {
     cleanup_control_icons(); // Clean up any existing icons
     
-    // Get the module path to find the icons relative to the DLL
-    wchar_t module_path[MAX_PATH];
-    GetModuleFileNameW(g_hIns, module_path, MAX_PATH);
-    
-    // Extract directory path
-    wchar_t* last_slash = wcsrchr(module_path, L'\\');
-    if (last_slash) {
-        *last_slash = L'\0'; // Terminate at the last slash
-    }
-    
-    // Load each icon ICO file directly as HICON (21x21 = 32 * 0.9^4)
-    wchar_t icon_path[MAX_PATH];
-    
-    // Try multiple possible icon filenames and locations
-    const wchar_t* icon_names[][2] = {
-        {L"play_icon.ico", L"play.ico"},
-        {L"pause_icon.ico", L"pause.ico"},  
-        {L"previous_icon.ico", L"previous.ico"},
-        {L"next_icon.ico", L"next.ico"}
-    };
-    
-    HICON* icon_ptrs[] = {&m_play_icon, &m_pause_icon, &m_previous_icon, &m_next_icon};
-    
-    for (int i = 0; i < 4; i++) {
-        *icon_ptrs[i] = nullptr;
-        
-        // Try both possible filenames
-        for (int j = 0; j < 2; j++) {
-            swprintf_s(icon_path, L"%s\\%s", module_path, icon_names[i][j]);
-            
-            // Check if file exists first
-            DWORD file_attrs = GetFileAttributesW(icon_path);
-            if (file_attrs != INVALID_FILE_ATTRIBUTES && !(file_attrs & FILE_ATTRIBUTE_DIRECTORY)) {
-                // File exists, try to load it at native size first for best quality
-                *icon_ptrs[i] = (HICON)LoadImageW(nullptr, icon_path, IMAGE_ICON, 0, 0, 
-                                                  LR_LOADFROMFILE | LR_DEFAULTSIZE);
-                
-                // If that fails, try loading at our target size
-                if (!*icon_ptrs[i]) {
-                    *icon_ptrs[i] = (HICON)LoadImageW(nullptr, icon_path, IMAGE_ICON, 21, 21, 
-                                                      LR_LOADFROMFILE);
-                }
-                if (*icon_ptrs[i]) {
-                    break; // Successfully loaded, move to next icon
-                }
-            }
-        }
-    }
+    // Load icons from embedded resources
+    m_play_icon = LoadIcon(g_hIns, MAKEINTRESOURCE(IDI_PLAY_ICON));
+    m_pause_icon = LoadIcon(g_hIns, MAKEINTRESOURCE(IDI_PAUSE_ICON));
+    m_previous_icon = LoadIcon(g_hIns, MAKEINTRESOURCE(IDI_PREVIOUS_ICON));
+    m_next_icon = LoadIcon(g_hIns, MAKEINTRESOURCE(IDI_NEXT_ICON));
 }
 
 void control_panel::cleanup_control_icons() {
