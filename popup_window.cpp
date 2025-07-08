@@ -104,7 +104,6 @@ void popup_window::show_track_info(metadb_handle_ptr p_track) {
         return; // Same track/metadata, don't show popup again
     }
     
-    console::formatter() << "POPUP DEBUG: Showing popup for new track/metadata: " << track_identifier;
     m_last_track_path = track_identifier;
     
     // Update track info and cover art
