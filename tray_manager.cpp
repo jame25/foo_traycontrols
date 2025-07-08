@@ -329,8 +329,7 @@ void tray_manager::update_tooltip(metadb_handle_ptr p_track) {
             Shell_NotifyIcon(NIM_MODIFY, &m_nid);
         }
         
-        // Show popup notification if enabled
-        popup_window::get_instance().show_track_info(p_track);
+        // Popup will be triggered by playback callbacks for actual track changes
     }
     catch (...) {
         // Fallback tooltip
@@ -702,21 +701,49 @@ void tray_manager::check_for_track_changes() {
             if (pc->get_now_playing(track) && track.is_valid()) {
                 pfc::string8 current_path = track->get_path();
                 
-                // Check if track has changed
-                if (current_path != m_last_track_path) {
-                    m_last_track_path = current_path;
-                    update_tooltip(track);
-                    // Show popup notification only on actual track change
-                    popup_window::get_instance().show_track_info(track);
-                } else if (strstr(current_path.get_ptr(), "://") != nullptr) {
-                    // For streaming sources, force update less frequently
-                    // in case metadata has changed without track change
-                    static int update_counter = 0;
+                bool is_stream = strstr(current_path.get_ptr(), "://") != nullptr;
+                
+                if (is_stream) {
+                    // For streams, use metadata as identifier for track changes
+                    pfc::string8 metadata_identifier;
+                    try {
+                        static_api_ptr_t<titleformat_compiler> compiler;
+                        service_ptr_t<titleformat_object> script;
+                        
+                        if (compiler->compile(script, "[%artist%]|[%title%]")) {
+                            pfc::string8 formatted_title;
+                            if (pc->playback_format_title(nullptr, formatted_title, script, nullptr, playback_control::display_level_all)) {
+                                metadata_identifier = formatted_title;
+                            }
+                        }
+                    } catch (...) {
+                        metadata_identifier = current_path;
+                    }
                     
-                    update_counter++;
-                    if (update_counter >= 10) { // Every 5 seconds (500ms * 10)
-                        update_counter = 0;
+                    // Check if metadata has actually changed
+                    if (metadata_identifier != m_last_track_metadata && !metadata_identifier.is_empty()) {
+                        m_last_track_metadata = metadata_identifier;
+                        m_last_track_path = current_path;
                         update_tooltip(track);
+                        // Show popup notification for stream metadata change
+                        popup_window::get_instance().show_track_info(track);
+                    } else {
+                        // Just update tooltip periodically without popup
+                        static int update_counter = 0;
+                        update_counter++;
+                        if (update_counter >= 10) { // Every 5 seconds
+                            update_counter = 0;
+                            update_tooltip(track);
+                        }
+                    }
+                } else {
+                    // For local files, use path as identifier
+                    if (current_path != m_last_track_path) {
+                        m_last_track_path = current_path;
+                        m_last_track_metadata = ""; // Clear metadata for local files
+                        update_tooltip(track);
+                        // Show popup notification for track change
+                        popup_window::get_instance().show_track_info(track);
                     }
                 }
             }
@@ -724,6 +751,7 @@ void tray_manager::check_for_track_changes() {
             // Not playing - clear last track and update state
             if (!m_last_track_path.is_empty()) {
                 m_last_track_path = "";
+                m_last_track_metadata = "";
                 update_playback_state("Stopped");
             }
         }
