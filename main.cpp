@@ -66,6 +66,8 @@ public:
     void on_playback_new_track(metadb_handle_ptr p_track) override {
         // Update tray tooltip with new track information
         tray_manager::get_instance().update_tooltip(p_track);
+        // Show popup notification for new tracks
+        popup_window::get_instance().show_track_info(p_track);
     }
     
     void on_playback_starting(play_control::t_track_command p_command, bool p_paused) override {
@@ -96,14 +98,14 @@ public:
     void on_playback_dynamic_info(const file_info & p_info) override {
         // Update tooltip with dynamic metadata info (for streaming sources)
         tray_manager::get_instance().update_tooltip_with_dynamic_info(p_info);
-        // Also refresh popup if it's visible
-        popup_window::get_instance().refresh_track_info();
+        // Note: Do NOT trigger popup here - this fires too frequently for streams
+        // Popup will be handled by track change detection in tray_manager timer
     }
     void on_playback_dynamic_info_track(const file_info & p_info) override {
         // Update tooltip with track-specific dynamic info (for streaming sources)
         tray_manager::get_instance().update_tooltip_with_dynamic_info(p_info);
-        // Also refresh popup if it's visible
-        popup_window::get_instance().refresh_track_info();
+        // Note: Do NOT trigger popup here - this fires too frequently for streams
+        // Popup will be handled by track change detection in tray_manager timer
     }
     void on_playback_time(double p_time) override {}
     void on_volume_change(float p_new_val) override {}
