@@ -46,6 +46,7 @@ private:
     // Timer for periodic tooltip updates
     static const UINT TOOLTIP_TIMER_ID = 2001;
     pfc::string8 m_last_track_path;
+    pfc::string8 m_last_track_metadata;
     
     // Window management
     HWND find_main_window();
