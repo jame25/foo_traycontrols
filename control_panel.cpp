@@ -744,18 +744,57 @@ void control_panel::paint_control_panel(HDC hdc) {
         FillRect(hdc, &cover_rect, cover_brush);
         DeleteObject(cover_brush);
         
-        // Add music note symbol
-        SetTextColor(hdc, RGB(150, 150, 150));
-        SetBkMode(hdc, TRANSPARENT);
-        HFONT symbol_font = CreateFont(40, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-                                       DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                                       DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI Symbol");
-        HFONT old_font = (HFONT)SelectObject(hdc, symbol_font);
+        // Determine symbol/icon based on whether this is a stream or local file
+        bool is_stream = false;
+        try {
+            auto playback = playback_control::get();
+            metadb_handle_ptr track;
+            if (playback->get_now_playing(track) && track.is_valid()) {
+                pfc::string8 path = track->get_path();
+                is_stream = strstr(path.get_ptr(), "://") != nullptr;
+            }
+        } catch (...) {
+            // Ignore errors, default to local file behavior
+        }
         
-        DrawText(hdc, L"♪", -1, &cover_rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-        
-        SelectObject(hdc, old_font);
-        DeleteObject(symbol_font);
+        if (is_stream) {
+            // Load and draw radio icon for internet streams
+            HICON radio_icon = LoadIcon(g_hIns, MAKEINTRESOURCE(IDI_RADIO_ICON));
+            if (radio_icon) {
+                // Center the icon in the cover rect (80x80 area)
+                int icon_size = 48; // Larger icon for control panel
+                int icon_x = cover_rect.left + (80 - icon_size) / 2;
+                int icon_y = cover_rect.top + (80 - icon_size) / 2;
+                
+                DrawIconEx(hdc, icon_x, icon_y, radio_icon, icon_size, icon_size, 0, nullptr, DI_NORMAL);
+            } else {
+                // Fallback to text if icon can't be loaded
+                SetTextColor(hdc, RGB(150, 150, 150));
+                SetBkMode(hdc, TRANSPARENT);
+                HFONT symbol_font = CreateFont(40, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                                               DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                                               DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI Symbol");
+                HFONT old_font = (HFONT)SelectObject(hdc, symbol_font);
+                
+                DrawText(hdc, L"📻", -1, &cover_rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+                
+                SelectObject(hdc, old_font);
+                DeleteObject(symbol_font);
+            }
+        } else {
+            // Add music note symbol for local files
+            SetTextColor(hdc, RGB(150, 150, 150));
+            SetBkMode(hdc, TRANSPARENT);
+            HFONT symbol_font = CreateFont(40, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                                           DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                                           DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI Symbol");
+            HFONT old_font = (HFONT)SelectObject(hdc, symbol_font);
+            
+            DrawText(hdc, L"♪", -1, &cover_rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+            
+            SelectObject(hdc, old_font);
+            DeleteObject(symbol_font);
+        }
     }
     
     // Draw track info
