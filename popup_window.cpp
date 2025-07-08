@@ -72,14 +72,40 @@ void popup_window::show_track_info(metadb_handle_ptr p_track) {
         return;
     }
     
-    // Check if this is the same track to prevent duplicate popups
+    // For track change detection, use path for local files and metadata for streams
     pfc::string8 current_path = p_track->get_path();
-    if (current_path == m_last_track_path) {
-        return; // Same track, don't show popup again
+    bool is_stream = strstr(current_path.get_ptr(), "://") != nullptr;
+    
+    pfc::string8 track_identifier;
+    if (is_stream) {
+        // For streams, use artist|title as identifier since path doesn't change
+        try {
+            auto playback = playback_control::get();
+            static_api_ptr_t<titleformat_compiler> compiler;
+            service_ptr_t<titleformat_object> script;
+            
+            if (compiler->compile(script, "[%artist%]|[%title%]")) {
+                pfc::string8 formatted_title;
+                if (playback->playback_format_title(nullptr, formatted_title, script, nullptr, playback_control::display_level_all)) {
+                    track_identifier = formatted_title;
+                }
+            }
+        } catch (...) {
+            // Fallback to path if titleformat fails
+            track_identifier = current_path;
+        }
+    } else {
+        // For local files, use path as identifier
+        track_identifier = current_path;
     }
     
-    console::formatter() << "POPUP DEBUG: Showing popup for new track: " << current_path;
-    m_last_track_path = current_path;
+    // Check if this is the same track/metadata to prevent duplicate popups
+    if (track_identifier == m_last_track_path && !track_identifier.is_empty()) {
+        return; // Same track/metadata, don't show popup again
+    }
+    
+    console::formatter() << "POPUP DEBUG: Showing popup for new track/metadata: " << track_identifier;
+    m_last_track_path = track_identifier;
     
     // Update track info and cover art
     update_track_info(p_track);
@@ -422,18 +448,51 @@ void popup_window::paint_popup(HDC hdc) {
         FillRect(hdc, &cover_rect, cover_brush);
         DeleteObject(cover_brush);
         
-        // Add "♪" symbol as placeholder for cover art
-        SetTextColor(hdc, RGB(200, 200, 200));
-        SetBkMode(hdc, TRANSPARENT);
-        HFONT symbol_font = CreateFont(24, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-                                       DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                                       DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI Symbol");
-        HFONT old_symbol_font = (HFONT)SelectObject(hdc, symbol_font);
+        // Determine icon based on whether this is a stream or local file
+        bool is_stream = false;
+        if (m_current_track.is_valid()) {
+            pfc::string8 path = m_current_track->get_path();
+            is_stream = strstr(path.get_ptr(), "://") != nullptr;
+        }
         
-        DrawText(hdc, L"♪", -1, &cover_rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-        
-        SelectObject(hdc, old_symbol_font);
-        DeleteObject(symbol_font);
+        if (is_stream) {
+            // Load and draw radio icon for internet streams
+            HICON radio_icon = LoadIcon(g_hIns, MAKEINTRESOURCE(IDI_RADIO_ICON));
+            if (radio_icon) {
+                // Center the icon in the cover rect
+                int icon_size = 32; // Standard small icon size
+                int icon_x = cover_rect.left + (60 - icon_size) / 2;
+                int icon_y = cover_rect.top + (60 - icon_size) / 2;
+                
+                DrawIconEx(hdc, icon_x, icon_y, radio_icon, icon_size, icon_size, 0, nullptr, DI_NORMAL);
+            } else {
+                // Fallback to text if icon can't be loaded
+                SetTextColor(hdc, RGB(200, 200, 200));
+                SetBkMode(hdc, TRANSPARENT);
+                HFONT symbol_font = CreateFont(24, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                                               DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                                               DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI Symbol");
+                HFONT old_symbol_font = (HFONT)SelectObject(hdc, symbol_font);
+                
+                DrawText(hdc, L"📻", -1, &cover_rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+                
+                SelectObject(hdc, old_symbol_font);
+                DeleteObject(symbol_font);
+            }
+        } else {
+            // Draw musical note symbol for local files
+            SetTextColor(hdc, RGB(200, 200, 200));
+            SetBkMode(hdc, TRANSPARENT);
+            HFONT symbol_font = CreateFont(24, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                                           DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                                           DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI Symbol");
+            HFONT old_symbol_font = (HFONT)SelectObject(hdc, symbol_font);
+            
+            DrawText(hdc, L"♪", -1, &cover_rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+            
+            SelectObject(hdc, old_symbol_font);
+            DeleteObject(symbol_font);
+        }
     }
     
     // Draw track info (right side)
