@@ -72,6 +72,15 @@ void popup_window::show_track_info(metadb_handle_ptr p_track) {
         return;
     }
     
+    // Check if this is the same track to prevent duplicate popups
+    pfc::string8 current_path = p_track->get_path();
+    if (current_path == m_last_track_path) {
+        return; // Same track, don't show popup again
+    }
+    
+    console::formatter() << "POPUP DEBUG: Showing popup for new track: " << current_path;
+    m_last_track_path = current_path;
+    
     // Update track info and cover art
     update_track_info(p_track);
     load_cover_art(p_track);
