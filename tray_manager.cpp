@@ -329,7 +329,8 @@ void tray_manager::update_tooltip(metadb_handle_ptr p_track) {
             Shell_NotifyIcon(NIM_MODIFY, &m_nid);
         }
         
-        // Popup notification will be handled by track change detection in check_for_track_changes()
+        // Show popup notification if enabled
+        popup_window::get_instance().show_track_info(p_track);
     }
     catch (...) {
         // Fallback tooltip
