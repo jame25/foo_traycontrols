@@ -584,12 +584,6 @@ void tray_manager::force_update_tooltip() {
 }
 
 LRESULT CALLBACK tray_manager::window_proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
-    // Debug: Show important messages that we do receive
-    if (msg == WM_SYSCOMMAND || msg == WM_CLOSE) {
-        wchar_t debug_msg[256];
-        swprintf_s(debug_msg, L"window_proc: msg=0x%X, wparam=0x%X", msg, wparam);
-        MessageBox(nullptr, debug_msg, L"Important Message", MB_OK);
-    }
     
     if (s_instance && s_instance->m_initialized) {
         switch (msg) {
@@ -604,7 +598,6 @@ LRESULT CALLBACK tray_manager::window_proc(HWND hwnd, UINT msg, WPARAM wparam, L
             if (wparam == SC_MINIMIZE) {
                 // Check if "always minimize to tray" is enabled
                 bool minimize_setting = get_always_minimize_to_tray();
-                MessageBox(nullptr, minimize_setting ? L"Minimize setting: ENABLED" : L"Minimize setting: DISABLED", L"Debug", MB_OK);
                 if (minimize_setting) {
                     s_instance->minimize_to_tray();
                     return 0;  // Prevent default minimize behavior
@@ -769,11 +762,6 @@ void tray_manager::check_window_visibility() {
     
     // Only trigger on actual state changes
     if (current_visible != m_was_visible || is_minimized != m_was_minimized) {
-        wchar_t debug_msg[256];
-        swprintf_s(debug_msg, L"Window state changed: visible=%s->%s, minimized=%s->%s", 
-                  m_was_visible ? L"true" : L"false", current_visible ? L"true" : L"false",
-                  m_was_minimized ? L"true" : L"false", is_minimized ? L"true" : L"false");
-        OutputDebugString(debug_msg);
         
         // Check if user just minimized the window and setting is enabled
         if (!m_was_minimized && is_minimized && get_always_minimize_to_tray()) {
