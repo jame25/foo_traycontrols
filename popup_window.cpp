@@ -581,20 +581,37 @@ void popup_window::draw_track_info(HDC hdc, const RECT& client_rect) {
     SetTextColor(hdc, RGB(255, 255, 255));
     SetBkMode(hdc, TRANSPARENT);
     
-    // Draw artist (larger font)
-    HFONT artist_font = CreateFont(16, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
-                                   DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                                   DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+    // Use custom fonts if available, otherwise fallback to defaults
+    HFONT artist_font, title_font;
+    
+    if (get_use_custom_fonts()) {
+        LOGFONT artist_lf = get_artist_font();
+        LOGFONT title_lf = get_track_font();
+        
+        // Scale fonts down slightly for popup (popup is smaller than control panel)
+        artist_lf.lfHeight = (artist_lf.lfHeight * 3) / 4;  // 75% of original size
+        title_lf.lfHeight = (title_lf.lfHeight * 3) / 4;    // 75% of original size
+        
+        artist_font = CreateFontIndirect(&artist_lf);
+        title_font = CreateFontIndirect(&title_lf);
+    } else {
+        // Default fonts
+        artist_font = CreateFont(16, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+                                 DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                                 DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+        title_font = CreateFont(14, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                                DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                                DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+    }
+    
+    // Draw artist
     HFONT old_font = (HFONT)SelectObject(hdc, artist_font);
     
     RECT artist_rect = {85, 15, client_rect.right - 10, 35};
     pfc::stringcvt::string_wide_from_utf8 wide_artist(artist.c_str());
     DrawText(hdc, wide_artist.get_ptr(), -1, &artist_rect, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
     
-    // Draw title (smaller font)
-    HFONT title_font = CreateFont(14, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-                                  DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                                  DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+    // Draw title
     SelectObject(hdc, title_font);
     
     RECT title_rect = {85, 40, client_rect.right - 10, 60};
