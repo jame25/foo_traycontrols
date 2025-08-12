@@ -20,6 +20,9 @@ public:
     // Update with current track info
     void update_track_info();
     
+    // Settings change notification
+    void on_settings_changed();
+    
 private:
     control_panel();
     ~control_panel();
@@ -51,11 +54,15 @@ private:
     // Album art
     HBITMAP m_cover_art_bitmap;
     
-    // Control icons
-    HICON m_play_icon;
-    HICON m_pause_icon;
-    HICON m_previous_icon;
-    HICON m_next_icon;
+    // Custom fonts
+    HFONT m_artist_font;
+    HFONT m_track_font;
+    
+    // Vector icon drawing
+    void draw_play_icon(HDC hdc, int x, int y, int size);
+    void draw_pause_icon(HDC hdc, int x, int y, int size);
+    void draw_previous_icon(HDC hdc, int x, int y, int size);
+    void draw_next_icon(HDC hdc, int x, int y, int size);
     
     // Animation state
     bool m_animating;
@@ -74,8 +81,8 @@ private:
     void load_cover_art();
     void cleanup_cover_art();
     HBITMAP convert_album_art_to_bitmap(album_art_data_ptr art_data);
-    void load_control_icons();
-    void cleanup_control_icons();
+    void load_fonts();
+    void cleanup_fonts();
     
     // Event handlers
     void handle_button_click(int button_id);
