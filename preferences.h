@@ -7,6 +7,15 @@
 bool get_always_minimize_to_tray();
 bool get_show_popup_notification();
 
+// Font configuration functions
+bool get_use_custom_fonts();
+LOGFONT get_artist_font();
+LOGFONT get_track_font();
+void set_artist_font(const LOGFONT& font);
+void set_track_font(const LOGFONT& font);
+void reset_fonts();
+LOGFONT get_default_font(bool is_artist, int size);
+
 // Preferences page instance - the actual dialog
 class tray_preferences : public preferences_page_instance {
 private:
@@ -32,6 +41,11 @@ private:
     bool has_changed();
     void apply_settings();
     void reset_settings();
+    void update_font_displays();
+    void select_artist_font();
+    void select_track_font();
+    void reset_fonts_to_default();
+    pfc::string8 format_font_name(const LOGFONT& lf);
 };
 
 // Preferences page factory
