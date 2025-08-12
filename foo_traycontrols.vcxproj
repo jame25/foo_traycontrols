@@ -63,7 +63,7 @@
       <RandomizedBaseAddress>false</RandomizedBaseAddress>
       <DataExecutionPrevention>
       </DataExecutionPrevention>
-      <AdditionalDependencies>foobar2000_SDK.lib;pfc.lib;shared.lib;shell32.lib;user32.lib;winmm.lib;ole32.lib;gdi32.lib;gdiplus.lib;shlwapi.lib</AdditionalDependencies>
+      <AdditionalDependencies>foobar2000_SDK.lib;pfc.lib;shared.lib;shell32.lib;user32.lib;winmm.lib;ole32.lib;gdi32.lib;gdiplus.lib;shlwapi.lib;comdlg32.lib</AdditionalDependencies>
       <AdditionalLibraryDirectories>lib/foobar2000_SDK/foobar2000/SDK/x64/$(Configuration);lib/foobar2000_SDK/pfc/x64/$(Configuration);lib/foobar2000_SDK/foobar2000/shared/x64/$(Configuration)</AdditionalLibraryDirectories>
       <ModuleDefinitionFile>foo_traycontrols.def</ModuleDefinitionFile>
     </Link>
@@ -93,7 +93,7 @@
       <RandomizedBaseAddress>false</RandomizedBaseAddress>
       <DataExecutionPrevention>
       </DataExecutionPrevention>
-      <AdditionalDependencies>foobar2000_SDK.lib;pfc.lib;shared.lib;shell32.lib;user32.lib;winmm.lib;ole32.lib;gdi32.lib;gdiplus.lib;shlwapi.lib</AdditionalDependencies>
+      <AdditionalDependencies>foobar2000_SDK.lib;pfc.lib;shared.lib;shell32.lib;user32.lib;winmm.lib;ole32.lib;gdi32.lib;gdiplus.lib;shlwapi.lib;comdlg32.lib</AdditionalDependencies>
       <AdditionalLibraryDirectories>lib/foobar2000_SDK/foobar2000/SDK/x64/$(Configuration);lib/foobar2000_SDK/pfc/x64/$(Configuration);lib/foobar2000_SDK/foobar2000/shared/x64/$(Configuration)</AdditionalLibraryDirectories>
       <ModuleDefinitionFile>foo_traycontrols.def</ModuleDefinitionFile>
     </Link>
@@ -131,6 +131,10 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Use</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Use</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="svg_icon.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Use</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Use</PrecompiledHeader>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="stdafx.h" />
@@ -138,6 +142,7 @@
     <ClInclude Include="preferences.h" />
     <ClInclude Include="popup_window.h" />
     <ClInclude Include="control_panel.h" />
+    <ClInclude Include="svg_icon.h" />
     <ClInclude Include="resource.h" />
   </ItemGroup>
   <ItemGroup>
