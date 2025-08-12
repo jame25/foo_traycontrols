@@ -25,10 +25,8 @@ control_panel::control_panel()
     , m_is_playing(false)
     , m_is_paused(false)
     , m_cover_art_bitmap(nullptr)
-    , m_play_icon(nullptr)
-    , m_pause_icon(nullptr)
-    , m_previous_icon(nullptr)
-    , m_next_icon(nullptr)
+    , m_artist_font(nullptr)
+    , m_track_font(nullptr)
     , m_animating(false)
     , m_closing(false)
     , m_animation_step(0)
@@ -53,7 +51,7 @@ void control_panel::initialize() {
     if (m_initialized) return;
     
     create_control_window();
-    load_control_icons();
+    load_fonts();
     m_initialized = true;
 }
 
@@ -71,7 +69,7 @@ void control_panel::cleanup() {
     }
     
     cleanup_cover_art();
-    cleanup_control_icons();
+    cleanup_fonts();
     
     if (m_control_window) {
         DestroyWindow(m_control_window);
@@ -430,32 +428,139 @@ HBITMAP control_panel::convert_album_art_to_bitmap(album_art_data_ptr art_data) 
 }
 
 
-void control_panel::load_control_icons() {
-    cleanup_control_icons(); // Clean up any existing icons
+// Vector-drawn icon implementations
+void control_panel::draw_play_icon(HDC hdc, int x, int y, int size) {
+    // Create a play triangle pointing right
+    POINT triangle[3];
+    int half_size = size / 2;
+    triangle[0] = {x - half_size/2, y - half_size};     // Top left
+    triangle[1] = {x - half_size/2, y + half_size};     // Bottom left  
+    triangle[2] = {x + half_size, y};                   // Right point
     
-    // Load icons from embedded resources
-    m_play_icon = LoadIcon(g_hIns, MAKEINTRESOURCE(IDI_PLAY_ICON));
-    m_pause_icon = LoadIcon(g_hIns, MAKEINTRESOURCE(IDI_PAUSE_ICON));
-    m_previous_icon = LoadIcon(g_hIns, MAKEINTRESOURCE(IDI_PREVIOUS_ICON));
-    m_next_icon = LoadIcon(g_hIns, MAKEINTRESOURCE(IDI_NEXT_ICON));
+    HBRUSH brush = CreateSolidBrush(RGB(255, 255, 255));
+    HBRUSH old_brush = (HBRUSH)SelectObject(hdc, brush);
+    HPEN pen = CreatePen(PS_SOLID, 1, RGB(255, 255, 255));
+    HPEN old_pen = (HPEN)SelectObject(hdc, pen);
+    
+    Polygon(hdc, triangle, 3);
+    
+    SelectObject(hdc, old_pen);
+    SelectObject(hdc, old_brush);
+    DeleteObject(pen);
+    DeleteObject(brush);
 }
 
-void control_panel::cleanup_control_icons() {
-    if (m_play_icon) {
-        DestroyIcon(m_play_icon);
-        m_play_icon = nullptr;
+void control_panel::draw_pause_icon(HDC hdc, int x, int y, int size) {
+    // Create two vertical rectangles
+    int half_size = size / 2;
+    int bar_width = size / 5;
+    int gap = size / 6;
+    
+    RECT left_bar = {x - gap - bar_width, y - half_size, x - gap, y + half_size};
+    RECT right_bar = {x + gap, y - half_size, x + gap + bar_width, y + half_size};
+    
+    HBRUSH brush = CreateSolidBrush(RGB(255, 255, 255));
+    FillRect(hdc, &left_bar, brush);
+    FillRect(hdc, &right_bar, brush);
+    DeleteObject(brush);
+}
+
+void control_panel::draw_previous_icon(HDC hdc, int x, int y, int size) {
+    // Draw vertical line + triangle pointing left
+    int half_size = size / 2;
+    int bar_width = 2;
+    
+    // Vertical line on the left
+    RECT bar = {x - half_size, y - half_size, x - half_size + bar_width, y + half_size};
+    HBRUSH brush = CreateSolidBrush(RGB(255, 255, 255));
+    FillRect(hdc, &bar, brush);
+    
+    // Triangle pointing left
+    POINT triangle[3];
+    triangle[0] = {x + half_size/2, y - half_size/2};   // Top right
+    triangle[1] = {x + half_size/2, y + half_size/2};   // Bottom right
+    triangle[2] = {x - half_size/4, y};                 // Left point
+    
+    HBRUSH old_brush = (HBRUSH)SelectObject(hdc, brush);
+    HPEN pen = CreatePen(PS_SOLID, 1, RGB(255, 255, 255));
+    HPEN old_pen = (HPEN)SelectObject(hdc, pen);
+    
+    Polygon(hdc, triangle, 3);
+    
+    SelectObject(hdc, old_pen);
+    SelectObject(hdc, old_brush);
+    DeleteObject(pen);
+    DeleteObject(brush);
+}
+
+void control_panel::draw_next_icon(HDC hdc, int x, int y, int size) {
+    // Draw triangle pointing right + vertical line
+    int half_size = size / 2;
+    int bar_width = 2;
+    
+    // Triangle pointing right
+    POINT triangle[3];
+    triangle[0] = {x - half_size/2, y - half_size/2};   // Top left
+    triangle[1] = {x - half_size/2, y + half_size/2};   // Bottom left
+    triangle[2] = {x + half_size/4, y};                 // Right point
+    
+    HBRUSH brush = CreateSolidBrush(RGB(255, 255, 255));
+    HBRUSH old_brush = (HBRUSH)SelectObject(hdc, brush);
+    HPEN pen = CreatePen(PS_SOLID, 1, RGB(255, 255, 255));
+    HPEN old_pen = (HPEN)SelectObject(hdc, pen);
+    
+    Polygon(hdc, triangle, 3);
+    
+    SelectObject(hdc, old_pen);
+    SelectObject(hdc, old_brush);
+    
+    // Vertical line on the right
+    RECT bar = {x + half_size - bar_width, y - half_size, x + half_size, y + half_size};
+    FillRect(hdc, &bar, brush);
+    
+    DeleteObject(pen);
+    DeleteObject(brush);
+}
+
+// Font management methods
+void control_panel::load_fonts() {
+    cleanup_fonts();
+    
+    if (get_use_custom_fonts()) {
+        // Use custom fonts
+        LOGFONT artist_lf = get_artist_font();
+        LOGFONT track_lf = get_track_font();
+        
+        m_artist_font = CreateFontIndirect(&artist_lf);
+        m_track_font = CreateFontIndirect(&track_lf);
+    } else {
+        // Use default fonts
+        LOGFONT artist_lf = get_default_font(true, 16);   // Bold, 16pt
+        LOGFONT track_lf = get_default_font(false, 14);   // Regular, 14pt
+        
+        m_artist_font = CreateFontIndirect(&artist_lf);
+        m_track_font = CreateFontIndirect(&track_lf);
     }
-    if (m_pause_icon) {
-        DestroyIcon(m_pause_icon);
-        m_pause_icon = nullptr;
+}
+
+void control_panel::cleanup_fonts() {
+    if (m_artist_font) {
+        DeleteObject(m_artist_font);
+        m_artist_font = nullptr;
     }
-    if (m_previous_icon) {
-        DestroyIcon(m_previous_icon);
-        m_previous_icon = nullptr;
+    if (m_track_font) {
+        DeleteObject(m_track_font);
+        m_track_font = nullptr;
     }
-    if (m_next_icon) {
-        DestroyIcon(m_next_icon);
-        m_next_icon = nullptr;
+}
+
+void control_panel::on_settings_changed() {
+    // Reload fonts when settings change
+    load_fonts();
+    
+    // Trigger repaint if visible
+    if (m_visible && m_control_window) {
+        InvalidateRect(m_control_window, nullptr, TRUE);
     }
 }
 
@@ -760,43 +865,38 @@ void control_panel::paint_control_panel(HDC hdc) {
     // Draw time info
     draw_time_info(hdc, client_rect);
     
-    // Draw control buttons using ICO icons or fallback text
+    // Draw control buttons using custom vector graphics
     // Moved right by 15% of panel width (294 * 0.15 = 44px)
     struct {
         int x, y;
-        HICON icon;
-        const wchar_t* fallback_text;
+        int button_type; // 0=previous, 1=play/pause, 2=next
     } buttons[] = {
-        {141, 90, m_previous_icon, L"⏮"},    // Previous (97 + 44)
-        {191, 90, m_is_playing && !m_is_paused ? m_pause_icon : m_play_icon, m_is_playing && !m_is_paused ? L"⏸" : L"▶"}, // Play/Pause (147 + 44)
-        {241, 90, m_next_icon, L"⏭"}        // Next (197 + 44)
+        {141, 90, 0},    // Previous
+        {191, 90, 1},    // Play/Pause
+        {241, 90, 2}     // Next
     };
     
+    // Enable anti-aliasing for smoother drawing
+    SetStretchBltMode(hdc, HALFTONE);
+    SetBrushOrgEx(hdc, 0, 0, nullptr);
+    
+    int icon_size = 16; // Size of the icons
+    
     for (auto& btn : buttons) {
-        if (btn.icon) {
-            // Set high quality rendering mode
-            int old_mode = SetStretchBltMode(hdc, HALFTONE);
-            SetBrushOrgEx(hdc, 0, 0, nullptr);
-            
-            // Draw icon with precise positioning and high quality scaling
-            DrawIconEx(hdc, btn.x - 10, btn.y - 10, btn.icon, 21, 21, 0, nullptr, DI_NORMAL);
-            
-            // Restore original mode
-            SetStretchBltMode(hdc, old_mode);
-        } else {
-            // Fallback to text symbols if icon failed to load
-            SetTextColor(hdc, RGB(255, 255, 255));
-            SetBkMode(hdc, TRANSPARENT);
-            HFONT symbol_font = CreateFont(15, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-                                           DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                                           DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI Symbol");
-            HFONT old_font = (HFONT)SelectObject(hdc, symbol_font);
-            
-            RECT btn_rect = {btn.x - 10, btn.y - 10, btn.x + 10, btn.y + 10};
-            DrawText(hdc, btn.fallback_text, -1, &btn_rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-            
-            SelectObject(hdc, old_font);
-            DeleteObject(symbol_font);
+        switch (btn.button_type) {
+        case 0: // Previous
+            draw_previous_icon(hdc, btn.x, btn.y, icon_size);
+            break;
+        case 1: // Play/Pause
+            if (m_is_playing && !m_is_paused) {
+                draw_pause_icon(hdc, btn.x, btn.y, icon_size);
+            } else {
+                draw_play_icon(hdc, btn.x, btn.y, icon_size);
+            }
+            break;
+        case 2: // Next
+            draw_next_icon(hdc, btn.x, btn.y, icon_size);
+            break;
         }
     }
 }
@@ -805,30 +905,34 @@ void control_panel::draw_track_info(HDC hdc, const RECT& client_rect) {
     SetTextColor(hdc, RGB(255, 255, 255));
     SetBkMode(hdc, TRANSPARENT);
     
-    // Draw track title (larger font)
-    HFONT title_font = CreateFont(18, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
-                                  DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                                  DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
-    HFONT old_font = (HFONT)SelectObject(hdc, title_font);
+    // Draw track title using custom or default font
+    HFONT font_to_use = m_track_font ? m_track_font : CreateFont(18, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+                                                                 DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                                                                 DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+    HFONT old_font = (HFONT)SelectObject(hdc, font_to_use);
     
     RECT title_rect = {105, 20, client_rect.right - 70, 45};
     pfc::stringcvt::string_wide_from_utf8 wide_title(m_current_title.c_str());
     DrawText(hdc, wide_title.get_ptr(), -1, &title_rect, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
     
-    // Draw artist (smaller font)
-    HFONT artist_font = CreateFont(14, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-                                   DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                                   DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
-    SelectObject(hdc, artist_font);
+    // Draw artist using custom or default font
+    HFONT artist_font_to_use = m_artist_font ? m_artist_font : CreateFont(14, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                                                                          DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                                                                          DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+    SelectObject(hdc, artist_font_to_use);
     
     RECT artist_rect = {105, 50, client_rect.right - 70, 70};
     pfc::stringcvt::string_wide_from_utf8 wide_artist(m_current_artist.c_str());
     DrawText(hdc, wide_artist.get_ptr(), -1, &artist_rect, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
     
-    // Cleanup fonts
+    // Cleanup fonts (only delete fallback fonts, not our member fonts)
     SelectObject(hdc, old_font);
-    DeleteObject(title_font);
-    DeleteObject(artist_font);
+    if (!m_track_font && font_to_use) {
+        DeleteObject(font_to_use);
+    }
+    if (!m_artist_font && artist_font_to_use) {
+        DeleteObject(artist_font_to_use);
+    }
 }
 
 void control_panel::draw_time_info(HDC hdc, const RECT& client_rect) {
