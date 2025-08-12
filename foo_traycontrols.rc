@@ -2,32 +2,39 @@
 #include <windows.h>
 
 // Tray icon
-IDI_TRAY_ICON           ICON    "tray_icon.ico"
+IDI_TRAY_ICON           ICON    "foobar2000_105.ico"
 
 // Internet radio icon for popup notifications
 IDI_RADIO_ICON          ICON    "iradio.ico"
 
-// Control panel icons
-IDI_PLAY_ICON           ICON    "play_icon.ico"
-IDI_PAUSE_ICON          ICON    "pause_icon.ico"
-IDI_PREVIOUS_ICON       ICON    "previous_icon.ico"
-IDI_NEXT_ICON           ICON    "next_icon.ico"
+// Control panel icons removed - now using Segoe Fluent Icons font
 
 // PNG version as binary resource (fallback)
 IDR_TRAY_PNG            RCDATA  "tray_icon.png"
 
 // Preferences dialog
-IDD_PREFERENCES_TRAY DIALOGEX 0, 0, 300, 200
+IDD_PREFERENCES_TRAY DIALOGEX 0, 0, 300, 280
 STYLE DS_SETFONT | DS_FIXEDSYS | WS_CHILD | WS_VISIBLE | DS_CONTROL
 EXSTYLE WS_EX_CONTROLPARENT
 FONT 8, "MS Shell Dlg", 400, 0, 0x1
 BEGIN
-    GROUPBOX        "Tray Behavior", IDC_STATIC, 7, 7, 286, 100
+    GROUPBOX        "Tray Behavior", IDC_STATIC, 7, 7, 286, 80
     CONTROL         "Always minimize to system tray", IDC_ALWAYS_MINIMIZE_TO_TRAY, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 15, 25, 200, 10
     LTEXT           "When enabled, clicking minimize sends foobar2000 directly to the system tray.", IDC_STATIC, 15, 40, 270, 8
     CONTROL         "Show popup notification on track change", IDC_SHOW_POPUP_NOTIFICATION, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 15, 55, 200, 10
     
-    GROUPBOX        "Information", IDC_STATIC, 7, 115, 286, 50
-    LTEXT           "Tray Controls v1.1.0", IDC_STATIC, 15, 130, 100, 8
-    LTEXT           "Single-click the tray icon for playback controls.", IDC_STATIC, 15, 145, 200, 8
+    GROUPBOX        "Font Settings", IDC_STATIC, 7, 95, 286, 90
+    LTEXT           "Artist Font:", IDC_STATIC, 15, 115, 40, 8
+    EDITTEXT        IDC_ARTIST_FONT_DISPLAY, 60, 113, 150, 12, ES_READONLY
+    PUSHBUTTON      "Select...", IDC_SELECT_ARTIST_FONT, 220, 112, 50, 14
+    
+    LTEXT           "Track Font:", IDC_STATIC, 15, 135, 40, 8
+    EDITTEXT        IDC_TRACK_FONT_DISPLAY, 60, 133, 150, 12, ES_READONLY
+    PUSHBUTTON      "Select...", IDC_SELECT_TRACK_FONT, 220, 132, 50, 14
+    
+    PUSHBUTTON      "Reset to Default", IDC_RESET_FONTS, 15, 155, 80, 14
+    
+    GROUPBOX        "Information", IDC_STATIC, 7, 195, 286, 50
+    LTEXT           "Tray Controls v1.1.1", IDC_STATIC, 15, 215, 100, 8
+    LTEXT           "Single-click the tray icon for playback controls.", IDC_STATIC, 15, 230, 200, 8
 END
