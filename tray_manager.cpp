@@ -73,10 +73,10 @@ void tray_manager::initialize() {
     m_nid.uID = TRAY_ID;
     m_nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
     m_nid.uCallbackMessage = WM_TRAYICON;
-    // Try to load our custom icon first, fallback to default if it fails
+    // Load tray icon from foobar2000_105.ico resource
     m_nid.hIcon = LoadIcon(g_hIns, MAKEINTRESOURCE(IDI_TRAY_ICON));
     if (!m_nid.hIcon) {
-        // Fallback to default application icon
+        // Fallback to default application icon if resource fails
         m_nid.hIcon = LoadIcon(nullptr, IDI_APPLICATION);
     }
     wcscpy_s(m_nid.szTip, L"foobar2000 - Tray Controls");
