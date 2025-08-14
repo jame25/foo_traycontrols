@@ -2,7 +2,7 @@
 #include <windows.h>
 
 // Tray icon
-IDI_TRAY_ICON           ICON    "tray_icon.ico"
+IDI_TRAY_ICON           ICON    "foobar2000_105.ico"
 
 // Internet radio icon for popup notifications
 IDI_RADIO_ICON          ICON    "iradio.ico"
