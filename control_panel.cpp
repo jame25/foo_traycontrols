@@ -101,13 +101,8 @@ void control_panel::show_control_panel(bool force_docked) {
     
     // Show window immediately with proper topmost behavior for docked mode
     ShowWindow(m_control_window, SW_SHOWNOACTIVATE);
-    if (!m_is_undocked) {
-        // Ensure topmost behavior for docked mode
-        SetWindowPos(m_control_window, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-    } else {
-        // Remove topmost for undocked mode
-        SetWindowPos(m_control_window, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-    }
+    // Ensure topmost behavior for both docked and undocked modes
+    SetWindowPos(m_control_window, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     
     m_visible = true;
     
@@ -839,7 +834,7 @@ void control_panel::toggle_artwork_expanded() {
         SetTimer(m_control_window, UPDATE_TIMER_ID, 500, nullptr);
         
         // Resize window to show only enlarged artwork (300x300)
-        SetWindowPos(m_control_window, HWND_NOTOPMOST, 0, 0, 300, 300, 
+        SetWindowPos(m_control_window, HWND_TOPMOST, 0, 0, 300, 300, 
             SWP_NOMOVE | SWP_NOACTIVATE);
         
         // Ensure we're undocked when in artwork mode
@@ -849,7 +844,7 @@ void control_panel::toggle_artwork_expanded() {
     } else {
         // Return to normal undocked mode
         // Resize back to normal control panel size
-        SetWindowPos(m_control_window, HWND_NOTOPMOST, 0, 0, 338, 120, 
+        SetWindowPos(m_control_window, HWND_TOPMOST, 0, 0, 338, 120, 
             SWP_NOMOVE | SWP_NOACTIVATE);
         
         // Restart update timer for normal mini player functionality (use 500ms for responsive updates)
@@ -1341,8 +1336,8 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                 panel->m_is_undocked = true;
                 // Stop timeout timer to prevent auto-hide
                 KillTimer(panel->m_control_window, TIMEOUT_TIMER_ID);
-                // Remove topmost to allow normal window behavior
-                SetWindowPos(panel->m_control_window, HWND_NOTOPMOST, 0, 0, 0, 0, 
+                // Keep topmost behavior even when undocked
+                SetWindowPos(panel->m_control_window, HWND_TOPMOST, 0, 0, 0, 0, 
                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
                 // Schedule track info update (asynchronous to avoid drag delay)
                 SetTimer(panel->m_control_window, UPDATE_TIMER_ID + 2, 50, nullptr);
