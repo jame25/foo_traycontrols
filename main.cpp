@@ -25,7 +25,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 // Component version declaration using the proper SDK macro
 DECLARE_COMPONENT_VERSION(
     "Tray Controls",
-    "1.1.1",
+    "1.1.2",
     "System tray controls for foobar2000.\n"
     "Features:\n"
     "- Minimize to system tray\n"
@@ -66,6 +66,8 @@ public:
     void on_playback_new_track(metadb_handle_ptr p_track) override {
         // Update tray tooltip with new track information
         tray_manager::get_instance().update_tooltip(p_track);
+        // Update control panel with new track information
+        control_panel::get_instance().update_track_info();
         // Show popup notification for new tracks
         popup_window::get_instance().show_track_info(p_track);
     }
@@ -76,17 +78,22 @@ public:
         metadb_handle_ptr track;
         if (pc->get_now_playing(track) && track.is_valid()) {
             tray_manager::get_instance().update_tooltip(track);
+            control_panel::get_instance().update_track_info();
         }
     }
     
     void on_playback_pause(bool p_state) override {
         // Update tray tooltip to show pause state
         tray_manager::get_instance().update_playback_state(p_state ? "Paused" : "Playing");
+        // Update control panel playback state
+        control_panel::get_instance().update_track_info();
     }
     
     void on_playback_stop(play_control::t_stop_reason p_reason) override {
         // Update tray tooltip to show stopped state
         tray_manager::get_instance().update_playback_state("Stopped");
+        // Update control panel playback state
+        control_panel::get_instance().update_track_info();
     }
     
     // Required overrides for play_callback_static
@@ -94,16 +101,22 @@ public:
     void on_playback_edited(metadb_handle_ptr p_track) override {
         // Update tooltip when track metadata is edited
         tray_manager::get_instance().update_tooltip(p_track);
+        // Update control panel when track metadata is edited
+        control_panel::get_instance().update_track_info();
     }
     void on_playback_dynamic_info(const file_info & p_info) override {
         // Update tooltip with dynamic metadata info (for streaming sources)
         tray_manager::get_instance().update_tooltip_with_dynamic_info(p_info);
+        // Update control panel with dynamic info (for streaming sources)
+        control_panel::get_instance().update_track_info();
         // Note: Do NOT trigger popup here - this fires too frequently for streams
         // Popup will be handled by track change detection in tray_manager timer
     }
     void on_playback_dynamic_info_track(const file_info & p_info) override {
         // Update tooltip with track-specific dynamic info (for streaming sources)
         tray_manager::get_instance().update_tooltip_with_dynamic_info(p_info);
+        // Update control panel with track-specific dynamic info (for streaming sources)
+        control_panel::get_instance().update_track_info();
         // Note: Do NOT trigger popup here - this fires too frequently for streams
         // Popup will be handled by track change detection in tray_manager timer
     }
