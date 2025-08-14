@@ -73,10 +73,10 @@ void tray_manager::initialize() {
     m_nid.uID = TRAY_ID;
     m_nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
     m_nid.uCallbackMessage = WM_TRAYICON;
-    // Load tray icon from foobar2000_105.ico resource
+    // Try to load our custom icon first, fallback to default if it fails
     m_nid.hIcon = LoadIcon(g_hIns, MAKEINTRESOURCE(IDI_TRAY_ICON));
     if (!m_nid.hIcon) {
-        // Fallback to default application icon if resource fails
+        // Fallback to default application icon
         m_nid.hIcon = LoadIcon(nullptr, IDI_APPLICATION);
     }
     wcscpy_s(m_nid.szTip, L"foobar2000 - Tray Controls");
@@ -632,8 +632,33 @@ LRESULT CALLBACK tray_manager::tray_window_proc(HWND hwnd, UINT msg, WPARAM wpar
                 return 0;
                 
             case WM_LBUTTONUP:
-                // Single-click shows control panel
-                control_panel::get_instance().toggle_control_panel();
+                // Single-click behavior: if panel is undocked, return it to docked mode and hide it
+                // Otherwise, toggle control panel normally
+                {
+                    auto& panel = control_panel::get_instance();
+                    if (panel.is_undocked() || panel.is_artwork_expanded()) {
+                        // Return undocked/artwork panel to docked mode and hide it
+                        if (panel.is_artwork_expanded()) {
+                            // First exit artwork mode, then continue to close
+                            panel.toggle_artwork_expanded();
+                        }
+                        panel.set_undocked(false);
+                        // Restore topmost behavior
+                        SetWindowPos(panel.get_control_window(), HWND_TOPMOST, 0, 0, 0, 0, 
+                            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                        // Hide the panel
+                        panel.hide_control_panel_immediate();
+                        // Trigger repaint to show undock icon again when reopened
+                        InvalidateRect(panel.get_control_window(), nullptr, TRUE);
+                    } else {
+                        // Show simple docked popup that auto-closes (like original behavior)
+                        if (!panel.get_control_window() || !IsWindowVisible(panel.get_control_window())) {
+                            panel.show_control_panel_simple();
+                        } else {
+                            panel.hide_control_panel_immediate();
+                        }
+                    }
+                }
                 return 0;
                 
             case WM_LBUTTONDBLCLK:
