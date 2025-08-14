@@ -136,6 +136,12 @@ void popup_window::on_settings_changed() {
     if (!get_show_popup_notification() && m_visible) {
         hide_popup();
     }
+    
+    // If popup is currently visible, update its position
+    if (m_visible && !m_animating) {
+        position_popup();
+        SetWindowPos(m_popup_window, HWND_TOPMOST, m_final_x, m_final_y, 320, 80, SWP_NOACTIVATE);
+    }
 }
 
 void popup_window::create_popup_window() {
@@ -195,17 +201,40 @@ void popup_window::position_popup() {
     const int margin = 10;
     const int top_margin = 96; // About an inch down (96 pixels ≈ 1 inch at 96 DPI)
     
-    // Position at top-left corner
+    // Position based on user preference
     int x = margin;
-    int y = top_margin;
+    int y;
+    int popup_position = get_popup_position();
     
-    // Adjust for taskbar position (only if taskbar is at top or left)
+    switch (popup_position) {
+    case 0: // Top Left
+        y = top_margin;
+        break;
+    case 1: // Middle Left
+        y = (screen_height - popup_height) / 2;
+        break;
+    case 2: // Bottom Left
+        y = screen_height - popup_height - margin;
+        break;
+    default:
+        y = top_margin;
+        break;
+    }
+    
+    // Adjust for taskbar position
     if (abd.rc.top == 0 && abd.rc.left == 0 && abd.rc.right == screen_width) {
         // Taskbar is at top
-        y = abd.rc.bottom + margin;
+        if (popup_position == 0) { // Only adjust top position
+            y = abd.rc.bottom + margin;
+        }
     } else if (abd.rc.left == 0 && abd.rc.top == 0 && abd.rc.bottom == screen_height) {
         // Taskbar is at left
         x = abd.rc.right + margin;
+    } else if (abd.rc.top == screen_height - abd.rc.bottom && abd.rc.left == 0 && abd.rc.right == screen_width) {
+        // Taskbar is at bottom
+        if (popup_position == 2) { // Only adjust bottom position
+            y = abd.rc.top - popup_height - margin;
+        }
     }
     
     // Store final position for animation
@@ -595,28 +624,28 @@ void popup_window::draw_track_info(HDC hdc, const RECT& client_rect) {
         artist_font = CreateFontIndirect(&artist_lf);
         title_font = CreateFontIndirect(&title_lf);
     } else {
-        // Default fonts
-        artist_font = CreateFont(16, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
-                                 DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                                 DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+        // Default fonts - title should be smaller and normal, artist larger and bold
         title_font = CreateFont(14, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
                                 DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                                 DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+        artist_font = CreateFont(16, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+                                 DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                                 DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
     }
     
-    // Draw artist
-    HFONT old_font = (HFONT)SelectObject(hdc, artist_font);
+    // Draw title first (top line)
+    HFONT old_font = (HFONT)SelectObject(hdc, title_font);
     
-    RECT artist_rect = {85, 15, client_rect.right - 10, 35};
-    pfc::stringcvt::string_wide_from_utf8 wide_artist(artist.c_str());
-    DrawText(hdc, wide_artist.get_ptr(), -1, &artist_rect, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-    
-    // Draw title
-    SelectObject(hdc, title_font);
-    
-    RECT title_rect = {85, 40, client_rect.right - 10, 60};
+    RECT title_rect = {85, 15, client_rect.right - 10, 35};
     pfc::stringcvt::string_wide_from_utf8 wide_title(title.c_str());
     DrawText(hdc, wide_title.get_ptr(), -1, &title_rect, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+    
+    // Draw artist second (bottom line)
+    SelectObject(hdc, artist_font);
+    
+    RECT artist_rect = {85, 40, client_rect.right - 10, 60};
+    pfc::stringcvt::string_wide_from_utf8 wide_artist(artist.c_str());
+    DrawText(hdc, wide_artist.get_ptr(), -1, &artist_rect, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
     
     // Cleanup fonts
     SelectObject(hdc, old_font);
