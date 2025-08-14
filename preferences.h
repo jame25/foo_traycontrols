@@ -6,6 +6,8 @@
 // Configuration access functions
 bool get_always_minimize_to_tray();
 bool get_show_popup_notification();
+int get_popup_position();
+
 
 // Font configuration functions
 bool get_use_custom_fonts();
@@ -15,6 +17,14 @@ void set_artist_font(const LOGFONT& font);
 void set_track_font(const LOGFONT& font);
 void reset_fonts();
 LOGFONT get_default_font(bool is_artist, int size);
+
+// Control Panel font configuration functions
+bool get_cp_use_custom_fonts();
+LOGFONT get_cp_artist_font();
+LOGFONT get_cp_track_font();
+void set_cp_artist_font(const LOGFONT& font);
+void set_cp_track_font(const LOGFONT& font);
+void reset_cp_fonts();
 
 // Preferences page instance - the actual dialog
 class tray_preferences : public preferences_page_instance {
@@ -45,6 +55,9 @@ private:
     void select_artist_font();
     void select_track_font();
     void reset_fonts_to_default();
+    void select_cp_artist_font();
+    void select_cp_track_font();
+    void reset_cp_fonts_to_default();
     pfc::string8 format_font_name(const LOGFONT& lf);
 };
 
