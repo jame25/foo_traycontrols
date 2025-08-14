@@ -12,7 +12,8 @@ public:
     void cleanup();
     
     // Show/hide control panel
-    void show_control_panel();
+    void show_control_panel(bool force_docked = false);
+    void show_control_panel_simple(); // Simple popup behavior like original
     void hide_control_panel();
     void hide_control_panel_immediate(); // Hide without animation
     void toggle_control_panel();
@@ -22,6 +23,13 @@ public:
     
     // Settings change notification
     void on_settings_changed();
+    
+    // Public accessors for tray manager
+    bool is_undocked() const { return m_is_undocked; }
+    bool is_artwork_expanded() const { return m_is_artwork_expanded; }
+    HWND get_control_window() const { return m_control_window; }
+    void set_undocked(bool undocked);
+    void toggle_artwork_expanded();
     
 private:
     control_panel();
@@ -50,9 +58,19 @@ private:
     double m_track_length;
     bool m_is_playing;
     bool m_is_paused;
+    bool m_is_undocked;
+    bool m_is_artwork_expanded;
+    
+    // Double-click detection for artwork expanded mode
+    DWORD m_last_click_time;
+    POINT m_last_click_pos;
     
     // Album art
     HBITMAP m_cover_art_bitmap;
+    HBITMAP m_cover_art_bitmap_large; // High quality version for expanded view
+    HBITMAP m_cover_art_bitmap_original; // Full resolution original for expanded view
+    int m_original_art_width;
+    int m_original_art_height;
     
     // Custom fonts
     HFONT m_artist_font;
@@ -81,6 +99,8 @@ private:
     void load_cover_art();
     void cleanup_cover_art();
     HBITMAP convert_album_art_to_bitmap(album_art_data_ptr art_data);
+    HBITMAP convert_album_art_to_bitmap_large(album_art_data_ptr art_data);
+    HBITMAP convert_album_art_to_bitmap_original(album_art_data_ptr art_data);
     void load_fonts();
     void cleanup_fonts();
     
@@ -94,11 +114,11 @@ private:
     
     // Window procedure
     static LRESULT CALLBACK control_window_proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam);
-    static VOID CALLBACK update_timer_proc(HWND hwnd, UINT msg, UINT_PTR timer_id, DWORD time);
     
     // Drawing
     void paint_control_panel(HDC hdc);
-    void draw_track_info(HDC hdc, const RECT& rect);
+    void paint_artwork_expanded(HDC hdc, const RECT& rect);
+    void draw_track_info(HDC hdc, const RECT& rect, int art_size = 80);
     void draw_time_info(HDC hdc, const RECT& rect);
     
     static control_panel* s_instance;
