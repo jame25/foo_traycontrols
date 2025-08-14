@@ -15,6 +15,19 @@
 #define IDC_TRACK_FONT_DISPLAY       207
 #define IDC_SELECT_TRACK_FONT        208
 #define IDC_RESET_FONTS              209
+#define IDC_POPUP_POSITION_LABEL     210
+#define IDC_POPUP_POSITION_COMBO     211
+
+// Control Panel font controls
+#define IDC_CP_ARTIST_FONT_LABEL         212
+#define IDC_CP_ARTIST_FONT_DISPLAY       213
+#define IDC_CP_SELECT_ARTIST_FONT        214
+#define IDC_CP_TRACK_FONT_LABEL          215
+#define IDC_CP_TRACK_FONT_DISPLAY        216
+#define IDC_CP_SELECT_TRACK_FONT         217
+#define IDC_CP_RESET_FONTS               218
+
+
 #define IDC_STATIC              -1
 
 #define IDM_TRAY_PLAY           1001
