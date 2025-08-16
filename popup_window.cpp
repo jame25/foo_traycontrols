@@ -624,11 +624,11 @@ void popup_window::draw_track_info(HDC hdc, const RECT& client_rect) {
         artist_font = CreateFontIndirect(&artist_lf);
         title_font = CreateFontIndirect(&title_lf);
     } else {
-        // Default fonts - title should be smaller and normal, artist larger and bold
-        title_font = CreateFont(14, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+        // Default fonts - title should be larger and bold, artist regular weight
+        title_font = CreateFont(17, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
                                 DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                                 DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
-        artist_font = CreateFont(16, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+        artist_font = CreateFont(16, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
                                  DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                                  DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
     }
