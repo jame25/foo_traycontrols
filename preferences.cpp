@@ -10,17 +10,62 @@ extern HINSTANCE g_hIns;
 static cfg_int cfg_always_minimize_to_tray(GUID{0x12345679, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0);
 static cfg_int cfg_show_popup_notification(GUID{0x12345681, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 1);
 static cfg_int cfg_popup_position(GUID{0x12345685, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0); // 0=Top Left, 1=Middle Left, 2=Bottom Left
+static cfg_int cfg_disable_miniplayer(GUID{0x12345686, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0);
 
 
 // Font configuration - store LOGFONT structure as binary data
-static cfg_struct_t<LOGFONT> cfg_artist_font(GUID{0x12345682, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, LOGFONT{});
-static cfg_struct_t<LOGFONT> cfg_track_font(GUID{0x12345683, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, LOGFONT{});
-static cfg_int cfg_use_custom_fonts(GUID{0x12345684, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0);
+static cfg_struct_t<LOGFONT> cfg_artist_font(GUID{0x12345692, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, []() {
+    LOGFONT lf = {};
+    lf.lfHeight = -11;
+    lf.lfWeight = FW_NORMAL;
+    lf.lfCharSet = DEFAULT_CHARSET;
+    lf.lfOutPrecision = OUT_DEFAULT_PRECIS;
+    lf.lfClipPrecision = CLIP_DEFAULT_PRECIS;
+    lf.lfQuality = DEFAULT_QUALITY;
+    lf.lfPitchAndFamily = DEFAULT_PITCH | FF_DONTCARE;
+    wcscpy_s(lf.lfFaceName, L"Segoe UI");
+    return lf;
+}());
+static cfg_struct_t<LOGFONT> cfg_track_font(GUID{0x12345693, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, []() {
+    LOGFONT lf = {};
+    lf.lfHeight = -14;
+    lf.lfWeight = FW_BOLD;
+    lf.lfCharSet = DEFAULT_CHARSET;
+    lf.lfOutPrecision = OUT_DEFAULT_PRECIS;
+    lf.lfClipPrecision = CLIP_DEFAULT_PRECIS;
+    lf.lfQuality = DEFAULT_QUALITY;
+    lf.lfPitchAndFamily = DEFAULT_PITCH | FF_DONTCARE;
+    wcscpy_s(lf.lfFaceName, L"Segoe UI");
+    return lf;
+}());
+static cfg_int cfg_use_custom_fonts(GUID{0x12345694, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0);
 
 // Control Panel specific font configuration
-static cfg_struct_t<LOGFONT> cfg_cp_artist_font(GUID{0x1234568A, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, LOGFONT{});
-static cfg_struct_t<LOGFONT> cfg_cp_track_font(GUID{0x1234568B, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, LOGFONT{});
-static cfg_int cfg_cp_use_custom_fonts(GUID{0x1234568C, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0);
+static cfg_struct_t<LOGFONT> cfg_cp_artist_font(GUID{0x1234569A, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, []() {
+    LOGFONT lf = {};
+    lf.lfHeight = -11;
+    lf.lfWeight = FW_NORMAL;
+    lf.lfCharSet = DEFAULT_CHARSET;
+    lf.lfOutPrecision = OUT_DEFAULT_PRECIS;
+    lf.lfClipPrecision = CLIP_DEFAULT_PRECIS;
+    lf.lfQuality = DEFAULT_QUALITY;
+    lf.lfPitchAndFamily = DEFAULT_PITCH | FF_DONTCARE;
+    wcscpy_s(lf.lfFaceName, L"Segoe UI");
+    return lf;
+}());
+static cfg_struct_t<LOGFONT> cfg_cp_track_font(GUID{0x1234569B, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, []() {
+    LOGFONT lf = {};
+    lf.lfHeight = -14;
+    lf.lfWeight = FW_BOLD;
+    lf.lfCharSet = DEFAULT_CHARSET;
+    lf.lfOutPrecision = OUT_DEFAULT_PRECIS;
+    lf.lfClipPrecision = CLIP_DEFAULT_PRECIS;
+    lf.lfQuality = DEFAULT_QUALITY;
+    lf.lfPitchAndFamily = DEFAULT_PITCH | FF_DONTCARE;
+    wcscpy_s(lf.lfFaceName, L"Segoe UI");
+    return lf;
+}());
+static cfg_int cfg_cp_use_custom_fonts(GUID{0x1234569D, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0);
 
 // Access functions for the configuration
 bool get_always_minimize_to_tray() {
@@ -35,6 +80,10 @@ bool get_show_popup_notification() {
 
 int get_popup_position() {
     return cfg_popup_position;
+}
+
+bool get_disable_miniplayer() {
+    return cfg_disable_miniplayer != 0;
 }
 
 
@@ -63,6 +112,9 @@ void set_track_font(const LOGFONT& font) {
 
 void reset_fonts() {
     cfg_use_custom_fonts = 0;
+    // Set font configurations to new default values
+    cfg_artist_font = get_default_font(true, 11);   // Artist: 11pt, regular
+    cfg_track_font = get_default_font(false, 14);   // Track: 14pt, bold
 }
 
 // Control Panel font configuration access functions
@@ -89,20 +141,50 @@ void set_cp_track_font(const LOGFONT& font) {
 }
 
 void reset_cp_fonts() {
+    // Set font configurations to new default values with larger sizes
+    LOGFONT default_artist = get_default_font(true, 13);   // Artist: 13pt instead of 11pt
+    LOGFONT default_track = get_default_font(false, 16);   // Track: 16pt instead of 14pt
+    
+    cfg_cp_artist_font = default_artist;
+    cfg_cp_track_font = default_track;
+    
+    // Disable custom fonts so control panel uses defaults from get_default_font
     cfg_cp_use_custom_fonts = 0;
 }
 
 // Helper function to get default LOGFONT
 LOGFONT get_default_font(bool is_artist, int size) {
     LOGFONT lf = {};
+    
+    // Try multiple approaches to ensure correct font size
+    // Method 1: Simple negative point size (original approach)
     lf.lfHeight = -size;
-    lf.lfWeight = is_artist ? FW_BOLD : FW_NORMAL;
+    
+    // Method 2: Alternative - try DPI calculation if simple method fails
+    if (size < 10) { // If we're getting constrained to small sizes
+        HDC hdc = GetDC(nullptr);
+        int dpi = GetDeviceCaps(hdc, LOGPIXELSY);
+        lf.lfHeight = -MulDiv(size, dpi, 72);
+        ReleaseDC(nullptr, hdc);
+    }
+    
+    lf.lfWeight = is_artist ? FW_NORMAL : FW_BOLD; // Artist regular, Track bold
     lf.lfCharSet = DEFAULT_CHARSET;
-    lf.lfOutPrecision = OUT_DEFAULT_PRECIS;
+    lf.lfOutPrecision = OUT_TT_PRECIS; // Use TrueType precision for better size control
     lf.lfClipPrecision = CLIP_DEFAULT_PRECIS;
-    lf.lfQuality = DEFAULT_QUALITY;
+    lf.lfQuality = CLEARTYPE_QUALITY; // Use ClearType for better rendering
     lf.lfPitchAndFamily = DEFAULT_PITCH | FF_DONTCARE;
     wcscpy_s(lf.lfFaceName, L"Segoe UI");
+    
+    // Force no scaling constraints
+    lf.lfWidth = 0; // Let Windows calculate width
+    lf.lfEscapement = 0;
+    lf.lfOrientation = 0;
+    lf.lfItalic = FALSE;
+    lf.lfUnderline = FALSE;
+    lf.lfStrikeOut = FALSE;
+    
+    
     return lf;
 }
 
@@ -156,6 +238,7 @@ INT_PTR CALLBACK tray_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, LP
         // Initialize checkbox states
         CheckDlgButton(hwnd, IDC_ALWAYS_MINIMIZE_TO_TRAY, cfg_always_minimize_to_tray != 0 ? BST_CHECKED : BST_UNCHECKED);
         CheckDlgButton(hwnd, IDC_SHOW_POPUP_NOTIFICATION, cfg_show_popup_notification != 0 ? BST_CHECKED : BST_UNCHECKED);
+        CheckDlgButton(hwnd, IDC_DISABLE_MINIPLAYER, cfg_disable_miniplayer != 0 ? BST_CHECKED : BST_UNCHECKED);
         
         // Initialize popup position combobox
         HWND hCombo = GetDlgItem(hwnd, IDC_POPUP_POSITION_COMBO);
@@ -181,6 +264,7 @@ INT_PTR CALLBACK tray_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, LP
         switch (LOWORD(wp)) {
         case IDC_ALWAYS_MINIMIZE_TO_TRAY:
         case IDC_SHOW_POPUP_NOTIFICATION:
+        case IDC_DISABLE_MINIPLAYER:
             if (HIWORD(wp) == BN_CLICKED) {
                 p_this->on_changed();
             }
@@ -248,10 +332,12 @@ bool tray_preferences::has_changed() {
     
     int current_minimize_to_tray = (IsDlgButtonChecked(m_hwnd, IDC_ALWAYS_MINIMIZE_TO_TRAY) == BST_CHECKED) ? 1 : 0;
     int current_show_popup = (IsDlgButtonChecked(m_hwnd, IDC_SHOW_POPUP_NOTIFICATION) == BST_CHECKED) ? 1 : 0;
+    int current_disable_miniplayer = (IsDlgButtonChecked(m_hwnd, IDC_DISABLE_MINIPLAYER) == BST_CHECKED) ? 1 : 0;
     int current_popup_position = (int)SendMessage(GetDlgItem(m_hwnd, IDC_POPUP_POSITION_COMBO), CB_GETCURSEL, 0, 0);
     
     return (current_minimize_to_tray != cfg_always_minimize_to_tray) || 
            (current_show_popup != cfg_show_popup_notification) ||
+           (current_disable_miniplayer != cfg_disable_miniplayer) ||
            (current_popup_position != cfg_popup_position);
 }
 
@@ -259,6 +345,7 @@ void tray_preferences::apply_settings() {
     if (m_hwnd) {
         cfg_always_minimize_to_tray = (IsDlgButtonChecked(m_hwnd, IDC_ALWAYS_MINIMIZE_TO_TRAY) == BST_CHECKED) ? 1 : 0;
         cfg_show_popup_notification = (IsDlgButtonChecked(m_hwnd, IDC_SHOW_POPUP_NOTIFICATION) == BST_CHECKED) ? 1 : 0;
+        cfg_disable_miniplayer = (IsDlgButtonChecked(m_hwnd, IDC_DISABLE_MINIPLAYER) == BST_CHECKED) ? 1 : 0;
         cfg_popup_position = (int)SendMessage(GetDlgItem(m_hwnd, IDC_POPUP_POSITION_COMBO), CB_GETCURSEL, 0, 0);
         
         
@@ -272,6 +359,7 @@ void tray_preferences::reset_settings() {
     if (m_hwnd) {
         CheckDlgButton(m_hwnd, IDC_ALWAYS_MINIMIZE_TO_TRAY, cfg_always_minimize_to_tray != 0 ? BST_CHECKED : BST_UNCHECKED);
         CheckDlgButton(m_hwnd, IDC_SHOW_POPUP_NOTIFICATION, cfg_show_popup_notification != 0 ? BST_CHECKED : BST_UNCHECKED);
+        CheckDlgButton(m_hwnd, IDC_DISABLE_MINIPLAYER, cfg_disable_miniplayer != 0 ? BST_CHECKED : BST_UNCHECKED);
         SendMessage(GetDlgItem(m_hwnd, IDC_POPUP_POSITION_COMBO), CB_SETCURSEL, cfg_popup_position, 0);
         
         
@@ -289,7 +377,7 @@ void tray_preferences::update_font_displays() {
         pfc::string8 font_desc = format_font_name(lf);
         uSetDlgItemText(m_hwnd, IDC_ARTIST_FONT_DISPLAY, font_desc);
     } else {
-        uSetDlgItemText(m_hwnd, IDC_ARTIST_FONT_DISPLAY, "Segoe UI, 16pt, Bold (Default)");
+        uSetDlgItemText(m_hwnd, IDC_ARTIST_FONT_DISPLAY, "Segoe UI, 11pt, Regular (Default)");
     }
     
     // Update original track font display
@@ -298,7 +386,7 @@ void tray_preferences::update_font_displays() {
         pfc::string8 font_desc = format_font_name(lf);
         uSetDlgItemText(m_hwnd, IDC_TRACK_FONT_DISPLAY, font_desc);
     } else {
-        uSetDlgItemText(m_hwnd, IDC_TRACK_FONT_DISPLAY, "Segoe UI, 14pt, Regular (Default)");
+        uSetDlgItemText(m_hwnd, IDC_TRACK_FONT_DISPLAY, "Segoe UI, 14pt, Bold (Default)");
     }
     
     // Update Control Panel font displays
@@ -311,8 +399,8 @@ void tray_preferences::update_font_displays() {
         pfc::string8 track_desc = format_font_name(track_lf);
         uSetDlgItemText(m_hwnd, IDC_CP_TRACK_FONT_DISPLAY, track_desc);
     } else {
-        uSetDlgItemText(m_hwnd, IDC_CP_ARTIST_FONT_DISPLAY, "Segoe UI, 16pt, Bold (Default)");
-        uSetDlgItemText(m_hwnd, IDC_CP_TRACK_FONT_DISPLAY, "Segoe UI, 14pt, Regular (Default)");
+        uSetDlgItemText(m_hwnd, IDC_CP_ARTIST_FONT_DISPLAY, "Segoe UI, 13pt, Regular (Default)");
+        uSetDlgItemText(m_hwnd, IDC_CP_TRACK_FONT_DISPLAY, "Segoe UI, 16pt, Bold (Default)");
     }
 }
 
@@ -324,7 +412,7 @@ void tray_preferences::select_artist_font() {
     if (get_use_custom_fonts()) {
         lf = get_artist_font();
     } else {
-        lf = get_default_font(true, 16);
+        lf = get_default_font(true, 11);
     }
     
     cf.lStructSize = sizeof(CHOOSEFONT);
@@ -376,7 +464,7 @@ void tray_preferences::select_cp_artist_font() {
     if (get_cp_use_custom_fonts()) {
         lf = get_cp_artist_font();
     } else {
-        lf = get_default_font(true, 16);
+        lf = get_default_font(true, 13);
     }
     
     cf.lStructSize = sizeof(CHOOSEFONT);
@@ -428,8 +516,10 @@ pfc::string8 tray_preferences::format_font_name(const LOGFONT& lf) {
     
     // Calculate point size from lfHeight
     HDC hdc = GetDC(nullptr);
-    int point_size = -MulDiv(lf.lfHeight, 72, GetDeviceCaps(hdc, LOGPIXELSY));
+    int dpi = GetDeviceCaps(hdc, LOGPIXELSY);
+    int point_size = MulDiv(abs(lf.lfHeight), 72, dpi);
     ReleaseDC(nullptr, hdc);
+    
     
     // Format string
     result << font_name.get_ptr() << ", " << point_size << "pt";
