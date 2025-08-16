@@ -7,6 +7,7 @@
 bool get_always_minimize_to_tray();
 bool get_show_popup_notification();
 int get_popup_position();
+bool get_disable_miniplayer();
 
 
 // Font configuration functions
