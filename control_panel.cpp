@@ -1053,9 +1053,9 @@ void control_panel::load_fonts() {
         m_artist_font = CreateFontIndirect(&artist_lf);
         m_track_font = CreateFontIndirect(&track_lf);
     } else {
-        // Use default fonts
-        LOGFONT artist_lf = get_default_font(true, 16);   // Bold, 16pt
-        LOGFONT track_lf = get_default_font(false, 14);   // Regular, 14pt
+        // Use default fonts with larger sizes to work around minimum size constraints
+        LOGFONT artist_lf = get_default_font(true, 13);   // Regular, 13pt instead of 11pt
+        LOGFONT track_lf = get_default_font(false, 16);   // Bold, 16pt instead of 14pt
         
         m_artist_font = CreateFontIndirect(&artist_lf);
         m_track_font = CreateFontIndirect(&track_lf);
@@ -1797,6 +1797,23 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                     return 0;
                 }
                 
+                // Handle double-click in compact mode text area - return to normal undocked mode
+                if (panel && panel->m_is_compact_mode) {
+                    RECT client_rect;
+                    GetClientRect(hwnd, &client_rect);
+                    int window_width = client_rect.right - client_rect.left;
+                    int window_height = client_rect.bottom - client_rect.top;
+                    int margin = 5;
+                    int art_size = window_height - (2 * margin);
+                    int text_left = margin + art_size + margin;
+                    int text_right = window_width - margin;
+                    
+                    // Check if double-click is in text area
+                    if (pt.x >= text_left && pt.x < text_right) {
+                        panel->start_roll_animation(false); // false = roll to normal mode
+                        return 0;
+                    }
+                }
                 
                 return 0;
             }
@@ -2094,7 +2111,10 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                         return HTCLIENT;
                     }
                     
-                    // Allow dragging from anywhere else on the compact panel
+                    // Allow dragging from anywhere else on the compact panel (unless disabled)
+                    if (get_disable_miniplayer()) {
+                        return HTCLIENT; // Prevent dragging when miniPlayer is disabled
+                    }
                     return HTCAPTION;
                 }
                 
@@ -2151,7 +2171,10 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                         if (at_right) return HTRIGHT;
                     }
                     
-                    // Allow dragging from everywhere else
+                    // Allow dragging from everywhere else (unless disabled)
+                    if (get_disable_miniplayer()) {
+                        return HTCLIENT; // Prevent dragging when miniPlayer is disabled
+                    }
                     return HTCAPTION;
                 }
                 
@@ -2185,7 +2208,10 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                         return HTCLIENT; // Normal click behavior for artwork
                     }
                     
-                    // For docked mode, allow dragging from everywhere else (except buttons and artwork)
+                    // For docked mode, allow dragging from everywhere else (except buttons and artwork, unless disabled)
+                    if (get_disable_miniplayer()) {
+                        return HTCLIENT; // Prevent dragging when miniPlayer is disabled
+                    }
                     return HTCAPTION;
                 }
                 return hit;
@@ -2651,7 +2677,7 @@ void control_panel::draw_track_info(HDC hdc, const RECT& client_rect, int art_si
     if (is_docked) {
         // DOCKED MODE: Track title large and bold, Artist small and normal
         // Draw track title using larger, bold font
-        HFONT title_font_to_use = m_track_font ? m_track_font : CreateFont(18, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+        HFONT title_font_to_use = m_track_font ? m_track_font : CreateFont(-14, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
                                                                            DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                                                                            DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
         HFONT old_font = (HFONT)SelectObject(hdc, title_font_to_use);
@@ -2661,9 +2687,11 @@ void control_panel::draw_track_info(HDC hdc, const RECT& client_rect, int art_si
         DrawText(hdc, wide_title.get_ptr(), -1, &title_rect, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
         
         // Draw artist using smaller, normal font
-        HFONT artist_font_to_use = m_artist_font ? m_artist_font : CreateFont(14, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+        HFONT artist_font_to_use = m_artist_font ? m_artist_font : CreateFont(-11, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
                                                                               DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                                                                               DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+        
+        
         SelectObject(hdc, artist_font_to_use);
         
         RECT artist_rect = {text_left, 50, text_right, 70};
@@ -2681,7 +2709,7 @@ void control_panel::draw_track_info(HDC hdc, const RECT& client_rect, int art_si
     } else {
         // UNDOCKED MODE: Keep original behavior (title bold 18, artist normal 14)
         // Draw track title using custom or default font
-        HFONT font_to_use = m_track_font ? m_track_font : CreateFont(18, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+        HFONT font_to_use = m_track_font ? m_track_font : CreateFont(-14, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
                                                                      DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                                                                      DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
         HFONT old_font = (HFONT)SelectObject(hdc, font_to_use);
@@ -2691,9 +2719,11 @@ void control_panel::draw_track_info(HDC hdc, const RECT& client_rect, int art_si
         DrawText(hdc, wide_title.get_ptr(), -1, &title_rect, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
         
         // Draw artist using custom or default font
-        HFONT artist_font_to_use = m_artist_font ? m_artist_font : CreateFont(14, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+        HFONT artist_font_to_use = m_artist_font ? m_artist_font : CreateFont(-11, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
                                                                               DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                                                                               DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+        
+        
         SelectObject(hdc, artist_font_to_use);
         
         RECT artist_rect = {text_left, 50, text_right, 70};
