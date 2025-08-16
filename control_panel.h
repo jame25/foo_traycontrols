@@ -30,6 +30,7 @@ public:
     HWND get_control_window() const { return m_control_window; }
     void set_undocked(bool undocked);
     void toggle_artwork_expanded();
+    void toggle_compact_mode();
     
 private:
     control_panel();
@@ -50,6 +51,7 @@ private:
     // Timer for updating time display
     static const UINT UPDATE_TIMER_ID = 4001;
     static const UINT ANIMATION_TIMER_ID = 4003;
+    static const UINT BUTTON_FADE_TIMER_ID = 9001;
     
     // Current track info
     pfc::string8 m_current_artist;
@@ -64,6 +66,54 @@ private:
     // Double-click detection for artwork expanded mode
     DWORD m_last_click_time;
     POINT m_last_click_pos;
+    
+    // Dimension memory for mode switching
+    int m_saved_undocked_width;
+    int m_saved_undocked_height;
+    int m_saved_expanded_width;
+    int m_saved_expanded_height;
+    
+    // Mouse hover state for overlay
+    bool m_overlay_visible;
+    DWORD m_last_mouse_move_time;
+    int m_overlay_opacity; // 0-100 for fade animation
+    DWORD m_fade_start_time;
+    
+    // Undocked mode artwork hover overlay
+    bool m_undocked_overlay_visible;
+    int m_undocked_overlay_opacity; // 0-100 for fade animation
+    DWORD m_undocked_fade_start_time;
+    
+    // Manual dragging state for expanded artwork mode
+    bool m_is_dragging;
+    POINT m_drag_start_pos;
+    
+    // Button fade state for undocked mode
+    bool m_buttons_visible;
+    int m_button_opacity; // 0-100 for fade animation
+    DWORD m_button_fade_start_time;
+    DWORD m_last_button_mouse_time;
+    
+    // Compact mode state
+    bool m_is_compact_mode;
+    int m_saved_normal_width;
+    int m_saved_normal_height;
+    int m_saved_compact_width; // Remember compact mode width when resized
+    bool m_was_compact_before_expanded; // Remember if we were in compact mode before entering expanded mode
+    
+    // Compact mode hover control overlay
+    bool m_compact_controls_visible;
+    DWORD m_last_compact_mouse_time;
+    
+    
+    // Roll-up/roll-down animation state
+    bool m_is_rolling_animation;
+    bool m_rolling_to_compact; // true = rolling to compact, false = rolling to normal
+    int m_roll_animation_step;
+    DWORD m_roll_animation_start_time;
+    static const int ROLL_ANIMATION_STEPS = 15;
+    static const int ROLL_ANIMATION_DURATION = 250; // ms
+    
     
     // Album art
     HBITMAP m_cover_art_bitmap;
@@ -81,6 +131,17 @@ private:
     void draw_pause_icon(HDC hdc, int x, int y, int size);
     void draw_previous_icon(HDC hdc, int x, int y, int size);
     void draw_next_icon(HDC hdc, int x, int y, int size);
+    void draw_play_icon_with_opacity(HDC hdc, int x, int y, int size, int opacity);
+    void draw_pause_icon_with_opacity(HDC hdc, int x, int y, int size, int opacity);
+    void draw_previous_icon_with_opacity(HDC hdc, int x, int y, int size, int opacity);
+    void draw_next_icon_with_opacity(HDC hdc, int x, int y, int size, int opacity);
+    void draw_up_arrow(HDC hdc, int x, int y, int size);
+    void draw_down_arrow(HDC hdc, int x, int y, int size);
+    void draw_up_arrow_with_opacity(HDC hdc, int x, int y, int size, int opacity);
+    void draw_down_arrow_with_opacity(HDC hdc, int x, int y, int size, int opacity);
+    void draw_roll_dots(HDC hdc, int x, int y, int size);
+    void start_roll_animation(bool to_compact);
+    void update_roll_animation();
     
     // Animation state
     bool m_animating;
@@ -118,8 +179,13 @@ private:
     // Drawing
     void paint_control_panel(HDC hdc);
     void paint_artwork_expanded(HDC hdc, const RECT& rect);
+    void paint_compact_mode(HDC hdc, const RECT& rect);
     void draw_track_info(HDC hdc, const RECT& rect, int art_size = 80);
     void draw_time_info(HDC hdc, const RECT& rect);
+    void draw_track_info_overlay(HDC hdc, int window_width, int window_height);
+    void draw_control_overlay(HDC hdc, int window_width, int window_height);
+    void draw_undocked_artwork_overlay(HDC hdc, int window_width, int window_height);
+    void draw_compact_control_overlay(HDC hdc, int window_width, int window_height);
     
     static control_panel* s_instance;
 };
