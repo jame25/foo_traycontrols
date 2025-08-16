@@ -1862,7 +1862,8 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                         panel->m_overlay_visible = true;
                         panel->m_overlay_opacity = 100; // Full opacity immediately on mouse move
                         KillTimer(hwnd, FADE_TIMER_ID); // Stop any fade animation
-                        InvalidateRect(hwnd, nullptr, TRUE);
+                        // In artwork expanded mode, only invalidate overlay areas to prevent artwork flicker
+                        InvalidateRect(hwnd, nullptr, FALSE);
                     } else {
                         // Reset to full opacity if already visible
                         panel->m_overlay_opacity = 100;
@@ -1962,7 +1963,12 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                             panel->m_undocked_overlay_opacity = 100;
                             KillTimer(hwnd, FADE_TIMER_ID + 1);
                             KillTimer(hwnd, OVERLAY_TIMER_ID + 1);
-                            InvalidateRect(hwnd, nullptr, TRUE);
+                            // In artwork expanded mode, only invalidate overlay areas to prevent artwork flicker
+                            if (panel->m_is_artwork_expanded) {
+                                InvalidateRect(hwnd, nullptr, FALSE);
+                            } else {
+                                InvalidateRect(hwnd, nullptr, TRUE);
+                            }
                             
                             // Track mouse leave events for undocked mode
                             TRACKMOUSEEVENT tme = {0};
@@ -1978,7 +1984,12 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                             panel->m_undocked_overlay_opacity = 0;
                             KillTimer(hwnd, OVERLAY_TIMER_ID + 1);
                             KillTimer(hwnd, FADE_TIMER_ID + 1);
-                            InvalidateRect(hwnd, nullptr, TRUE);
+                            // In artwork expanded mode, only invalidate overlay areas to prevent artwork flicker
+                            if (panel->m_is_artwork_expanded) {
+                                InvalidateRect(hwnd, nullptr, FALSE);
+                            } else {
+                                InvalidateRect(hwnd, nullptr, TRUE);
+                            }
                         }
                     }
                 }
@@ -2275,8 +2286,8 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                         panel->m_saved_expanded_height = corrected_height;
                     }
                     
-                    // Repaint to adjust artwork display
-                    InvalidateRect(hwnd, nullptr, TRUE);
+                    // Repaint to adjust artwork display - use optimized invalidation to prevent flicker
+                    InvalidateRect(hwnd, nullptr, FALSE);
                 } else if (panel->m_is_undocked) {
                     // Handle resize-based mode switching between normal undocked and compact modes
                     int new_width = LOWORD(lparam);
@@ -2431,11 +2442,21 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                         panel->m_overlay_visible = false;
                         panel->m_overlay_opacity = 0;
                         KillTimer(hwnd, FADE_TIMER_ID);
-                        InvalidateRect(hwnd, nullptr, TRUE);
+                        // In artwork expanded mode, only invalidate overlay areas to prevent artwork flicker
+                        if (panel->m_is_artwork_expanded) {
+                            InvalidateRect(hwnd, nullptr, FALSE);
+                        } else {
+                            InvalidateRect(hwnd, nullptr, TRUE);
+                        }
                     } else {
                         // Calculate fade progress (100 to 0 over 1 second)
                         panel->m_overlay_opacity = 100 - (int)((elapsed * 100) / fade_duration);
-                        InvalidateRect(hwnd, nullptr, TRUE);
+                        // In artwork expanded mode, only invalidate overlay areas to prevent artwork flicker
+                        if (panel->m_is_artwork_expanded) {
+                            InvalidateRect(hwnd, nullptr, FALSE);
+                        } else {
+                            InvalidateRect(hwnd, nullptr, TRUE);
+                        }
                     }
                 }
                 return 0;
@@ -2458,11 +2479,21 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                         panel->m_undocked_overlay_visible = false;
                         panel->m_undocked_overlay_opacity = 0;
                         KillTimer(hwnd, FADE_TIMER_ID + 1);
-                        InvalidateRect(hwnd, nullptr, TRUE);
+                        // In artwork expanded mode, only invalidate overlay areas to prevent artwork flicker
+                        if (panel->m_is_artwork_expanded) {
+                            InvalidateRect(hwnd, nullptr, FALSE);
+                        } else {
+                            InvalidateRect(hwnd, nullptr, TRUE);
+                        }
                     } else {
                         // Calculate fade progress (100 to 0 over 1 second)
                         panel->m_undocked_overlay_opacity = 100 - (int)((elapsed * 100) / fade_duration);
-                        InvalidateRect(hwnd, nullptr, TRUE);
+                        // In artwork expanded mode, only invalidate overlay areas to prevent artwork flicker
+                        if (panel->m_is_artwork_expanded) {
+                            InvalidateRect(hwnd, nullptr, FALSE);
+                        } else {
+                            InvalidateRect(hwnd, nullptr, TRUE);
+                        }
                     }
                 }
                 return 0;
