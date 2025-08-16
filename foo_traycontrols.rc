@@ -17,25 +17,27 @@ IDI_NEXT_ICON           ICON    "next_icon.ico"
 IDR_TRAY_PNG            RCDATA  "tray_icon.png"
 
 // Preferences dialog
-IDD_PREFERENCES_TRAY DIALOGEX 0, 0, 300, 210
+IDD_PREFERENCES_TRAY DIALOGEX 0, 0, 300, 225
 STYLE DS_SETFONT | DS_FIXEDSYS | WS_CHILD | WS_VISIBLE | DS_CONTROL
 EXSTYLE WS_EX_CONTROLPARENT
 FONT 8, "MS Shell Dlg", 400, 0, 0x1
 BEGIN
-    GROUPBOX        "Tray Behavior", IDC_STATIC, 7, 7, 286, 100
+    GROUPBOX        "Tray Behavior", IDC_STATIC, 7, 7, 286, 115
     CONTROL         "Always minimize to system tray", IDC_ALWAYS_MINIMIZE_TO_TRAY, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 15, 25, 200, 10
     LTEXT           "When enabled, clicking minimize sends foobar2000 directly to the system tray.", IDC_STATIC, 15, 40, 270, 8
     CONTROL         "Show popup notification on track change", IDC_SHOW_POPUP_NOTIFICATION, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 15, 55, 200, 10
     LTEXT           "Position:", IDC_POPUP_POSITION_LABEL, 15, 75, 35, 10
     COMBOBOX        IDC_POPUP_POSITION_COMBO, 55, 73, 80, 80, CBS_DROPDOWNLIST | CBS_HASSTRINGS | WS_VSCROLL | WS_TABSTOP
+    CONTROL         "Disable MiniPlayer", IDC_DISABLE_MINIPLAYER, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 15, 90, 200, 10
+    LTEXT           "When enabled, prevents the control panel from being undocked (dragged).", IDC_STATIC, 15, 105, 270, 8
     
-    GROUPBOX        "Control Panel", IDC_STATIC, 7, 115, 286, 85
-    LTEXT           "Artist Font:", IDC_CP_ARTIST_FONT_LABEL, 15, 135, 45, 10
-    EDITTEXT        IDC_CP_ARTIST_FONT_DISPLAY, 65, 133, 150, 14, ES_READONLY | WS_BORDER
-    PUSHBUTTON      "Select...", IDC_CP_SELECT_ARTIST_FONT, 225, 132, 50, 16
-    LTEXT           "Track Font:", IDC_CP_TRACK_FONT_LABEL, 15, 155, 45, 10
-    EDITTEXT        IDC_CP_TRACK_FONT_DISPLAY, 65, 153, 150, 14, ES_READONLY | WS_BORDER
-    PUSHBUTTON      "Select...", IDC_CP_SELECT_TRACK_FONT, 225, 152, 50, 16
-    PUSHBUTTON      "Reset to Default", IDC_CP_RESET_FONTS, 15, 175, 80, 16
+    GROUPBOX        "Control Panel", IDC_STATIC, 7, 130, 286, 85
+    LTEXT           "Artist Font:", IDC_CP_ARTIST_FONT_LABEL, 15, 150, 45, 10
+    EDITTEXT        IDC_CP_ARTIST_FONT_DISPLAY, 65, 148, 150, 14, ES_READONLY | WS_BORDER
+    PUSHBUTTON      "Select...", IDC_CP_SELECT_ARTIST_FONT, 225, 147, 50, 16
+    LTEXT           "Track Font:", IDC_CP_TRACK_FONT_LABEL, 15, 170, 45, 10
+    EDITTEXT        IDC_CP_TRACK_FONT_DISPLAY, 65, 168, 150, 14, ES_READONLY | WS_BORDER
+    PUSHBUTTON      "Select...", IDC_CP_SELECT_TRACK_FONT, 225, 167, 50, 16
+    PUSHBUTTON      "Reset to Default", IDC_CP_RESET_FONTS, 15, 190, 80, 16
     
 END
