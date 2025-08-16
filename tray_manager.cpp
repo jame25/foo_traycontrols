@@ -646,8 +646,8 @@ LRESULT CALLBACK tray_manager::tray_window_proc(HWND hwnd, UINT msg, WPARAM wpar
                         // Restore topmost behavior
                         SetWindowPos(panel.get_control_window(), HWND_TOPMOST, 0, 0, 0, 0, 
                             SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-                        // Hide the panel
-                        panel.hide_control_panel_immediate();
+                        // Hide the panel with slide animation (like timeout behavior)
+                        panel.hide_control_panel();
                         // Trigger repaint to show undock icon again when reopened
                         InvalidateRect(panel.get_control_window(), nullptr, TRUE);
                     } else {
