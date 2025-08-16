@@ -1599,15 +1599,15 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                         int button_size = 24;
                         int button_spacing = 60;
                         int center_x = window_width / 2;
-                        // Calculate center of the bottom overlay area, then lower by 20%
+                        // Calculate center of the bottom overlay area, then lower for better visual balance
                         int overlay_top = window_height - overlay_height;
-                        int center_y = overlay_top + (overlay_height / 2) + (overlay_height / 5);
+                        int center_y = overlay_top + (overlay_height / 2) + (overlay_height * 28 / 100); // Lower by 28%
                         
                         // Check Previous button - use larger click area covering more of the overlay
                         int prev_x = center_x - button_spacing;
                         int click_area_size = button_size + 8; // Expand click area
-                        // Use overlay center for click detection, not the lowered visual position
-                        int click_center_y = overlay_top + (overlay_height / 2);
+                        // Use the same center_y for click detection as visual positioning
+                        int click_center_y = center_y;
                         if (abs(pt.x - prev_x) <= click_area_size/2 && abs(pt.y - click_center_y) <= overlay_height/2) {
                             panel->handle_button_click(BTN_PREV);
                             return 0;
@@ -2630,18 +2630,23 @@ void control_panel::paint_artwork_expanded(HDC hdc, const RECT& client_rect) {
     int window_width = client_rect.right - client_rect.left;
     int window_height = client_rect.bottom - client_rect.top;
     
+    // Use double buffering to prevent flicker during overlay animations
+    HDC buffer_dc = CreateCompatibleDC(hdc);
+    HBITMAP buffer_bitmap = CreateCompatibleBitmap(hdc, window_width, window_height);
+    HBITMAP old_buffer_bitmap = (HBITMAP)SelectObject(buffer_dc, buffer_bitmap);
+    
     if (m_cover_art_bitmap_original && m_original_art_width > 0 && m_original_art_height > 0) {
         // Use original resolution bitmap for expanded view
-        HDC cover_dc = CreateCompatibleDC(hdc);
+        HDC cover_dc = CreateCompatibleDC(buffer_dc);
         HBITMAP old_bitmap = (HBITMAP)SelectObject(cover_dc, m_cover_art_bitmap_original);
         
         // Set high-quality stretching mode
-        SetStretchBltMode(hdc, HALFTONE);
-        SetBrushOrgEx(hdc, 0, 0, nullptr);
+        SetStretchBltMode(buffer_dc, HALFTONE);
+        SetBrushOrgEx(buffer_dc, 0, 0, nullptr);
         
         // Since window maintains aspect ratio, artwork should fill entire window
         // Draw the artwork to fill the entire client area (no black bars)
-        StretchBlt(hdc, 0, 0, window_width, window_height,
+        StretchBlt(buffer_dc, 0, 0, window_width, window_height,
                    cover_dc, 0, 0, m_original_art_width, m_original_art_height, SRCCOPY);
         
         SelectObject(cover_dc, old_bitmap);
@@ -2649,18 +2654,26 @@ void control_panel::paint_artwork_expanded(HDC hdc, const RECT& client_rect) {
         
         // Draw track info overlay if hovering
         if (m_overlay_visible) {
-            draw_track_info_overlay(hdc, window_width, window_height);
-            draw_control_overlay(hdc, window_width, window_height);
+            draw_track_info_overlay(buffer_dc, window_width, window_height);
+            draw_control_overlay(buffer_dc, window_width, window_height);
         }
         
     } else {
         // Draw placeholder for no artwork
         RECT artwork_rect = {0, 0, window_width, window_height};
         HBRUSH placeholder_brush = CreateSolidBrush(RGB(60, 60, 60));
-        FillRect(hdc, &artwork_rect, placeholder_brush);
+        FillRect(buffer_dc, &artwork_rect, placeholder_brush);
         DeleteObject(placeholder_brush);
         
     }
+    
+    // Copy the complete buffered image to the screen in one operation
+    BitBlt(hdc, 0, 0, window_width, window_height, buffer_dc, 0, 0, SRCCOPY);
+    
+    // Cleanup buffer
+    SelectObject(buffer_dc, old_buffer_bitmap);
+    DeleteObject(buffer_bitmap);
+    DeleteDC(buffer_dc);
 }
 
 void control_panel::draw_track_info(HDC hdc, const RECT& client_rect, int art_size) {
@@ -2975,9 +2988,9 @@ void control_panel::draw_control_overlay(HDC hdc, int window_width, int window_h
         int button_size = 24; // Size of each button
         int button_spacing = 60; // Space between button centers
         int center_x = window_width / 2;
-        // Calculate center of the bottom overlay area, then lower by 20%
+        // Calculate center of the bottom overlay area, then lower for better visual balance
         int overlay_top = window_height - overlay_height;
-        int center_y = overlay_top + (overlay_height / 2) + (overlay_height / 5);
+        int center_y = overlay_top + (overlay_height / 2) + (overlay_height * 28 / 100); // Lower by 28%
         
         // Previous button
         int prev_x = center_x - button_spacing;
