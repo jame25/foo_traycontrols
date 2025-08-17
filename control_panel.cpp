@@ -1295,12 +1295,57 @@ void control_panel::handle_button_click(int button_id) {
 void control_panel::handle_timer() {
     // Use simple behavior (like original) when in basic popup mode
     if (!m_is_undocked && !m_is_artwork_expanded) {
-        // Original simple timer behavior - just update time position
+        // Original simple timer behavior - but also check for stream metadata changes
         try {
             auto playback = playback_control::get();
             m_current_time = playback->playback_get_position();
             m_is_playing = playback->is_playing();
             m_is_paused = playback->is_paused();
+            
+            // For streams in docked mode, also check for metadata changes
+            metadb_handle_ptr current_track;
+            if (playback->get_now_playing(current_track) && current_track.is_valid()) {
+                pfc::string8 path = current_track->get_path();
+                bool is_stream = strstr(path.get_ptr(), "://") != nullptr;
+                
+                if (is_stream) {
+                    // Check if stream metadata has changed
+                    static pfc::string8 last_docked_title, last_docked_artist;
+                    pfc::string8 current_title, current_artist;
+                    
+                    // Use titleformat to get current stream metadata
+                    try {
+                        static_api_ptr_t<titleformat_compiler> compiler;
+                        service_ptr_t<titleformat_object> script;
+                        
+                        if (compiler->compile(script, "[%artist%]|[%title%]")) {
+                            pfc::string8 formatted_title;
+                            if (playback->playback_format_title(nullptr, formatted_title, script, nullptr, playback_control::display_level_all)) {
+                                const char* separator = strstr(formatted_title.get_ptr(), "|");
+                                if (separator && strlen(formatted_title.get_ptr()) > 1) {
+                                    pfc::string8 tf_artist(formatted_title.get_ptr(), separator - formatted_title.get_ptr());
+                                    pfc::string8 tf_title(separator + 1);
+                                    
+                                    if (!tf_artist.is_empty() && !tf_title.is_empty()) {
+                                        current_artist = tf_artist;
+                                        current_title = tf_title;
+                                    }
+                                }
+                            }
+                        }
+                    } catch (...) {
+                        // Fall through to basic metadata
+                    }
+                    
+                    // Check if metadata changed
+                    if (current_title != last_docked_title || current_artist != last_docked_artist) {
+                        last_docked_title = current_title;
+                        last_docked_artist = current_artist;
+                        update_track_info(); // Update track info for stream metadata change
+                        return;
+                    }
+                }
+            }
             
             // Refresh time display
             if (m_control_window) {
@@ -1330,12 +1375,46 @@ void control_panel::handle_timer() {
                 
                 // Also compare metadata for streams that might not change track handle
                 pfc::string8 current_title, current_artist;
-                file_info_impl info;
-                if (current_track->get_info(info)) {
-                    const char* title_str = info.meta_get("TITLE", 0);
-                    const char* artist_str = info.meta_get("ARTIST", 0);
-                    if (title_str) current_title = title_str;
-                    if (artist_str) current_artist = artist_str;
+                
+                // Check if this is a stream
+                pfc::string8 path = current_track->get_path();
+                bool is_stream = strstr(path.get_ptr(), "://") != nullptr;
+                
+                if (is_stream) {
+                    // For streams, use titleformat to get current metadata (same as update_track_info)
+                    try {
+                        static_api_ptr_t<titleformat_compiler> compiler;
+                        service_ptr_t<titleformat_object> script;
+                        
+                        if (compiler->compile(script, "[%artist%]|[%title%]")) {
+                            pfc::string8 formatted_title;
+                            if (playback->playback_format_title(nullptr, formatted_title, script, nullptr, playback_control::display_level_all)) {
+                                const char* separator = strstr(formatted_title.get_ptr(), "|");
+                                if (separator && strlen(formatted_title.get_ptr()) > 1) {
+                                    pfc::string8 tf_artist(formatted_title.get_ptr(), separator - formatted_title.get_ptr());
+                                    pfc::string8 tf_title(separator + 1);
+                                    
+                                    if (!tf_artist.is_empty() && !tf_title.is_empty()) {
+                                        current_artist = tf_artist;
+                                        current_title = tf_title;
+                                    }
+                                }
+                            }
+                        }
+                    } catch (...) {
+                        // Fall through to basic metadata
+                    }
+                }
+                
+                // If titleformat didn't work or not a stream, use basic metadata
+                if (current_title.is_empty() || current_artist.is_empty()) {
+                    file_info_impl info;
+                    if (current_track->get_info(info)) {
+                        const char* title_str = info.meta_get("TITLE", 0);
+                        const char* artist_str = info.meta_get("ARTIST", 0);
+                        if (title_str && current_title.is_empty()) current_title = title_str;
+                        if (artist_str && current_artist.is_empty()) current_artist = artist_str;
+                    }
                 }
                 
                 bool metadata_changed = (current_title != last_title) || (current_artist != last_artist);
@@ -2586,6 +2665,68 @@ void control_panel::paint_control_panel(HDC hdc) {
         FillRect(hdc, &cover_rect, cover_brush);
         DeleteObject(cover_brush);
         
+        // Check if current track is a stream and show radio icon
+        try {
+            auto playback = playback_control::get();
+            metadb_handle_ptr track;
+            
+            if (playback->get_now_playing(track) && track.is_valid()) {
+                pfc::string8 path = track->get_path();
+                bool is_stream = strstr(path.get_ptr(), "://") != nullptr;
+                
+                if (is_stream) {
+                    // Load and draw radio icon for internet streams
+                    // Try LoadImage first for better flexibility with icon sizes
+                    HICON radio_icon = (HICON)LoadImage(g_hIns, MAKEINTRESOURCE(IDI_RADIO_ICON), IMAGE_ICON, art_size/2, art_size/2, LR_DEFAULTCOLOR);
+                    
+                    // If LoadImage fails, try LoadIcon as fallback
+                    if (!radio_icon) {
+                        radio_icon = LoadIcon(g_hIns, MAKEINTRESOURCE(IDI_RADIO_ICON));
+                    }
+                    
+                    if (radio_icon) {
+                        // Center the icon in the cover rect
+                        int icon_size = art_size / 2; // Half the artwork size
+                        int icon_x = cover_rect.left + (art_size - icon_size) / 2;
+                        int icon_y = cover_rect.top + (art_size - icon_size) / 2;
+                        
+                        DrawIconEx(hdc, icon_x, icon_y, radio_icon, icon_size, icon_size, 0, nullptr, DI_NORMAL);
+                        DestroyIcon(radio_icon); // Clean up the icon handle
+                    } else {
+                        // Fallback to text if icon can't be loaded
+                        SetTextColor(hdc, RGB(200, 200, 200));
+                        SetBkMode(hdc, TRANSPARENT);
+                        int font_size = art_size / 3; // Scale font with artwork size
+                        HFONT symbol_font = CreateFont(font_size, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                                                       DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                                                       DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI Symbol");
+                        HFONT old_symbol_font = (HFONT)SelectObject(hdc, symbol_font);
+                        
+                        DrawText(hdc, L"📻", -1, &cover_rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+                        
+                        SelectObject(hdc, old_symbol_font);
+                        DeleteObject(symbol_font);
+                    }
+                } else {
+                    // Draw musical note symbol for local files
+                    SetTextColor(hdc, RGB(200, 200, 200));
+                    SetBkMode(hdc, TRANSPARENT);
+                    int font_size = art_size / 3; // Scale font with artwork size
+                    HFONT symbol_font = CreateFont(font_size, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                                                   DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                                                   DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI Symbol");
+                    HFONT old_symbol_font = (HFONT)SelectObject(hdc, symbol_font);
+                    
+                    DrawText(hdc, L"♪", -1, &cover_rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+                    
+                    SelectObject(hdc, old_symbol_font);
+                    DeleteObject(symbol_font);
+                }
+            }
+        } catch (...) {
+            // Ignore errors - placeholder will remain plain gray
+        }
+        
     }
     
     // Draw track info (pass art_size for adaptive layout)
@@ -2696,6 +2837,65 @@ void control_panel::paint_artwork_expanded(HDC hdc, const RECT& client_rect) {
         FillRect(buffer_dc, &artwork_rect, placeholder_brush);
         DeleteObject(placeholder_brush);
         
+        // Check if current track is a stream and show radio icon
+        try {
+            auto playback = playback_control::get();
+            metadb_handle_ptr track;
+            
+            if (playback->get_now_playing(track) && track.is_valid()) {
+                pfc::string8 path = track->get_path();
+                bool is_stream = strstr(path.get_ptr(), "://") != nullptr;
+                
+                if (is_stream) {
+                    // Load and draw radio icon for internet streams (use larger size for expanded view)
+                    int icon_size = (window_width < window_height ? window_width : window_height) / 4; // Quarter of smallest dimension
+                    HICON radio_icon = (HICON)LoadImage(g_hIns, MAKEINTRESOURCE(IDI_RADIO_ICON), IMAGE_ICON, icon_size, icon_size, LR_DEFAULTCOLOR);
+                    
+                    if (!radio_icon) {
+                        radio_icon = LoadIcon(g_hIns, MAKEINTRESOURCE(IDI_RADIO_ICON));
+                    }
+                    
+                    if (radio_icon) {
+                        int icon_x = (window_width - icon_size) / 2;
+                        int icon_y = (window_height - icon_size) / 2;
+                        
+                        DrawIconEx(buffer_dc, icon_x, icon_y, radio_icon, icon_size, icon_size, 0, nullptr, DI_NORMAL);
+                        DestroyIcon(radio_icon);
+                    } else {
+                        // Fallback to text if icon can't be loaded
+                        SetTextColor(buffer_dc, RGB(200, 200, 200));
+                        SetBkMode(buffer_dc, TRANSPARENT);
+                        int font_size = (window_width < window_height ? window_width : window_height) / 8; // Larger font for expanded view
+                        HFONT symbol_font = CreateFont(font_size, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                                                       DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                                                       DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI Symbol");
+                        HFONT old_symbol_font = (HFONT)SelectObject(buffer_dc, symbol_font);
+                        
+                        DrawText(buffer_dc, L"📻", -1, &artwork_rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+                        
+                        SelectObject(buffer_dc, old_symbol_font);
+                        DeleteObject(symbol_font);
+                    }
+                } else {
+                    // Draw musical note symbol for local files
+                    SetTextColor(buffer_dc, RGB(200, 200, 200));
+                    SetBkMode(buffer_dc, TRANSPARENT);
+                    int font_size = (window_width < window_height ? window_width : window_height) / 8;
+                    HFONT symbol_font = CreateFont(font_size, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                                                   DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                                                   DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI Symbol");
+                    HFONT old_symbol_font = (HFONT)SelectObject(buffer_dc, symbol_font);
+                    
+                    DrawText(buffer_dc, L"♪", -1, &artwork_rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+                    
+                    SelectObject(buffer_dc, old_symbol_font);
+                    DeleteObject(symbol_font);
+                }
+            }
+        } catch (...) {
+            // Ignore errors - placeholder will remain plain gray
+        }
+        
     }
     
     // Copy the complete buffered image to the screen in one operation
@@ -2801,9 +3001,9 @@ void control_panel::paint_compact_mode(HDC hdc, const RECT& rect) {
     int art_size = window_height - (2 * margin); // Use almost full height for artwork
     
     // Draw artwork
+    RECT art_rect = {margin, margin, margin + art_size, margin + art_size};
+    
     if (m_cover_art_bitmap) {
-        RECT art_rect = {margin, margin, margin + art_size, margin + art_size};
-        
         HDC mem_dc = CreateCompatibleDC(hdc);
         HBITMAP old_bitmap = (HBITMAP)SelectObject(mem_dc, m_cover_art_bitmap);
         
@@ -2819,6 +3019,70 @@ void control_panel::paint_compact_mode(HDC hdc, const RECT& rect) {
         
         SelectObject(mem_dc, old_bitmap);
         DeleteDC(mem_dc);
+    } else {
+        // Draw placeholder
+        HBRUSH cover_brush = CreateSolidBrush(RGB(60, 60, 60));
+        FillRect(hdc, &art_rect, cover_brush);
+        DeleteObject(cover_brush);
+        
+        // Check if current track is a stream and show radio icon
+        try {
+            auto playback = playback_control::get();
+            metadb_handle_ptr track;
+            
+            if (playback->get_now_playing(track) && track.is_valid()) {
+                pfc::string8 path = track->get_path();
+                bool is_stream = strstr(path.get_ptr(), "://") != nullptr;
+                
+                if (is_stream) {
+                    // Load and draw radio icon for internet streams
+                    HICON radio_icon = (HICON)LoadImage(g_hIns, MAKEINTRESOURCE(IDI_RADIO_ICON), IMAGE_ICON, art_size/2, art_size/2, LR_DEFAULTCOLOR);
+                    
+                    if (!radio_icon) {
+                        radio_icon = LoadIcon(g_hIns, MAKEINTRESOURCE(IDI_RADIO_ICON));
+                    }
+                    
+                    if (radio_icon) {
+                        int icon_size = art_size / 2;
+                        int icon_x = art_rect.left + (art_size - icon_size) / 2;
+                        int icon_y = art_rect.top + (art_size - icon_size) / 2;
+                        
+                        DrawIconEx(hdc, icon_x, icon_y, radio_icon, icon_size, icon_size, 0, nullptr, DI_NORMAL);
+                        DestroyIcon(radio_icon);
+                    } else {
+                        // Fallback to text if icon can't be loaded
+                        SetTextColor(hdc, RGB(200, 200, 200));
+                        SetBkMode(hdc, TRANSPARENT);
+                        int font_size = art_size / 3;
+                        HFONT symbol_font = CreateFont(font_size, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                                                       DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                                                       DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI Symbol");
+                        HFONT old_symbol_font = (HFONT)SelectObject(hdc, symbol_font);
+                        
+                        DrawText(hdc, L"📻", -1, &art_rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+                        
+                        SelectObject(hdc, old_symbol_font);
+                        DeleteObject(symbol_font);
+                    }
+                } else {
+                    // Draw musical note symbol for local files
+                    SetTextColor(hdc, RGB(200, 200, 200));
+                    SetBkMode(hdc, TRANSPARENT);
+                    int font_size = art_size / 3;
+                    HFONT symbol_font = CreateFont(font_size, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                                                   DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                                                   DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI Symbol");
+                    HFONT old_symbol_font = (HFONT)SelectObject(hdc, symbol_font);
+                    
+                    DrawText(hdc, L"♪", -1, &art_rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+                    
+                    SelectObject(hdc, old_symbol_font);
+                    DeleteObject(symbol_font);
+                }
+            }
+        } catch (...) {
+            // Ignore errors - placeholder will remain plain gray
+        }
     }
     
     // Draw artwork hover arrows if hovering over artwork (same as undocked mode)
