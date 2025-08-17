@@ -485,7 +485,14 @@ void popup_window::paint_popup(HDC hdc) {
         
         if (is_stream) {
             // Load and draw radio icon for internet streams
-            HICON radio_icon = LoadIcon(g_hIns, MAKEINTRESOURCE(IDI_RADIO_ICON));
+            // Try LoadImage first for better flexibility with icon sizes
+            HICON radio_icon = (HICON)LoadImage(g_hIns, MAKEINTRESOURCE(IDI_RADIO_ICON), IMAGE_ICON, 32, 32, LR_DEFAULTCOLOR);
+            
+            // If LoadImage fails, try LoadIcon as fallback
+            if (!radio_icon) {
+                radio_icon = LoadIcon(g_hIns, MAKEINTRESOURCE(IDI_RADIO_ICON));
+            }
+            
             if (radio_icon) {
                 // Center the icon in the cover rect
                 int icon_size = 32; // Standard small icon size
@@ -493,6 +500,7 @@ void popup_window::paint_popup(HDC hdc) {
                 int icon_y = cover_rect.top + (60 - icon_size) / 2;
                 
                 DrawIconEx(hdc, icon_x, icon_y, radio_icon, icon_size, icon_size, 0, nullptr, DI_NORMAL);
+                DestroyIcon(radio_icon); // Clean up the icon handle
             } else {
                 // Fallback to text if icon can't be loaded
                 SetTextColor(hdc, RGB(200, 200, 200));
