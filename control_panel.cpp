@@ -3098,20 +3098,20 @@ void control_panel::paint_compact_mode(HDC hdc, const RECT& rect) {
     int text_left = margin + art_size + margin;
     int text_right = window_width - margin; // No dots, use full width
     
-    // Draw song title (top half of remaining space) - reduced by 25%
-    HFONT title_font = CreateFont(29, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+    // Draw song title (top half of remaining space) - 11pt
+    HFONT title_font = CreateFont(-15, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
                                   DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                                  DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+                                  DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Microsoft YaHei");
     HFONT old_font = (HFONT)SelectObject(hdc, title_font);
     
     RECT title_rect = {text_left, margin - (int)(window_height * 0.10), text_right, window_height / 2 + margin - (int)(window_height * 0.10)};
     pfc::stringcvt::string_wide_from_utf8 wide_title(m_current_title.c_str());
     DrawText(hdc, wide_title.get_ptr(), -1, &title_rect, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
     
-    // Draw artist name (bottom half of remaining space) - doubled in size
-    HFONT artist_font = CreateFont(27, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+    // Draw artist name (bottom half of remaining space) - 9pt
+    HFONT artist_font = CreateFont(-12, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
                                    DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                                   DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+                                   DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Microsoft YaHei");
     SelectObject(hdc, artist_font);
     
     RECT artist_rect = {text_left, window_height / 2 + margin - (int)(window_height * 0.15), text_right, window_height - margin - (int)(window_height * 0.15)};
