@@ -39,7 +39,7 @@ private:
     // Timer for auto-hide and animation
     static const UINT POPUP_TIMER_ID = 3001;
     static const UINT ANIMATION_TIMER_ID = 3002;
-    static const UINT POPUP_DISPLAY_TIME = 3000; // 3 seconds
+    // POPUP_DISPLAY_TIME is now configurable via get_popup_duration() in preferences
     static const UINT ANIMATION_DURATION = 300; // 300ms slide animation
     static const UINT ANIMATION_STEPS = 20; // Number of animation frames
     
