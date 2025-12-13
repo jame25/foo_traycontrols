@@ -202,18 +202,28 @@ void popup_window::position_popup() {
     const int top_margin = 96; // About an inch down (96 pixels ≈ 1 inch at 96 DPI)
     
     // Position based on user preference
-    int x = margin;
+    int x;
     int y;
     int popup_position = get_popup_position();
-    
-    switch (popup_position) {
-    case 0: // Top Left
+    bool is_right_side = (popup_position >= 3); // 3, 4, 5 are right-side positions
+
+    // Set X position based on left/right side
+    if (is_right_side) {
+        x = screen_width - popup_width - margin;
+    } else {
+        x = margin;
+    }
+
+    // Set Y position based on top/middle/bottom (indices 0,3=top, 1,4=middle, 2,5=bottom)
+    int vertical_position = popup_position % 3;
+    switch (vertical_position) {
+    case 0: // Top
         y = top_margin;
         break;
-    case 1: // Middle Left
+    case 1: // Middle
         y = (screen_height - popup_height) / 2;
         break;
-    case 2: // Bottom Left
+    case 2: // Bottom
         y = screen_height - popup_height - margin;
         break;
     default:
@@ -224,16 +234,23 @@ void popup_window::position_popup() {
     // Adjust for taskbar position
     if (abd.rc.top == 0 && abd.rc.left == 0 && abd.rc.right == screen_width) {
         // Taskbar is at top
-        if (popup_position == 0) { // Only adjust top position
+        if (vertical_position == 0) { // Only adjust top position
             y = abd.rc.bottom + margin;
         }
     } else if (abd.rc.left == 0 && abd.rc.top == 0 && abd.rc.bottom == screen_height) {
-        // Taskbar is at left
-        x = abd.rc.right + margin;
+        // Taskbar is at left - only affects left-side popups
+        if (!is_right_side) {
+            x = abd.rc.right + margin;
+        }
     } else if (abd.rc.top == screen_height - abd.rc.bottom && abd.rc.left == 0 && abd.rc.right == screen_width) {
         // Taskbar is at bottom
-        if (popup_position == 2) { // Only adjust bottom position
+        if (vertical_position == 2) { // Only adjust bottom position
             y = abd.rc.top - popup_height - margin;
+        }
+    } else if (abd.rc.right == screen_width && abd.rc.top == 0 && abd.rc.bottom == screen_height && abd.rc.left > 0) {
+        // Taskbar is at right - only affects right-side popups
+        if (is_right_side) {
+            x = abd.rc.left - popup_width - margin;
         }
     }
     
@@ -663,43 +680,65 @@ void popup_window::draw_track_info(HDC hdc, const RECT& client_rect) {
 
 void popup_window::start_slide_in_animation() {
     if (m_animating) return;
-    
-    // Calculate start position (off-screen to the left)
-    m_start_x = -320; // Start off-screen to the left (negative width)
+
+    // Determine if sliding from right or left based on popup position
+    int popup_position = get_popup_position();
+    bool is_right_side = (popup_position >= 3);
+
+    // Get screen width for right-side calculations
+    int screen_width = GetSystemMetrics(SM_CXSCREEN);
+
+    // Calculate start position (off-screen on the appropriate side)
+    if (is_right_side) {
+        m_start_x = screen_width; // Start off-screen to the right
+    } else {
+        m_start_x = -320; // Start off-screen to the left (negative width)
+    }
     m_start_y = m_final_y;
-    
+
     // Set initial position
     SetWindowPos(m_popup_window, HWND_TOPMOST, m_start_x, m_start_y, 320, 80, SWP_NOACTIVATE);
-    
+
     // Show window and start animation
     ShowWindow(m_popup_window, SW_SHOWNOACTIVATE);
-    
+
     m_animating = true;
     m_sliding_in = true;
     m_animation_step = 0;
     m_visible = true;
-    
+
     // Start animation timer
     SetTimer(m_popup_window, ANIMATION_TIMER_ID, ANIMATION_DURATION / ANIMATION_STEPS, animation_timer_proc);
 }
 
 void popup_window::start_slide_out_animation() {
     if (m_animating) return;
-    
+
+    // Determine if sliding to right or left based on popup position
+    int popup_position = get_popup_position();
+    bool is_right_side = (popup_position >= 3);
+
+    // Get screen width for right-side calculations
+    int screen_width = GetSystemMetrics(SM_CXSCREEN);
+
     // Get current position as start position
     RECT window_rect;
     GetWindowRect(m_popup_window, &window_rect);
     m_start_x = window_rect.left;
     m_start_y = window_rect.top;
-    
-    // Set final position (off-screen to the left)
-    m_final_x = -320; // Exit off-screen to the left
+
+    // Set final position (off-screen on the appropriate side)
+    if (is_right_side) {
+        m_final_x = screen_width; // Exit off-screen to the right
+    } else {
+        m_final_x = -320; // Exit off-screen to the left
+    }
     m_final_y = m_start_y;
-    
+
     m_animating = true;
     m_sliding_in = false;
     m_animation_step = 0;
-    
+
     // Start animation timer
     SetTimer(m_popup_window, ANIMATION_TIMER_ID, ANIMATION_DURATION / ANIMATION_STEPS, animation_timer_proc);
 }
@@ -727,8 +766,8 @@ void popup_window::update_animation() {
         m_animating = false;
         
         if (m_sliding_in) {
-            // Animation complete, start auto-hide timer
-            SetTimer(m_popup_window, POPUP_TIMER_ID, POPUP_DISPLAY_TIME, hide_timer_proc);
+            // Animation complete, start auto-hide timer using configurable duration
+            SetTimer(m_popup_window, POPUP_TIMER_ID, get_popup_duration(), hide_timer_proc);
         } else {
             // Slide-out complete, hide window
             ShowWindow(m_popup_window, SW_HIDE);
