@@ -91,7 +91,7 @@
       <DataExecutionPrevention>
       </DataExecutionPrevention>
       <AdditionalDependencies>foobar2000_SDK.lib;pfc.lib;shared.lib;shell32.lib;user32.lib;winmm.lib;ole32.lib;gdi32.lib;gdiplus.lib;shlwapi.lib;comdlg32.lib</AdditionalDependencies>
-      <AdditionalLibraryDirectories>lib/foobar2000_SDK/foobar2000/SDK/Win32/$(Configuration);lib/foobar2000_SDK/pfc/Win32/$(Configuration);lib/foobar2000_SDK/foobar2000/shared/Win32/$(Configuration)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>lib/foobar2000_SDK/foobar2000/SDK/$(Configuration);lib/foobar2000_SDK/pfc/$(Configuration);lib/foobar2000_SDK/foobar2000/shared/$(Configuration)</AdditionalLibraryDirectories>
       <ModuleDefinitionFile>foo_traycontrols.def</ModuleDefinitionFile>
     </Link>
   </ItemDefinitionGroup>
@@ -121,7 +121,7 @@
       <DataExecutionPrevention>
       </DataExecutionPrevention>
       <AdditionalDependencies>foobar2000_SDK.lib;pfc.lib;shared.lib;shell32.lib;user32.lib;winmm.lib;ole32.lib;gdi32.lib;gdiplus.lib;shlwapi.lib;comdlg32.lib</AdditionalDependencies>
-      <AdditionalLibraryDirectories>lib/foobar2000_SDK/foobar2000/SDK/Win32/$(Configuration);lib/foobar2000_SDK/pfc/Win32/$(Configuration);lib/foobar2000_SDK/foobar2000/shared/Win32/$(Configuration)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>lib/foobar2000_SDK/foobar2000/SDK/$(Configuration);lib/foobar2000_SDK/pfc/$(Configuration);lib/foobar2000_SDK/foobar2000/shared/$(Configuration)</AdditionalLibraryDirectories>
       <ModuleDefinitionFile>foo_traycontrols.def</ModuleDefinitionFile>
     </Link>
   </ItemDefinitionGroup>
@@ -231,6 +231,12 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Use</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Use</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="volume_popup.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Use</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Use</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Use</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Use</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="svg_icon.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Use</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Use</PrecompiledHeader>
@@ -244,6 +250,7 @@
     <ClInclude Include="preferences.h" />
     <ClInclude Include="popup_window.h" />
     <ClInclude Include="control_panel.h" />
+    <ClInclude Include="volume_popup.h" />
     <ClInclude Include="svg_icon.h" />
     <ClInclude Include="resource.h" />
   </ItemGroup>
