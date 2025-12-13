@@ -26,6 +26,9 @@ const UINT IDM_EXIT = 1007;
 // Static instance
 tray_manager* tray_manager::s_instance = nullptr;
 
+// Static mouse hook handle
+HHOOK tray_manager::s_mouse_hook = nullptr;
+
 tray_manager& tray_manager::get_instance() {
     if (!s_instance) {
         s_instance = new tray_manager();
@@ -33,7 +36,7 @@ tray_manager& tray_manager::get_instance() {
     return *s_instance;
 }
 
-tray_manager::tray_manager() 
+tray_manager::tray_manager()
     : m_main_window(nullptr)
     , m_tray_window(nullptr)
     , m_tray_added(false)
@@ -52,10 +55,10 @@ tray_manager::~tray_manager() {
 
 void tray_manager::initialize() {
     if (m_initialized) return;
-    
+
     // Find foobar2000 main window
     m_main_window = find_main_window();
-    
+
     if (!m_main_window) {
         m_initialized = true;
         return;
@@ -73,7 +76,7 @@ void tray_manager::initialize() {
     m_nid.uID = TRAY_ID;
     m_nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
     m_nid.uCallbackMessage = WM_TRAYICON;
-    // Try to load our custom icon first, fallback to default if it fails
+    // Load the tray icon
     m_nid.hIcon = LoadIcon(g_hIns, MAKEINTRESOURCE(IDI_TRAY_ICON));
     if (!m_nid.hIcon) {
         // Fallback to default application icon
@@ -84,6 +87,11 @@ void tray_manager::initialize() {
     // Add tray icon immediately - always visible
     Shell_NotifyIcon(NIM_ADD, &m_nid);
     m_tray_added = true;
+
+    // Install low-level mouse hook for wheel volume control over tray icon
+    if (!s_mouse_hook) {
+        s_mouse_hook = SetWindowsHookEx(WH_MOUSE_LL, low_level_mouse_proc, g_hIns, 0);
+    }
 
     // Use window subclassing for minimize detection only
     m_original_wndproc = (WNDPROC)SetWindowLongPtr(m_main_window, GWLP_WNDPROC, (LONG_PTR)window_proc);
@@ -130,29 +138,33 @@ void tray_manager::cleanup() {
     // Cleanup popup window and control panel
     popup_window::get_instance().cleanup();
     control_panel::get_instance().cleanup();
-    
+
     // Kill the tooltip update timer
     if (m_tray_window) {
         KillTimer(m_tray_window, TOOLTIP_TIMER_ID);
     }
-    
-    // Mouse hook removed - no cleanup needed
-    
+
+    // Remove low-level mouse hook
+    if (s_mouse_hook) {
+        UnhookWindowsHookEx(s_mouse_hook);
+        s_mouse_hook = nullptr;
+    }
+
     if (m_tray_added) {
         Shell_NotifyIcon(NIM_DELETE, &m_nid);
         m_tray_added = false;
     }
-    
+
     if (m_main_window && m_original_wndproc) {
         SetWindowLongPtr(m_main_window, GWLP_WNDPROC, (LONG_PTR)m_original_wndproc);
         m_original_wndproc = nullptr;
     }
-    
+
     if (m_tray_window) {
         DestroyWindow(m_tray_window);
         m_tray_window = nullptr;
     }
-    
+
     m_initialized = false;
 }
 
@@ -632,31 +644,24 @@ LRESULT CALLBACK tray_manager::tray_window_proc(HWND hwnd, UINT msg, WPARAM wpar
                 return 0;
                 
             case WM_LBUTTONUP:
-                // Single-click behavior: if panel is undocked, return it to docked mode and hide it
-                // Otherwise, toggle control panel normally
+                // Single-click behavior for tray icon
                 {
                     auto& panel = control_panel::get_instance();
-                    if (panel.is_undocked() || panel.is_artwork_expanded()) {
-                        // Return undocked/artwork panel to docked mode and hide it
-                        if (panel.is_artwork_expanded()) {
-                            // First exit artwork mode, then continue to close
-                            panel.toggle_artwork_expanded();
-                        }
-                        panel.set_undocked(false);
-                        // Restore topmost behavior
-                        SetWindowPos(panel.get_control_window(), HWND_TOPMOST, 0, 0, 0, 0, 
-                            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-                        // Hide the panel with slide animation (like timeout behavior)
-                        panel.hide_control_panel();
-                        // Trigger repaint to show undock icon again when reopened
-                        InvalidateRect(panel.get_control_window(), nullptr, TRUE);
+                    bool is_visible = panel.get_control_window() && IsWindowVisible(panel.get_control_window());
+                    bool is_miniplayer = panel.is_undocked() || panel.is_artwork_expanded() || panel.is_compact_mode();
+
+                    if (is_visible && is_miniplayer) {
+                        // Miniplayer (any non-docked mode) is visible - hide it and remember state/position
+                        panel.hide_and_remember_miniplayer();
+                    } else if (panel.has_saved_miniplayer_state()) {
+                        // Was in a miniplayer mode before - restore it at saved position
+                        panel.show_miniplayer_at_saved_position();
+                    } else if (is_visible) {
+                        // Docked panel is visible - hide it
+                        panel.hide_control_panel_immediate();
                     } else {
-                        // Show simple docked popup that auto-closes (like original behavior)
-                        if (!panel.get_control_window() || !IsWindowVisible(panel.get_control_window())) {
-                            panel.show_control_panel_simple();
-                        } else {
-                            panel.hide_control_panel_immediate();
-                        }
+                        // Nothing visible, no saved state - show docked panel
+                        panel.show_control_panel_simple();
                     }
                 }
                 return 0;
@@ -695,9 +700,38 @@ bool tray_manager::is_cursor_over_tray_icon() {
             cursor_pos.y >= tray_rect.top && cursor_pos.y <= tray_rect.bottom);
 }
 
-// Mouse hook functionality removed - was causing system freezing conflicts with artwork downloading
+// Low-level mouse hook for wheel volume control over tray icon
+LRESULT CALLBACK tray_manager::low_level_mouse_proc(int nCode, WPARAM wParam, LPARAM lParam) {
+    if (nCode >= 0 && wParam == WM_MOUSEWHEEL && s_instance && s_instance->m_initialized) {
+        MSLLHOOKSTRUCT* hookData = (MSLLHOOKSTRUCT*)lParam;
 
-// Mouse hook update function removed - was causing system freezing conflicts
+        // Check if cursor is over the notification area (system tray)
+        if (s_instance->is_cursor_over_tray_icon()) {
+            // Get wheel delta from hook data (HIWORD of mouseData)
+            short wheelDelta = HIWORD(hookData->mouseData);
+
+            try {
+                static_api_ptr_t<playback_control> pc;
+                float current_volume = pc->get_volume();
+                // Volume is in dB, typically -100 to 0
+                // Adjust by 2 dB per wheel notch (120 units = 1 notch)
+                float volume_change = (wheelDelta > 0) ? 2.0f : -2.0f;
+                float new_volume = current_volume + volume_change;
+                // Clamp to valid range
+                if (new_volume > 0.0f) new_volume = 0.0f;
+                if (new_volume < -100.0f) new_volume = -100.0f;
+                pc->set_volume(new_volume);
+            } catch (...) {
+                // Ignore volume control errors
+            }
+
+            // Don't consume the message - let other apps handle it too
+            // return 1; // Uncomment to consume the message
+        }
+    }
+
+    return CallNextHookEx(s_mouse_hook, nCode, wParam, lParam);
+}
 
 // Timer procedure for periodic tooltip updates and window monitoring
 VOID CALLBACK tray_manager::tooltip_timer_proc(HWND hwnd, UINT msg, UINT_PTR timer_id, DWORD time) {
@@ -781,24 +815,24 @@ void tray_manager::check_for_track_changes() {
 // Check for window visibility changes and handle minimize behavior
 void tray_manager::check_window_visibility() {
     if (!m_initialized || !m_main_window || m_processing_minimize) return;
-    
+
     bool current_visible = IsWindowVisible(m_main_window);
     bool is_minimized = IsIconic(m_main_window);
-    
+
     // Only trigger on actual state changes
     if (current_visible != m_was_visible || is_minimized != m_was_minimized) {
-        
+
         // Check if user just minimized the window and setting is enabled
         if (!m_was_minimized && is_minimized && get_always_minimize_to_tray()) {
             m_processing_minimize = true;
-            
+
             // Hide the window to tray
             ShowWindow(m_main_window, SW_HIDE);
-            
+
             m_processing_minimize = false;
         }
-        
-        
+
+
         // Update stored state
         m_was_visible = current_visible;
         m_was_minimized = is_minimized;
