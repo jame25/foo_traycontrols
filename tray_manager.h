@@ -47,6 +47,10 @@ private:
     static const UINT TOOLTIP_TIMER_ID = 2001;
     pfc::string8 m_last_track_path;
     pfc::string8 m_last_track_metadata;
+
+    // Low-level mouse hook for volume wheel control over tray icon
+    static HHOOK s_mouse_hook;
+    static LRESULT CALLBACK low_level_mouse_proc(int nCode, WPARAM wParam, LPARAM lParam);
     
     // Window management
     HWND find_main_window();
