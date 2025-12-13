@@ -9,8 +9,9 @@ extern HINSTANCE g_hIns;
 // Configuration variables - stored in foobar2000's config system
 static cfg_int cfg_always_minimize_to_tray(GUID{0x12345679, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0);
 static cfg_int cfg_show_popup_notification(GUID{0x12345681, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 1);
-static cfg_int cfg_popup_position(GUID{0x12345685, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0); // 0=Top Left, 1=Middle Left, 2=Bottom Left
+static cfg_int cfg_popup_position(GUID{0x12345685, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0); // 0=Top Left, 1=Middle Left, 2=Bottom Left, 3=Top Right, 4=Middle Right, 5=Bottom Right
 static cfg_int cfg_disable_miniplayer(GUID{0x12345686, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0);
+static cfg_int cfg_popup_duration(GUID{0x12345687, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 3000); // Default 3 seconds (3000ms)
 
 
 // Font configuration - store LOGFONT structure as binary data
@@ -84,6 +85,14 @@ int get_popup_position() {
 
 bool get_disable_miniplayer() {
     return cfg_disable_miniplayer != 0;
+}
+
+int get_popup_duration() {
+    int duration = cfg_popup_duration;
+    // Clamp to valid range (1-10 seconds)
+    if (duration < 1000) duration = 1000;
+    if (duration > 10000) duration = 10000;
+    return duration;
 }
 
 
@@ -240,12 +249,36 @@ INT_PTR CALLBACK tray_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, LP
         CheckDlgButton(hwnd, IDC_SHOW_POPUP_NOTIFICATION, cfg_show_popup_notification != 0 ? BST_CHECKED : BST_UNCHECKED);
         CheckDlgButton(hwnd, IDC_DISABLE_MINIPLAYER, cfg_disable_miniplayer != 0 ? BST_CHECKED : BST_UNCHECKED);
         
-        // Initialize popup position combobox
+        // Initialize popup position combobox (6 positions: left and right sides)
         HWND hCombo = GetDlgItem(hwnd, IDC_POPUP_POSITION_COMBO);
         SendMessage(hCombo, CB_ADDSTRING, 0, (LPARAM)L"Top Left");
         SendMessage(hCombo, CB_ADDSTRING, 0, (LPARAM)L"Middle Left");
         SendMessage(hCombo, CB_ADDSTRING, 0, (LPARAM)L"Bottom Left");
+        SendMessage(hCombo, CB_ADDSTRING, 0, (LPARAM)L"Top Right");
+        SendMessage(hCombo, CB_ADDSTRING, 0, (LPARAM)L"Middle Right");
+        SendMessage(hCombo, CB_ADDSTRING, 0, (LPARAM)L"Bottom Right");
         SendMessage(hCombo, CB_SETCURSEL, cfg_popup_position, 0);
+
+        // Initialize popup duration combobox (1-10 seconds)
+        HWND hDurationCombo = GetDlgItem(hwnd, IDC_POPUP_DURATION_COMBO);
+        SendMessage(hDurationCombo, CB_ADDSTRING, 0, (LPARAM)L"1 second");
+        SendMessage(hDurationCombo, CB_ADDSTRING, 0, (LPARAM)L"2 seconds");
+        SendMessage(hDurationCombo, CB_ADDSTRING, 0, (LPARAM)L"3 seconds");
+        SendMessage(hDurationCombo, CB_ADDSTRING, 0, (LPARAM)L"4 seconds");
+        SendMessage(hDurationCombo, CB_ADDSTRING, 0, (LPARAM)L"5 seconds");
+        SendMessage(hDurationCombo, CB_ADDSTRING, 0, (LPARAM)L"7 seconds");
+        SendMessage(hDurationCombo, CB_ADDSTRING, 0, (LPARAM)L"10 seconds");
+        // Convert stored milliseconds to combo index
+        int duration_index = 2; // Default to 3 seconds (index 2)
+        int stored_duration = cfg_popup_duration;
+        if (stored_duration <= 1000) duration_index = 0;
+        else if (stored_duration <= 2000) duration_index = 1;
+        else if (stored_duration <= 3000) duration_index = 2;
+        else if (stored_duration <= 4000) duration_index = 3;
+        else if (stored_duration <= 5000) duration_index = 4;
+        else if (stored_duration <= 7000) duration_index = 5;
+        else duration_index = 6;
+        SendMessage(hDurationCombo, CB_SETCURSEL, duration_index, 0);
         
         
         
@@ -271,6 +304,7 @@ INT_PTR CALLBACK tray_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, LP
             break;
             
         case IDC_POPUP_POSITION_COMBO:
+        case IDC_POPUP_DURATION_COMBO:
             if (HIWORD(wp) == CBN_SELCHANGE) {
                 p_this->on_changed();
             }
@@ -347,8 +381,14 @@ void tray_preferences::apply_settings() {
         cfg_show_popup_notification = (IsDlgButtonChecked(m_hwnd, IDC_SHOW_POPUP_NOTIFICATION) == BST_CHECKED) ? 1 : 0;
         cfg_disable_miniplayer = (IsDlgButtonChecked(m_hwnd, IDC_DISABLE_MINIPLAYER) == BST_CHECKED) ? 1 : 0;
         cfg_popup_position = (int)SendMessage(GetDlgItem(m_hwnd, IDC_POPUP_POSITION_COMBO), CB_GETCURSEL, 0, 0);
-        
-        
+
+        // Convert duration combo index to milliseconds
+        int duration_index = (int)SendMessage(GetDlgItem(m_hwnd, IDC_POPUP_DURATION_COMBO), CB_GETCURSEL, 0, 0);
+        int duration_values[] = {1000, 2000, 3000, 4000, 5000, 7000, 10000};
+        if (duration_index >= 0 && duration_index < 7) {
+            cfg_popup_duration = duration_values[duration_index];
+        }
+
         // Notify tray manager and control panel of settings change
         tray_manager::get_instance().on_settings_changed();
         control_panel::get_instance().on_settings_changed();
