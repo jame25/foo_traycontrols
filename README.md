@@ -2,7 +2,7 @@
 
 A foobar2000 component that provides comprehensive system tray functionality with popup controls, notifications, and minimize-to-tray behavior.
 
-<img width="742" height="547" alt="foo_trayctrls" src="https://github.com/user-attachments/assets/56c2290c-b593-4799-bbd3-148d3dd4dfa5" />
+<img width="739" height="544" alt="foo_traytools" src="https://github.com/user-attachments/assets/9e6712a9-6ba2-454a-bbb2-9e7b83f55aea" />
 <img width="339" height="121" alt="foo_trayctrls_popup" src="https://github.com/user-attachments/assets/8f37e99e-c32a-40cf-8f1c-5a4083d73de5" />
 
 
