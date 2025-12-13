@@ -8,6 +8,7 @@ bool get_always_minimize_to_tray();
 bool get_show_popup_notification();
 int get_popup_position();
 bool get_disable_miniplayer();
+int get_popup_duration(); // Returns popup duration in milliseconds (1000-10000)
 
 
 // Font configuration functions
