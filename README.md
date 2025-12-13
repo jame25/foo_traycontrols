@@ -28,7 +28,7 @@ A foobar2000 component that provides comprehensive system tray functionality wit
 - **Popup Track Notifications**: Optional popup notifications on track changes featuring:
   - Album artwork display
   - Track and artist information
-  - Positioned at top-left corner with smooth slide-in animation
+  - Smooth slide-in animation
 - **Simple Tray Menu**: Right-click context menu provides:
   - Show/Hide foobar2000 window
   - Exit application
