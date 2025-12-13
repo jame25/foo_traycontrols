@@ -1,6 +1,7 @@
 #include "stdafx.h"
 #include "control_panel.h"
 #include "preferences.h"
+#include "volume_popup.h"
 
 // Timer constants
 #define TIMEOUT_TIMER_ID 9999  // Use unique timer ID to avoid conflicts
@@ -19,7 +20,7 @@ extern HINSTANCE g_hIns;
 // control_panel - Media control panel popup
 //=============================================================================
 
-control_panel::control_panel() 
+control_panel::control_panel()
     : m_control_window(nullptr)
     , m_initialized(false)
     , m_visible(false)
@@ -34,6 +35,14 @@ control_panel::control_panel()
     , m_saved_undocked_height(120)
     , m_saved_expanded_width(400)
     , m_saved_expanded_height(400)
+    , m_saved_miniplayer_x(-1)
+    , m_saved_miniplayer_y(-1)
+    , m_saved_miniplayer_width(0)
+    , m_saved_miniplayer_height(0)
+    , m_has_saved_miniplayer_state(false)
+    , m_saved_was_undocked(false)
+    , m_saved_was_expanded(false)
+    , m_saved_was_compact(false)
     , m_overlay_visible(false)
     , m_last_mouse_move_time(0)
     , m_overlay_opacity(0)
@@ -70,7 +79,10 @@ control_panel::control_panel()
     , m_final_x(0)
     , m_final_y(0)
     , m_compact_controls_visible(false)
-    , m_last_compact_mouse_time(0) {
+    , m_last_compact_mouse_time(0)
+    , m_mouse_over_close_button(false)
+    , m_hovered_button(0) // Initialize hover state
+{
     m_last_click_pos.x = 0;
     m_last_click_pos.y = 0;
 }
@@ -183,12 +195,13 @@ void control_panel::show_control_panel(bool force_docked) {
 
 void control_panel::show_control_panel_simple() {
     if (!m_initialized || m_visible) return;
-    
+
     // Force clean docked state - ignore any previous undocked state
     m_is_undocked = false;
     m_is_artwork_expanded = false;
     m_is_compact_mode = false; // Ensure compact mode is disabled in docked state
-    
+    m_has_saved_miniplayer_state = false; // Clear miniplayer memory when showing docked panel
+
     // Reset undocked overlay state
     m_undocked_overlay_visible = false;
     m_undocked_overlay_opacity = 0;
@@ -257,6 +270,86 @@ void control_panel::toggle_control_panel() {
         m_is_compact_mode = false; // Reset compact mode when toggling via tray
         show_control_panel_simple(); // Use simple popup behavior like original
     }
+}
+
+void control_panel::hide_and_remember_miniplayer() {
+    if (!m_control_window || !m_visible) return;
+
+    // Only save state if in a non-docked mode (undocked, expanded, or compact)
+    if (m_is_undocked || m_is_artwork_expanded || m_is_compact_mode) {
+        RECT rect;
+        GetWindowRect(m_control_window, &rect);
+        m_saved_miniplayer_x = rect.left;
+        m_saved_miniplayer_y = rect.top;
+        m_saved_miniplayer_width = rect.right - rect.left;
+        m_saved_miniplayer_height = rect.bottom - rect.top;
+        m_saved_was_undocked = m_is_undocked;
+        m_saved_was_expanded = m_is_artwork_expanded;
+        m_saved_was_compact = m_is_compact_mode;
+        m_has_saved_miniplayer_state = true;
+    }
+
+    // Hide immediately without animation
+    KillTimer(m_control_window, UPDATE_TIMER_ID);
+    KillTimer(m_control_window, ANIMATION_TIMER_ID);
+    KillTimer(m_control_window, TIMEOUT_TIMER_ID);
+    ShowWindow(m_control_window, SW_HIDE);
+    m_visible = false;
+}
+
+void control_panel::show_miniplayer_at_saved_position() {
+    if (!m_initialized) {
+        initialize();
+    }
+
+    if (!m_control_window) {
+        create_control_window();
+    }
+
+    // Update track info and load cover art
+    update_track_info();
+
+    // Restore the saved mode state
+    m_is_undocked = m_saved_was_undocked;
+    m_is_artwork_expanded = m_saved_was_expanded;
+    m_is_compact_mode = m_saved_was_compact;
+
+    // Use saved position and dimensions
+    int x = m_saved_miniplayer_x;
+    int y = m_saved_miniplayer_y;
+    int width = m_saved_miniplayer_width;
+    int height = m_saved_miniplayer_height;
+
+    // Provide defaults if no valid saved state
+    if (x < 0 || y < 0 || width <= 0 || height <= 0) {
+        int screen_width = GetSystemMetrics(SM_CXSCREEN);
+        int screen_height = GetSystemMetrics(SM_CYSCREEN);
+
+        if (m_is_artwork_expanded) {
+            width = m_saved_expanded_width > 0 ? m_saved_expanded_width : 400;
+            height = m_saved_expanded_height > 0 ? m_saved_expanded_height : 400;
+        } else if (m_is_compact_mode) {
+            width = m_saved_compact_width > 0 ? m_saved_compact_width : 320;
+            height = 75;
+        } else {
+            width = m_saved_undocked_width > 0 ? m_saved_undocked_width : 338;
+            height = m_saved_undocked_height > 0 ? m_saved_undocked_height : 120;
+        }
+
+        x = (screen_width - width) / 2;
+        y = (screen_height - height) / 2;
+    }
+
+    // Position and show the window
+    SetWindowPos(m_control_window, HWND_TOPMOST, x, y, width, height, SWP_NOACTIVATE);
+    ShowWindow(m_control_window, SW_SHOWNOACTIVATE);
+    m_visible = true;
+
+    // Start update timer
+    SetTimer(m_control_window, UPDATE_TIMER_ID, 500, nullptr);
+
+    // Trigger repaint
+    InvalidateRect(m_control_window, nullptr, TRUE);
 }
 
 void control_panel::update_track_info() {
@@ -730,14 +823,26 @@ HBITMAP control_panel::convert_album_art_to_bitmap_original(album_art_data_ptr a
 }
 
 
-// Vector-drawn icon implementations
+// Forward declaration for helper
+void draw_hover_circle(HDC hdc, int x, int y, int size);
+
+// Vector-drawn icon implementations - Material Design Style
 void control_panel::draw_play_icon(HDC hdc, int x, int y, int size) {
-    // Create a play triangle pointing right
-    POINT triangle[3];
+    if (m_hovered_button == BTN_PLAYPAUSE) {
+        draw_hover_circle(hdc, x, y, size);
+    }
+    // Material Design Play Arrow
+    // Equilateral triangle pointing right
+    // Standard size is usually 24dp, here scaled to 'size'
+    
     int half_size = size / 2;
-    triangle[0] = {x - half_size/2, y - half_size};     // Top left
-    triangle[1] = {x - half_size/2, y + half_size};     // Bottom left  
-    triangle[2] = {x + half_size, y};                   // Right point
+    // Adjust center slightly to look visually centered
+    int offset_x = size / 8; 
+    
+    POINT triangle[3];
+    triangle[0] = {x - half_size + offset_x, y - half_size};     // Top left
+    triangle[1] = {x - half_size + offset_x, y + half_size};     // Bottom left  
+    triangle[2] = {x + half_size + offset_x, y};                 // Right point
     
     HBRUSH brush = CreateSolidBrush(RGB(255, 255, 255));
     HBRUSH old_brush = (HBRUSH)SelectObject(hdc, brush);
@@ -753,13 +858,23 @@ void control_panel::draw_play_icon(HDC hdc, int x, int y, int size) {
 }
 
 void control_panel::draw_pause_icon(HDC hdc, int x, int y, int size) {
-    // Create two vertical rectangles
+    if (m_hovered_button == BTN_PLAYPAUSE) {
+        draw_hover_circle(hdc, x, y, size);
+    }
+    // Material Design Pause
+    // Two vertical bars
     int half_size = size / 2;
-    int bar_width = size / 5;
-    int gap = size / 6;
+    int bar_width = size / 3; // Thicker bars
+    int gap = size / 5;
     
-    RECT left_bar = {x - gap - bar_width, y - half_size, x - gap, y + half_size};
-    RECT right_bar = {x + gap, y - half_size, x + gap + bar_width, y + half_size};
+    // Total width = 2 * bar_width + gap
+    // Start x = x - total_width / 2
+    
+    // Simplify: Center gap is gap, so bars are at x +/- (gap/2 + bar_width/2)
+    int offset = gap/2;
+    
+    RECT left_bar = {x - offset - bar_width, y - half_size, x - offset, y + half_size};
+    RECT right_bar = {x + offset, y - half_size, x + offset + bar_width, y + half_size};
     
     HBRUSH brush = CreateSolidBrush(RGB(255, 255, 255));
     FillRect(hdc, &left_bar, brush);
@@ -767,21 +882,53 @@ void control_panel::draw_pause_icon(HDC hdc, int x, int y, int size) {
     DeleteObject(brush);
 }
 
-void control_panel::draw_previous_icon(HDC hdc, int x, int y, int size) {
-    // Draw vertical line + triangle pointing left
-    int half_size = size / 2;
-    int bar_width = 2;
+// Helper for drawing hover circles behind buttons
+void draw_hover_circle(HDC hdc, int x, int y, int size) {
+    int radius = size * 3 / 4; // Slightly larger than typical button interaction area
     
-    // Vertical line on the left
+    // Create semi-transparent white/grey circle
+    // Since GDI doesn't support alpha blending primitives easily without GDI+,
+    // we use a specific color that looks like a highlight on our dark backgrounds.
+    // Our backgrounds are usually dark grey (32,32,32) or image based.
+    // A lighter grey circle works well.
+    
+    HBRUSH brush = CreateSolidBrush(RGB(60, 60, 60)); // Lighter than background
+    HPEN pen = (HPEN)GetStockObject(NULL_PEN);
+    
+    HBRUSH old_brush = (HBRUSH)SelectObject(hdc, brush);
+    HPEN old_pen = (HPEN)SelectObject(hdc, pen);
+    
+    Ellipse(hdc, x - radius, y - radius, x + radius, y + radius);
+    
+    SelectObject(hdc, old_pen);
+    SelectObject(hdc, old_brush);
+    DeleteObject(brush);
+}
+
+void control_panel::draw_previous_icon(HDC hdc, int x, int y, int size) {
+    if (m_hovered_button == BTN_PREV) {
+        draw_hover_circle(hdc, x, y, size);
+    }
+    // Material Design Skip Previous
+    // Vertical bar + Triangle pointing left
+    
+    int half_size = size / 2;
+    int bar_width = size / 5;
+    int gap = 2; // Small gap between triangle and bar
+    
+    // Bar on LEFT (standard for Skip Previous)
     RECT bar = {x - half_size, y - half_size, x - half_size + bar_width, y + half_size};
+    
     HBRUSH brush = CreateSolidBrush(RGB(255, 255, 255));
     FillRect(hdc, &bar, brush);
     
     // Triangle pointing left
     POINT triangle[3];
-    triangle[0] = {x + half_size/2, y - half_size/2};   // Top right
-    triangle[1] = {x + half_size/2, y + half_size/2};   // Bottom right
-    triangle[2] = {x - half_size/4, y};                 // Left point
+    int tri_start_x = x - half_size + bar_width; // Start after bar
+    
+    triangle[0] = {x + half_size, y - half_size};   // Top right
+    triangle[1] = {x + half_size, y + half_size};   // Bottom right
+    triangle[2] = {tri_start_x, y};                 // Left point (touching or close to bar)
     
     HBRUSH old_brush = (HBRUSH)SelectObject(hdc, brush);
     HPEN pen = CreatePen(PS_SOLID, 1, RGB(255, 255, 255));
@@ -796,15 +943,22 @@ void control_panel::draw_previous_icon(HDC hdc, int x, int y, int size) {
 }
 
 void control_panel::draw_next_icon(HDC hdc, int x, int y, int size) {
-    // Draw triangle pointing right + vertical line
+    if (m_hovered_button == BTN_NEXT) {
+        draw_hover_circle(hdc, x, y, size);
+    }
+    // Material Design Skip Next
+    // Triangle pointing right + Vertical bar
+    
     int half_size = size / 2;
-    int bar_width = 2;
+    int bar_width = size / 5;
     
     // Triangle pointing right
     POINT triangle[3];
-    triangle[0] = {x - half_size/2, y - half_size/2};   // Top left
-    triangle[1] = {x - half_size/2, y + half_size/2};   // Bottom left
-    triangle[2] = {x + half_size/4, y};                 // Right point
+    int tri_end_x = x + half_size - bar_width;
+    
+    triangle[0] = {x - half_size, y - half_size};     // Top left
+    triangle[1] = {x - half_size, y + half_size};     // Bottom left
+    triangle[2] = {tri_end_x, y};                     // Right point
     
     HBRUSH brush = CreateSolidBrush(RGB(255, 255, 255));
     HBRUSH old_brush = (HBRUSH)SelectObject(hdc, brush);
@@ -813,29 +967,28 @@ void control_panel::draw_next_icon(HDC hdc, int x, int y, int size) {
     
     Polygon(hdc, triangle, 3);
     
-    SelectObject(hdc, old_pen);
-    SelectObject(hdc, old_brush);
-    
-    // Vertical line on the right
+    // Bar on RIGHT
     RECT bar = {x + half_size - bar_width, y - half_size, x + half_size, y + half_size};
     FillRect(hdc, &bar, brush);
     
+    SelectObject(hdc, old_pen);
+    SelectObject(hdc, old_brush);    
     DeleteObject(pen);
     DeleteObject(brush);
 }
 
 void control_panel::draw_up_arrow(HDC hdc, int x, int y, int size) {
-    // Draw triangle pointing up
+    // Material Design Arrow Drop Up
     int half_size = size / 2;
     
     POINT triangle[3];
-    triangle[0] = {x, y - half_size};                       // Top point
-    triangle[1] = {x - half_size/2, y + half_size/4};       // Bottom left
-    triangle[2] = {x + half_size/2, y + half_size/4};       // Bottom right
+    triangle[0] = {x, y - half_size/2};                 // Top point
+    triangle[1] = {x - half_size, y + half_size/2};     // Bottom left
+    triangle[2] = {x + half_size, y + half_size/2};     // Bottom right
     
     HBRUSH brush = CreateSolidBrush(RGB(255, 255, 255));
     HBRUSH old_brush = (HBRUSH)SelectObject(hdc, brush);
-    HPEN pen = CreatePen(PS_SOLID, 1, RGB(255, 255, 255));
+    HPEN pen = CreatePen(PS_SOLID, 1, RGB(255, 255, 255)); // Outline for sharpness
     HPEN old_pen = (HPEN)SelectObject(hdc, pen);
     
     Polygon(hdc, triangle, 3);
@@ -847,13 +1000,13 @@ void control_panel::draw_up_arrow(HDC hdc, int x, int y, int size) {
 }
 
 void control_panel::draw_down_arrow(HDC hdc, int x, int y, int size) {
-    // Draw triangle pointing down
+    // Material Design Arrow Drop Down
     int half_size = size / 2;
     
     POINT triangle[3];
-    triangle[0] = {x, y + half_size};                       // Bottom point
-    triangle[1] = {x - half_size/2, y - half_size/4};       // Top left
-    triangle[2] = {x + half_size/2, y - half_size/4};       // Top right
+    triangle[0] = {x, y + half_size/2};                 // Bottom point
+    triangle[1] = {x - half_size, y - half_size/2};     // Top left
+    triangle[2] = {x + half_size, y - half_size/2};     // Top right
     
     HBRUSH brush = CreateSolidBrush(RGB(255, 255, 255));
     HBRUSH old_brush = (HBRUSH)SelectObject(hdc, brush);
@@ -869,13 +1022,13 @@ void control_panel::draw_down_arrow(HDC hdc, int x, int y, int size) {
 }
 
 void control_panel::draw_up_arrow_with_opacity(HDC hdc, int x, int y, int size, int opacity) {
-    // Draw triangle pointing up with specified opacity (0-255)
+    // Material Design Up Arrow with opacity
     int half_size = size / 2;
     
     POINT triangle[3];
-    triangle[0] = {x, y - half_size};                       // Top point
-    triangle[1] = {x - half_size/2, y + half_size/4};       // Bottom left
-    triangle[2] = {x + half_size/2, y + half_size/4};       // Bottom right
+    triangle[0] = {x, y - half_size/2};                 // Top point
+    triangle[1] = {x - half_size, y + half_size/2};     // Bottom left
+    triangle[2] = {x + half_size, y + half_size/2};     // Bottom right
     
     HBRUSH brush = CreateSolidBrush(RGB(opacity, opacity, opacity));
     HBRUSH old_brush = (HBRUSH)SelectObject(hdc, brush);
@@ -891,13 +1044,13 @@ void control_panel::draw_up_arrow_with_opacity(HDC hdc, int x, int y, int size, 
 }
 
 void control_panel::draw_down_arrow_with_opacity(HDC hdc, int x, int y, int size, int opacity) {
-    // Draw triangle pointing down with specified opacity (0-255)
+    // Material Design Down Arrow with opacity
     int half_size = size / 2;
     
     POINT triangle[3];
-    triangle[0] = {x, y + half_size};                       // Bottom point
-    triangle[1] = {x - half_size/2, y - half_size/4};       // Top left
-    triangle[2] = {x + half_size/2, y - half_size/4};       // Top right
+    triangle[0] = {x, y + half_size/2};                 // Bottom point
+    triangle[1] = {x - half_size, y - half_size/2};     // Top left
+    triangle[2] = {x + half_size, y - half_size/2};     // Top right
     
     HBRUSH brush = CreateSolidBrush(RGB(opacity, opacity, opacity));
     HBRUSH old_brush = (HBRUSH)SelectObject(hdc, brush);
@@ -936,16 +1089,187 @@ void control_panel::draw_roll_dots(HDC hdc, int x, int y, int size) {
     DeleteObject(brush);
 }
 
+void control_panel::draw_volume_icon(HDC hdc, int x, int y, int size) {
+    // Material Design Speaker Icon - Screenshot accurate
+    
+    // Normalize colors
+    HBRUSH brush = CreateSolidBrush(RGB(255, 255, 255));
+    HBRUSH old_brush = (HBRUSH)SelectObject(hdc, brush);
+    HPEN pen = CreatePen(PS_SOLID, 1, RGB(255, 255, 255));
+    HPEN old_pen = (HPEN)SelectObject(hdc, pen);
+    
+    // Speaker is drawn to the left of x, waves to the right
+    // Center point x,y is roughly the gap between speaker and waves
+    
+    // 1. Speaker Body
+    // Rect part
+    int body_h = size * 3 / 8; // ~37% height
+    int body_w = size / 4;
+    int flare_w = size / 4;
+    int speaker_tip_x = x - 2; // Tip of the speaker cone
+    
+    POINT speaker[6];
+    speaker[0] = {speaker_tip_x - flare_w - body_w, y - body_h/2}; // Top-left rect
+    speaker[1] = {speaker_tip_x - flare_w, y - body_h/2};          // Top-right rect
+    speaker[2] = {speaker_tip_x, y - size/2 + 2};                  // Top flare tip
+    speaker[3] = {speaker_tip_x, y + size/2 - 2};                  // Bottom flare tip
+    speaker[4] = {speaker_tip_x - flare_w, y + body_h/2};          // Bottom-right rect
+    speaker[5] = {speaker_tip_x - flare_w - body_w, y + body_h/2}; // Bottom-left rect
+    
+    Polygon(hdc, speaker, 6);
+    
+    // 2. Sound Waves
+    HPEN wave_pen = CreatePen(PS_SOLID, 2, RGB(255, 255, 255)); // 2px thickness for visibility
+    SelectObject(hdc, wave_pen);
+    HBRUSH null_brush = (HBRUSH)GetStockObject(NULL_BRUSH);
+    SelectObject(hdc, null_brush); // Don't fill arcs
+    
+    int wave_center_x = speaker_tip_x; // Waves emanate from speaker tip
+    
+    // Inner wave
+    int r1 = size / 3;
+    // Bounding box for arc
+    int r1_left = wave_center_x - r1;
+    int r1_top = y - r1;
+    int r1_right = wave_center_x + r1;
+    int r1_bottom = y + r1;
+    // Radial points for 45 degree start/end
+    int offset1 = r1 * 7 / 10; // ~sin(45)
+    Arc(hdc, r1_left, r1_top, r1_right, r1_bottom, 
+        wave_center_x + offset1, y - offset1,  // Start: Top Right
+        wave_center_x + offset1, y + offset1); // End: Bottom Right
+        
+    // Outer wave
+    int r2 = size * 2 / 3;
+    int r2_left = wave_center_x - r2;
+    int r2_top = y - r2;
+    int r2_right = wave_center_x + r2;
+    int r2_bottom = y + r2;
+    int offset2 = r2 * 7 / 10;
+    Arc(hdc, r2_left, r2_top, r2_right, r2_bottom, 
+        wave_center_x + offset2, y - offset2,
+        wave_center_x + offset2, y + offset2);
+
+    SelectObject(hdc, old_pen);
+    SelectObject(hdc, old_brush);
+    DeleteObject(pen);
+    DeleteObject(wave_pen);
+    DeleteObject(brush);
+}
+
+void control_panel::draw_volume_icon_with_opacity(HDC hdc, int x, int y, int size, int opacity) {
+    // Material Design Volume Up with opacity - Screenshot accurate
+    
+    int color_value = 32 + ((255 - 32) * opacity) / 100;
+    
+    HBRUSH brush = CreateSolidBrush(RGB(color_value, color_value, color_value));
+    HBRUSH old_brush = (HBRUSH)SelectObject(hdc, brush);
+    HPEN pen = CreatePen(PS_SOLID, 1, RGB(color_value, color_value, color_value));
+    HPEN old_pen = (HPEN)SelectObject(hdc, pen);
+    
+    // 1. Speaker Body
+    int body_h = size * 3 / 8;
+    int body_w = size / 4;
+    int flare_w = size / 4;
+    int speaker_tip_x = x - 2;
+    
+    POINT speaker[6];
+    speaker[0] = {speaker_tip_x - flare_w - body_w, y - body_h/2}; 
+    speaker[1] = {speaker_tip_x - flare_w, y - body_h/2};          
+    speaker[2] = {speaker_tip_x, y - size/2 + 2};                  
+    speaker[3] = {speaker_tip_x, y + size/2 - 2};                  
+    speaker[4] = {speaker_tip_x - flare_w, y + body_h/2};          
+    speaker[5] = {speaker_tip_x - flare_w - body_w, y + body_h/2}; 
+    
+    Polygon(hdc, speaker, 6);
+    
+    // 2. Sound Waves
+    HPEN wave_pen = CreatePen(PS_SOLID, 2, RGB(color_value, color_value, color_value));
+    SelectObject(hdc, wave_pen);
+    HBRUSH null_brush = (HBRUSH)GetStockObject(NULL_BRUSH);
+    SelectObject(hdc, null_brush);
+    
+    int wave_center_x = speaker_tip_x;
+
+    // Inner wave
+    int r1 = size / 3;
+    int r1_left = wave_center_x - r1;
+    int r1_top = y - r1;
+    int r1_right = wave_center_x + r1;
+    int r1_bottom = y + r1;
+    int offset1 = r1 * 7 / 10;
+    Arc(hdc, r1_left, r1_top, r1_right, r1_bottom, 
+        wave_center_x + offset1, y - offset1,
+        wave_center_x + offset1, y + offset1);
+        
+    // Outer wave
+    int r2 = size * 2 / 3;
+    int r2_left = wave_center_x - r2;
+    int r2_top = y - r2;
+    int r2_right = wave_center_x + r2;
+    int r2_bottom = y + r2;
+    int offset2 = r2 * 7 / 10;
+    Arc(hdc, r2_left, r2_top, r2_right, r2_bottom, 
+        wave_center_x + offset2, y - offset2,
+        wave_center_x + offset2, y + offset2);
+
+    SelectObject(hdc, old_pen);
+    SelectObject(hdc, old_brush);
+    DeleteObject(pen);
+    DeleteObject(wave_pen);
+    DeleteObject(brush);
+}
+
+void control_panel::draw_close_icon(HDC hdc, int x, int y, int size) {
+    // Material Design Close (X)
+    int half_size = size / 2;
+    int stroke_width = 2; // Thicker clearer stroke
+    
+    HPEN pen = CreatePen(PS_SOLID, stroke_width, RGB(255, 255, 255));
+    HPEN old_pen = (HPEN)SelectObject(hdc, pen);
+    
+    MoveToEx(hdc, x - half_size, y - half_size, nullptr);
+    LineTo(hdc, x + half_size, y + half_size);
+    MoveToEx(hdc, x + half_size, y - half_size, nullptr);
+    LineTo(hdc, x - half_size, y + half_size);
+    
+    SelectObject(hdc, old_pen);
+    DeleteObject(pen);
+}
+
+void control_panel::draw_close_icon_with_opacity(HDC hdc, int x, int y, int size, int opacity) {
+    // Material Design Close (X) with opacity
+    int half_size = size / 2;
+    int stroke_width = 2;
+
+    int color_value = 32 + ((255 - 32) * opacity) / 100;
+    HPEN pen = CreatePen(PS_SOLID, stroke_width, RGB(color_value, color_value, color_value));
+    HPEN old_pen = (HPEN)SelectObject(hdc, pen);
+
+    MoveToEx(hdc, x - half_size, y - half_size, nullptr);
+    LineTo(hdc, x + half_size, y + half_size);
+    MoveToEx(hdc, x + half_size, y - half_size, nullptr);
+    LineTo(hdc, x - half_size, y + half_size);
+
+    SelectObject(hdc, old_pen);
+    DeleteObject(pen);
+}
+
 // Opacity-based icon drawing for button fade effect
 void control_panel::draw_play_icon_with_opacity(HDC hdc, int x, int y, int size, int opacity) {
-    // Create a play triangle pointing right with specified opacity (0-100)
-    POINT triangle[3];
+    if (m_hovered_button == BTN_PLAYPAUSE) {
+        draw_hover_circle(hdc, x, y, size);
+    }
+    // Material Design Play Arrow with opacity
+    // Equilateral triangle pointing right
     int half_size = size / 2;
-    triangle[0] = {x - half_size/2, y - half_size};     // Top left
-    triangle[1] = {x - half_size/2, y + half_size};     // Bottom left  
-    triangle[2] = {x + half_size, y};                   // Right point
+    int offset_x = size / 8;
     
-    // Fade from white (255,255,255) to background (32,32,32)
+    POINT triangle[3];
+    triangle[0] = {x - half_size + offset_x, y - half_size};     // Top left
+    triangle[1] = {x - half_size + offset_x, y + half_size};     // Bottom left  
+    triangle[2] = {x + half_size + offset_x, y};                 // Right point
+    
     int color_value = 32 + ((255 - 32) * opacity) / 100;
     HBRUSH brush = CreateSolidBrush(RGB(color_value, color_value, color_value));
     HBRUSH old_brush = (HBRUSH)SelectObject(hdc, brush);
@@ -961,17 +1285,20 @@ void control_panel::draw_play_icon_with_opacity(HDC hdc, int x, int y, int size,
 }
 
 void control_panel::draw_pause_icon_with_opacity(HDC hdc, int x, int y, int size, int opacity) {
-    // Create two vertical rectangles with specified opacity (0-100)
+    if (m_hovered_button == BTN_PLAYPAUSE) {
+        draw_hover_circle(hdc, x, y, size);
+    }
+    // Material Design Pause with opacity
     int half_size = size / 2;
-    int bar_width = size / 5;
-    int gap = size / 6;
+    int bar_width = size / 3;
+    int gap = size / 5;
     
-    // Fade from white (255,255,255) to background (32,32,32)
     int color_value = 32 + ((255 - 32) * opacity) / 100;
     HBRUSH brush = CreateSolidBrush(RGB(color_value, color_value, color_value));
     
-    RECT left_bar = {x - gap/2 - bar_width, y - half_size, x - gap/2, y + half_size};
-    RECT right_bar = {x + gap/2, y - half_size, x + gap/2 + bar_width, y + half_size};
+    int offset = gap/2;
+    RECT left_bar = {x - offset - bar_width, y - half_size, x - offset, y + half_size};
+    RECT right_bar = {x + offset, y - half_size, x + offset + bar_width, y + half_size};
     
     FillRect(hdc, &left_bar, brush);
     FillRect(hdc, &right_bar, brush);
@@ -980,26 +1307,35 @@ void control_panel::draw_pause_icon_with_opacity(HDC hdc, int x, int y, int size
 }
 
 void control_panel::draw_previous_icon_with_opacity(HDC hdc, int x, int y, int size, int opacity) {
-    // Draw vertical line + triangle pointing left with specified opacity (0-100)
+    if (m_hovered_button == BTN_PREV) {
+        // Draw hover circle with opacity... effectively just brighter/visible circle
+        // Reuse the non-opacity hover helper but maybe with alpha?
+        // For simplicity, just draw the standard hover circle since these overlays are usually dark
+        draw_hover_circle(hdc, x, y, size);
+    }
+
+    // Material Design Skip Previous with opacity
     int half_size = size / 2;
-    int bar_width = 2;
+    int bar_width = size / 5;
+    int gap = 2;
     
-    // Fade from white (255,255,255) to background (32,32,32)
     int color_value = 32 + ((255 - 32) * opacity) / 100;
     HBRUSH brush = CreateSolidBrush(RGB(color_value, color_value, color_value));
     HPEN pen = CreatePen(PS_SOLID, 1, RGB(color_value, color_value, color_value));
     HPEN old_pen = (HPEN)SelectObject(hdc, pen);
     HBRUSH old_brush = (HBRUSH)SelectObject(hdc, brush);
     
-    // Vertical line on the left
+    // Bar on LEFT
     RECT bar = {x - half_size, y - half_size, x - half_size + bar_width, y + half_size};
     FillRect(hdc, &bar, brush);
     
     // Triangle pointing left  
     POINT triangle[3];
-    triangle[0] = {x - half_size/4, y - half_size/2};   // Top right
-    triangle[1] = {x - half_size/4, y + half_size/2};   // Bottom right
-    triangle[2] = {x + half_size/2, y};                 // Left point
+    int tri_start_x = x - half_size + bar_width;
+    
+    triangle[0] = {x + half_size, y - half_size};   // Top right
+    triangle[1] = {x + half_size, y + half_size};   // Bottom right
+    triangle[2] = {tri_start_x, y};                 // Left point
     
     Polygon(hdc, triangle, 3);
     
@@ -1010,11 +1346,14 @@ void control_panel::draw_previous_icon_with_opacity(HDC hdc, int x, int y, int s
 }
 
 void control_panel::draw_next_icon_with_opacity(HDC hdc, int x, int y, int size, int opacity) {
-    // Draw triangle pointing right + vertical line with specified opacity (0-100)
-    int half_size = size / 2;
-    int bar_width = 2;
+    if (m_hovered_button == BTN_NEXT) {
+        draw_hover_circle(hdc, x, y, size);
+    }
     
-    // Fade from white (255,255,255) to background (32,32,32)
+    // Material Design Skip Next with opacity
+    int half_size = size / 2;
+    int bar_width = size / 5;
+    
     int color_value = 32 + ((255 - 32) * opacity) / 100;
     HBRUSH brush = CreateSolidBrush(RGB(color_value, color_value, color_value));
     HPEN pen = CreatePen(PS_SOLID, 1, RGB(color_value, color_value, color_value));
@@ -1023,18 +1362,20 @@ void control_panel::draw_next_icon_with_opacity(HDC hdc, int x, int y, int size,
     
     // Triangle pointing right
     POINT triangle[3];
-    triangle[0] = {x - half_size/2, y - half_size/2};   // Top left
-    triangle[1] = {x - half_size/2, y + half_size/2};   // Bottom left
-    triangle[2] = {x + half_size/4, y};                 // Right point
+    int tri_end_x = x + half_size - bar_width;
+    
+    triangle[0] = {x - half_size, y - half_size};   // Top left
+    triangle[1] = {x - half_size, y + half_size};   // Bottom left
+    triangle[2] = {tri_end_x, y};                     // Right point
     
     Polygon(hdc, triangle, 3);
     
-    SelectObject(hdc, old_pen);
-    SelectObject(hdc, old_brush);
-    
-    // Vertical line on the right
+    // Bar on RIGHT
     RECT bar = {x + half_size - bar_width, y - half_size, x + half_size, y + half_size};
     FillRect(hdc, &bar, brush);
+    
+    SelectObject(hdc, old_pen);
+    SelectObject(hdc, old_brush);
     
     DeleteObject(pen);
     DeleteObject(brush);
@@ -1085,10 +1426,13 @@ void control_panel::on_settings_changed() {
 
 void control_panel::set_undocked(bool undocked) {
     m_is_undocked = undocked;
-    
+
     // Reset compact mode when switching undocked state
     if (undocked) {
         m_is_compact_mode = false; // Start in normal undocked mode, not compact
+    } else {
+        // Returning to docked mode - clear saved miniplayer state
+        m_has_saved_miniplayer_state = false;
     }
     
     // When becoming undocked, schedule track info update (asynchronous)
@@ -1124,7 +1468,10 @@ void control_panel::toggle_artwork_expanded() {
         m_saved_expanded_width = current_width;
         m_saved_expanded_height = current_height;
         m_is_artwork_expanded = false;
-        
+
+        // Clear the saved miniplayer state since user manually changed modes
+        m_has_saved_miniplayer_state = false;
+
         // Hide overlay when leaving expanded mode
         m_overlay_visible = false;
         m_overlay_opacity = 0;
@@ -1256,14 +1603,14 @@ void control_panel::toggle_compact_mode() {
 void control_panel::handle_button_click(int button_id) {
     try {
         auto playback = playback_control::get();
-        
+
         switch (button_id) {
         case BTN_PREV:
             playback->previous();
             // Delay update to allow track change to process
             SetTimer(m_control_window, UPDATE_TIMER_ID + 1, 100, nullptr);
             return; // Don't update immediately
-            
+
         case BTN_PLAYPAUSE:
             if (m_is_playing) {
                 if (m_is_paused) {
@@ -1275,18 +1622,79 @@ void control_panel::handle_button_click(int button_id) {
                 playback->play_or_unpause();
             }
             break;
-            
+
         case BTN_NEXT:
             playback->next();
             // Delay update to allow track change to process
             SetTimer(m_control_window, UPDATE_TIMER_ID + 1, 100, nullptr);
             return; // Don't update immediately
-            
+
+        case BTN_VOLUME:
+            {
+                RECT rect;
+                GetWindowRect(m_control_window, &rect);
+                int window_x = rect.left;
+                int window_y = rect.top;
+                int width = rect.right - rect.left;
+                int height = rect.bottom - rect.top;
+                
+                int btn_center_x = 0;
+                int btn_center_y = 0;
+
+                if (m_is_artwork_expanded) {
+                    // Expanded mode overlay
+                    const int overlay_height = 46;
+                    int overlay_top = height - overlay_height;
+                    // Formula from draw_control_overlay
+                    int center_y = overlay_top + (overlay_height / 2) + (overlay_height * 28 / 100);
+                    int center_x = width / 2;
+                    int button_spacing = 60;
+                    btn_center_x = center_x + button_spacing * 2;
+                    btn_center_y = center_y + 12; 
+                } else if (m_is_compact_mode) {
+                     // Compact mode overlay
+                    int margin = 5;
+                    int art_size = height - (2 * margin);
+                    int text_left = margin + art_size + margin;
+                    int text_right = width - margin;
+                    int text_area_width = text_right - text_left;
+                    int button_size = 24;
+                    int button_spacing = 20;
+                    int total_buttons_width = (4 * button_size) + (3 * button_spacing);
+                    
+                    int buttons_start_x = text_left + (text_area_width - total_buttons_width) / 2;
+                    int button_y = margin + (height - 2 * margin - button_size) / 2 + 5;
+                    
+                    int prev_x = buttons_start_x + button_size / 2;
+                    int play_x = prev_x + button_size + button_spacing;
+                    int next_x = play_x + button_size + button_spacing;
+                    int volume_x = next_x + button_size + button_spacing;
+                    
+                    btn_center_x = volume_x;
+                    btn_center_y = button_y + button_size/2;
+                } else {
+                     // Normal/Docked logic
+                     int button_y = height - 30;
+                     int button_spacing = 50;
+                     int center_x = width / 2;
+                     btn_center_x = center_x + button_spacing * 2;
+                     btn_center_y = button_y + 8;
+                }
+                
+                volume_popup::get_instance().show_at(window_x + btn_center_x, window_y + btn_center_y);
+            }
+            return; // No track info update needed
+
+        case BTN_CLOSE:
+            // Close the miniplayer and clear saved state
+            m_has_saved_miniplayer_state = false;
+            hide_control_panel_immediate();
+            return;
         }
-        
+
         // Update display after action
         update_track_info();
-        
+
     } catch (...) {
         // Ignore playback control errors
     }
@@ -1601,24 +2009,28 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                     int text_left = margin + art_size + margin;
                     int text_right = window_width - margin;
                     int text_area_width = text_right - text_left;
-                    
+
                     int text_top = 0;
                     int text_bottom = window_height;
                     int text_area_height = text_bottom - text_top;
-                    
+
                     int button_size = 24;
                     int button_spacing = 20;
-                    int total_buttons_width = (3 * button_size) + (2 * button_spacing);
+                    int total_buttons_width = (3 * button_size) + (2 * button_spacing); // 3 buttons now
                     int buttons_start_x = text_left + (text_area_width - total_buttons_width) / 2;
                     int button_y = margin + (window_height - 2 * margin - button_size) / 2 + 5;
-                    
+
                     int prev_x = buttons_start_x + button_size / 2;
                     int play_x = prev_x + button_size + button_spacing;
                     int next_x = play_x + button_size + button_spacing;
-                    
+                    int volume_x = next_x + button_size + button_spacing;
+
                     // Check which button was clicked (use button_size/2 as click radius)
                     int click_radius = button_size / 2 + 2; // Slightly larger click area
-                    
+
+
+
+
                     if (abs(pt.x - prev_x) <= click_radius && abs(pt.y - button_y) <= click_radius) {
                         panel->handle_button_click(BTN_PREV);
                         return 0;
@@ -1672,8 +2084,8 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                     int window_height = client_rect.bottom - client_rect.top;
                     const int overlay_height = 46; // Reduced by another 5%
                     
-                    // Check if click is in bottom overlay area and overlay is visible
                     if (panel->m_overlay_visible && pt.y >= window_height - overlay_height) {
+
                         // Calculate button positions (same as in draw_control_overlay)
                         int button_size = 24;
                         int button_spacing = 60;
@@ -1681,7 +2093,7 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                         // Calculate center of the bottom overlay area, then lower for better visual balance
                         int overlay_top = window_height - overlay_height;
                         int center_y = overlay_top + (overlay_height / 2) + (overlay_height * 28 / 100); // Lower by 28%
-                        
+
                         // Check Previous button - use larger click area covering more of the overlay
                         int prev_x = center_x - button_spacing;
                         int click_area_size = button_size + 8; // Expand click area
@@ -1691,23 +2103,21 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                             panel->handle_button_click(BTN_PREV);
                             return 0;
                         }
-                        
+
                         // Check Play/Pause button
                         int play_x = center_x;
                         if (abs(pt.x - play_x) <= click_area_size/2 && abs(pt.y - click_center_y) <= overlay_height/2) {
                             panel->handle_button_click(BTN_PLAYPAUSE);
                             return 0;
                         }
-                        
+
                         // Check Next button
                         int next_x = center_x + button_spacing;
                         if (abs(pt.x - next_x) <= click_area_size/2 && abs(pt.y - click_center_y) <= overlay_height/2) {
                             panel->handle_button_click(BTN_NEXT);
                             return 0;
                         }
-                        
                     }
-                    
                     
                     // Handle double-click detection for toggling mode
                     DWORD current_time = GetTickCount();
@@ -1724,11 +2134,7 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                         return 0;
                     }
                     
-                    // Store this click for next double-click detection
-                    panel->m_last_click_time = current_time;
-                    panel->m_last_click_pos = pt;
-                    
-                    // Store click position for potential dragging, but don't start dragging yet
+                    // Store this click for potential dragging, but don't start dragging yet
                     // Dragging will only start when mouse actually moves in WM_MOUSEMOVE
                     GetCursorPos(&panel->m_drag_start_pos);
                 }
@@ -1737,8 +2143,8 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
             // Handle clicks in non-expanded modes
             {
                 POINT pt = {LOWORD(lparam), HIWORD(lparam)};
-                
-                
+
+
                 // Temporarily disabled timeout reset to test if continuous mouse events are interfering
                 /*
                 if (panel && panel->m_visible && panel->m_control_window && !panel->m_animating) {
@@ -1746,18 +2152,34 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                     SetTimer(panel->m_control_window, TIMEOUT_TIMER_ID, 5000, nullptr);
                 }
                 */
-                
+
+                // Check if cursor is over close button (top-left) to toggle visibility state
+                if (panel->m_is_undocked && !panel->m_is_artwork_expanded && !panel->m_is_compact_mode) {
+                    bool mouse_over_close = false;
+                    int close_x = 15;
+                    int close_y = 15;
+                    if (pt.x >= close_x - 12 && pt.x <= close_x + 12 && pt.y >= close_y - 12 && pt.y <= close_y + 12) {
+                        mouse_over_close = true;
+                    }
+                    
+                    if (mouse_over_close != panel->m_mouse_over_close_button) {
+                        panel->m_mouse_over_close_button = mouse_over_close;
+                        // Invalidate just the close button area
+                        RECT close_rect = {close_x - 15, close_y - 15, close_x + 15, close_y + 15};
+                        InvalidateRect(hwnd, &close_rect, TRUE);
+                    }
+                }
+
                 // Check which button was clicked - adaptive to window size
                 RECT client_rect;
                 GetClientRect(hwnd, &client_rect);
                 int window_width = client_rect.right - client_rect.left;
                 int window_height = client_rect.bottom - client_rect.top;
-                
-                
+
                 int button_y = window_height - 30;
                 int button_spacing = 50;
                 int center_x = window_width / 2;
-                
+
                 // Check if click is in button row (±10px around button_y for 20px tall area)
                 if (pt.y >= button_y - 10 && pt.y <= button_y + 10) {
                     if (pt.x >= center_x - button_spacing - 10 && pt.x < center_x - button_spacing + 10) {
@@ -1766,6 +2188,16 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                         panel->handle_button_click(BTN_PLAYPAUSE);   // Play/Pause
                     } else if (pt.x >= center_x + button_spacing - 10 && pt.x < center_x + button_spacing + 10) {
                         panel->handle_button_click(BTN_NEXT);        // Next
+                    }
+                }
+
+                // Check if click is on close button (top-left corner, only in undocked miniplayer mode)
+                if (panel->m_is_undocked && !panel->m_is_artwork_expanded && !panel->m_is_compact_mode) {
+                    int close_x = 15;
+                    int close_y = 15;
+                    if (pt.x >= close_x - 10 && pt.x <= close_x + 10 && pt.y >= close_y - 10 && pt.y <= close_y + 10) {
+                        panel->handle_button_click(BTN_CLOSE);
+                        return 0;
                     }
                 }
                 // Check if click is in album art area
@@ -2082,16 +2514,128 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                     panel->m_buttons_visible = true;
                     InvalidateRect(hwnd, nullptr, TRUE);
                 }
+                }
+
+            
+            // Check which button is hovered for visual feedback
+            if (panel) {
+                int hovered_btn = 0;
+                POINT pt = {LOWORD(lparam), HIWORD(lparam)};
+                
+                // Docked mode logic
+                if (!panel->m_is_undocked) {
+                    RECT client_rect;
+                    GetClientRect(hwnd, &client_rect);
+                    int window_height = client_rect.bottom - client_rect.top;
+                    int window_width = client_rect.right - client_rect.left;
+                    int button_y = window_height - 30;
+                    int button_spacing = 50;
+                    int center_x = window_width / 2;
+                    
+                    if (pt.y >= button_y - 15 && pt.y <= button_y + 15) {
+                        int button_radius = 15;
+                        if (abs(pt.x - (center_x - button_spacing)) <= button_radius) hovered_btn = BTN_PREV;
+                        else if (abs(pt.x - center_x) <= button_radius) hovered_btn = BTN_PLAYPAUSE;
+                        else if (abs(pt.x - (center_x + button_spacing)) <= button_radius) hovered_btn = BTN_NEXT;
+                    }
+                } 
+                // Expanded Artwork mode logic
+                else if (panel->m_is_artwork_expanded && panel->m_overlay_visible) {
+                    RECT client_rect;
+                    GetClientRect(hwnd, &client_rect);
+                    int window_height = client_rect.bottom - client_rect.top;
+                    int window_width = client_rect.right - client_rect.left;
+                    int overlay_height = 46;
+                    
+                    if (pt.y >= window_height - overlay_height) {
+                        int button_spacing = 60;
+                        int center_x = window_width / 2;
+                        
+                        int button_radius = 20; 
+                        if (abs(pt.x - (center_x - button_spacing)) <= button_radius) hovered_btn = BTN_PREV;
+                        else if (abs(pt.x - center_x) <= button_radius) hovered_btn = BTN_PLAYPAUSE;
+                        else if (abs(pt.x - (center_x + button_spacing)) <= button_radius) hovered_btn = BTN_NEXT;
+                    }
+                }
+                // Compact mode logic
+                else if (panel->m_is_compact_mode && panel->m_compact_controls_visible) {
+                    RECT client_rect;
+                    GetClientRect(hwnd, &client_rect);
+                    int window_height = client_rect.bottom - client_rect.top;
+                    int window_width = client_rect.right - client_rect.left;
+                    int margin = 5;
+                    int art_size = window_height - (2 * margin);
+                    int text_left = margin + art_size + margin;
+                    int text_right = window_width - margin;
+                    int text_area_width = text_right - text_left;
+                    
+                    int button_size = 24;
+                    int button_spacing = 20;
+                    int total_buttons_width = (3 * button_size) + (2 * button_spacing);
+                    int buttons_start_x = text_left + (text_area_width - total_buttons_width) / 2;
+                    int button_y = margin + (window_height - 2 * margin - button_size) / 2 + 5;
+                    
+                    int prev_x = buttons_start_x + button_size / 2;
+                    int play_x = prev_x + button_size + button_spacing;
+                    int next_x = play_x + button_size + button_spacing;
+                    
+                    int button_radius = button_size / 2 + 4;
+                    if (abs(pt.x - prev_x) <= button_radius && abs(pt.y - button_y) <= button_radius) hovered_btn = BTN_PREV;
+                    else if (abs(pt.x - play_x) <= button_radius && abs(pt.y - button_y) <= button_radius) hovered_btn = BTN_PLAYPAUSE;
+                    else if (abs(pt.x - next_x) <= button_radius && abs(pt.y - button_y) <= button_radius) hovered_btn = BTN_NEXT;
+                }
+                // Normal Undocked logic (Miniplayer)
+                else if (panel->m_is_undocked && !panel->m_is_artwork_expanded && !panel->m_is_compact_mode) {
+                     RECT client_rect;
+                     GetClientRect(hwnd, &client_rect);
+                     int window_width = client_rect.right - client_rect.left;
+                     int window_height = client_rect.bottom - client_rect.top;
+                     int center_x = window_width / 2;
+                     
+                     // Assuming layout logic from paint_control_panel
+                     int button_y = window_height - 30; // Assuming dynamic centering might be different but using std offsets
+                     // Recalculate based on real layout
+                     // The drawing logic often centers vertically if enough space, but standard is bottom-30
+                     
+                     // Using simpler hit test that covers standard layout
+                     // Center Y is usually window_height/2 for very small windows, or bottom for larger
+                     // But let's stick to what click handler uses: "button_y = window_height - 30"
+                     
+                     int button_spacing = 50;
+                     int button_radius = 16;
+                     if (abs(pt.y - button_y) <= button_radius) {
+                         if (abs(pt.x - (center_x - button_spacing)) <= button_radius) hovered_btn = BTN_PREV;
+                         else if (abs(pt.x - center_x) <= button_radius) hovered_btn = BTN_PLAYPAUSE;
+                         else if (abs(pt.x - (center_x + button_spacing)) <= button_radius) hovered_btn = BTN_NEXT;
+                     }
+                }
+                
+                // Update hover state
+                if (panel->m_hovered_button != hovered_btn) {
+                    panel->m_hovered_button = hovered_btn;
+                    // Fully redraw to ensure background circles are drawn/erased
+                    // Use FALSE for bErase (3rd arg) to prevent flickering in double-buffered modes (like expanded artwork)
+                    InvalidateRect(hwnd, nullptr, FALSE); 
+                }
             }
             break;
             
         case WM_MOUSELEAVE:
+            // Start immediate fade when mouse leaves the window
             if (panel && panel->m_is_artwork_expanded && panel->m_overlay_visible) {
-                // Start immediate fade when mouse leaves the window
+
                 KillTimer(hwnd, OVERLAY_TIMER_ID);
                 panel->m_fade_start_time = GetTickCount();
                 SetTimer(hwnd, FADE_TIMER_ID, 50, nullptr); // Start fade immediately
-            } else if (panel && !panel->m_is_artwork_expanded && (panel->m_undocked_overlay_visible || panel->m_compact_controls_visible)) {
+            }
+            
+            // Clear hover state on leave
+            if (panel && panel->m_hovered_button != 0) {
+                panel->m_hovered_button = 0;
+                InvalidateRect(hwnd, nullptr, FALSE);
+            }
+                
+            if (panel && !panel->m_is_artwork_expanded && (panel->m_undocked_overlay_visible || panel->m_compact_controls_visible)) {
                 // Hide undocked artwork overlay and compact control overlay when mouse leaves the window
                 bool needs_repaint = false;
                 if (panel->m_undocked_overlay_visible) {
@@ -2731,66 +3275,65 @@ void control_panel::paint_control_panel(HDC hdc) {
     
     // Draw track info (pass art_size for adaptive layout)
     draw_track_info(hdc, client_rect, art_size);
-    
+
     // Draw time info
     draw_time_info(hdc, client_rect);
-    
+
     // Draw undocked artwork overlay if hovering over artwork
     if (m_undocked_overlay_visible) {
         draw_undocked_artwork_overlay(hdc, window_width, window_height);
     }
-    
+
     // Draw control buttons using custom vector graphics - adapt to window size
     int button_y = window_height - 30; // 30px from bottom
     int button_spacing = 50;
     int center_x = window_width / 2;
-    
-    struct {
-        int x, y;
-        int button_type; // 0=previous, 1=play/pause, 2=next
-    } buttons[] = {
-        {center_x - button_spacing, button_y, 0},    // Previous
-        {center_x, button_y, 1},                     // Play/Pause
-        {center_x + button_spacing, button_y, 2}     // Next
-    };
-    
+
     // Enable anti-aliasing for smoother drawing
     SetStretchBltMode(hdc, HALFTONE);
     SetBrushOrgEx(hdc, 0, 0, nullptr);
-    
+
     int icon_size = 16; // Size of the icons
-    
-    for (auto& btn : buttons) {
-        switch (btn.button_type) {
-        case 0: // Previous
-            if (m_is_undocked && !m_is_artwork_expanded) {
-                draw_previous_icon_with_opacity(hdc, btn.x, btn.y, icon_size, m_button_opacity);
-            } else {
-                draw_previous_icon(hdc, btn.x, btn.y, icon_size);
-            }
-            break;
-        case 1: // Play/Pause
-            if (m_is_undocked && !m_is_artwork_expanded) {
-                if (m_is_playing && !m_is_paused) {
-                    draw_pause_icon_with_opacity(hdc, btn.x, btn.y, icon_size, m_button_opacity);
-                } else {
-                    draw_play_icon_with_opacity(hdc, btn.x, btn.y, icon_size, m_button_opacity);
-                }
-            } else {
-                if (m_is_playing && !m_is_paused) {
-                    draw_pause_icon(hdc, btn.x, btn.y, icon_size);
-                } else {
-                    draw_play_icon(hdc, btn.x, btn.y, icon_size);
-                }
-            }
-            break;
-        case 2: // Next
-            if (m_is_undocked && !m_is_artwork_expanded) {
-                draw_next_icon_with_opacity(hdc, btn.x, btn.y, icon_size, m_button_opacity);
-            } else {
-                draw_next_icon(hdc, btn.x, btn.y, icon_size);
-            }
-            break;
+
+    // Draw Previous button
+    int prev_x = center_x - button_spacing;
+    if (m_is_undocked && !m_is_artwork_expanded) {
+        draw_previous_icon_with_opacity(hdc, prev_x, button_y, icon_size, m_button_opacity);
+    } else {
+        draw_previous_icon(hdc, prev_x, button_y, icon_size);
+    }
+
+    // Draw Play/Pause button
+    if (m_is_undocked && !m_is_artwork_expanded) {
+        if (m_is_playing && !m_is_paused) {
+            draw_pause_icon_with_opacity(hdc, center_x, button_y, icon_size, m_button_opacity);
+        } else {
+            draw_play_icon_with_opacity(hdc, center_x, button_y, icon_size, m_button_opacity);
+        }
+    } else {
+        if (m_is_playing && !m_is_paused) {
+            draw_pause_icon(hdc, center_x, button_y, icon_size);
+        } else {
+            draw_play_icon(hdc, center_x, button_y, icon_size);
+        }
+    }
+
+    // Draw Next button
+    int next_x = center_x + button_spacing;
+    if (m_is_undocked && !m_is_artwork_expanded) {
+        draw_next_icon_with_opacity(hdc, next_x, button_y, icon_size, m_button_opacity);
+    } else {
+        draw_next_icon(hdc, next_x, button_y, icon_size);
+    }
+
+    // Draw close button in top-left corner
+    if (m_is_undocked && !m_is_artwork_expanded) {
+        // Draw close button only on hover (cursor-triggered overlay)
+        if (m_mouse_over_close_button) {
+            int close_x = 15;
+            int close_y = 15;
+            // Draw without opacity (full visibility) if hovered
+            draw_close_icon_with_opacity(hdc, close_x, close_y, 12, 100); 
         }
     }
     
@@ -3283,17 +3826,17 @@ void control_panel::draw_control_overlay(HDC hdc, int window_width, int window_h
         int button_size = 24; // Size of each button
         int button_spacing = 60; // Space between button centers
         int center_x = window_width / 2;
-        // Calculate center of the bottom overlay area, then lower for better visual balance
+        // Calculate center of the bottom overlay area
         int overlay_top = window_height - overlay_height;
-        int center_y = overlay_top + (overlay_height / 2) + (overlay_height * 28 / 100); // Lower by 28%
+        int center_y = overlay_top + (overlay_height / 2); // Perfectly centered vertically
         
         // Previous button
         int prev_x = center_x - button_spacing;
         int prev_y = center_y;
         if (m_is_undocked && !m_is_artwork_expanded) {
-            draw_previous_icon_with_opacity(hdc, prev_x - button_size/2, prev_y - button_size/2, button_size, m_button_opacity);
+            draw_previous_icon_with_opacity(hdc, prev_x, prev_y, button_size, m_button_opacity);
         } else {
-            draw_previous_icon(hdc, prev_x - button_size/2, prev_y - button_size/2, button_size);
+            draw_previous_icon(hdc, prev_x, prev_y, button_size);
         }
         
         // Play/Pause button
@@ -3301,15 +3844,15 @@ void control_panel::draw_control_overlay(HDC hdc, int window_width, int window_h
         int play_y = center_y;
         if (m_is_undocked && !m_is_artwork_expanded) {
             if (m_is_playing && !m_is_paused) {
-                draw_pause_icon_with_opacity(hdc, play_x - button_size/2, play_y - button_size/2, button_size, m_button_opacity);
+                draw_pause_icon_with_opacity(hdc, play_x, play_y, button_size, m_button_opacity);
             } else {
-                draw_play_icon_with_opacity(hdc, play_x - button_size/2, play_y - button_size/2, button_size, m_button_opacity);
+                draw_play_icon_with_opacity(hdc, play_x, play_y, button_size, m_button_opacity);
             }
         } else {
             if (m_is_playing && !m_is_paused) {
-                draw_pause_icon(hdc, play_x - button_size/2, play_y - button_size/2, button_size);
+                draw_pause_icon(hdc, play_x, play_y, button_size);
             } else {
-                draw_play_icon(hdc, play_x - button_size/2, play_y - button_size/2, button_size);
+                draw_play_icon(hdc, play_x, play_y, button_size);
             }
         }
         
@@ -3317,13 +3860,21 @@ void control_panel::draw_control_overlay(HDC hdc, int window_width, int window_h
         int next_x = center_x + button_spacing;
         int next_y = center_y;
         if (m_is_undocked && !m_is_artwork_expanded) {
-            draw_next_icon_with_opacity(hdc, next_x - button_size/2, next_y - button_size/2, button_size, m_button_opacity);
+            draw_next_icon_with_opacity(hdc, next_x, next_y, button_size, m_button_opacity);
         } else {
-            draw_next_icon(hdc, next_x - button_size/2, next_y - button_size/2, button_size);
+            draw_next_icon(hdc, next_x, next_y, button_size);
         }
-        
+
+
+
+        // Close button in top-left corner for expanded artwork mode
+        int close_size = 16;
+        int close_x = 10;
+        int close_y = 10;
+
     }
 }
+
 
 void control_panel::draw_undocked_artwork_overlay(HDC hdc, int window_width, int window_height) {
     // Calculate artwork area (different for compact vs normal mode)
@@ -3366,55 +3917,55 @@ void control_panel::draw_compact_control_overlay(HDC hdc, int window_width, int 
     if (!m_compact_controls_visible) {
         return;
     }
-    
+
     // Calculate text area where controls will be drawn (same as text layout in paint_compact_mode)
     int margin = 5;
     int art_size = window_height - (2 * margin);
     int text_left = margin + art_size + margin;
     int text_right = window_width - margin;
     int text_area_width = text_right - text_left;
-    
+
     // Use a simplified text area for the overlay
     int text_top = 0;
     int text_bottom = window_height;
     int text_area_height = text_bottom - text_top;
     int overlay_bottom = window_height - 18; // Leave minimal space for progress bar and time
-    
-    // Create control button layout in the text area
+
+    // Create control button layout in the text area (now 4 buttons: prev, play, next, volume)
     int button_size = 24; // Increased by 20% from 20 to 24
     int button_spacing = 20; // Much more spacing between buttons
-    int total_buttons_width = (3 * button_size) + (2 * button_spacing);
-    
+    int total_buttons_width = (3 * button_size) + (2 * button_spacing); // 3 buttons now (Prev, Play, Next)
+
     // Center the buttons horizontally in the text area
     int buttons_start_x = text_left + (text_area_width - total_buttons_width) / 2;
-    
+
     // Position buttons slightly below center
     int button_y = margin + (window_height - 2 * margin - button_size) / 2 + 5;
-    
+
     // Calculate button positions
     int prev_x = buttons_start_x + button_size / 2;
     int play_x = prev_x + button_size + button_spacing;
     int next_x = play_x + button_size + button_spacing;
-    
+
     // Create background overlay to completely hide the text (don't cover progress bar)
     RECT overlay_rect = {text_left, 0, text_right, overlay_bottom};
     HBRUSH overlay_brush = CreateSolidBrush(RGB(28, 28, 28)); // Solid background to completely hide text
     FillRect(hdc, &overlay_rect, overlay_brush);
     DeleteObject(overlay_brush);
-    
+
     // Draw control buttons
     // Previous button
-    draw_previous_icon(hdc, prev_x - button_size/2, button_y, button_size);
-    
+    draw_previous_icon(hdc, prev_x, button_y, button_size);
+
     // Play/Pause button
     if (m_is_playing && !m_is_paused) {
-        draw_pause_icon(hdc, play_x - button_size/2, button_y, button_size);
+        draw_pause_icon(hdc, play_x, button_y, button_size);
     } else {
-        draw_play_icon(hdc, play_x - button_size/2, button_y, button_size);
+        draw_play_icon(hdc, play_x, button_y, button_size);
     }
-    
+
     // Next button
-    draw_next_icon(hdc, next_x - button_size/2, button_y, button_size);
+    draw_next_icon(hdc, next_x, button_y, button_size);
 }
 
 void control_panel::start_roll_animation(bool to_compact) {
