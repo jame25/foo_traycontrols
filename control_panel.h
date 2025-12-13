@@ -27,10 +27,14 @@ public:
     // Public accessors for tray manager
     bool is_undocked() const { return m_is_undocked; }
     bool is_artwork_expanded() const { return m_is_artwork_expanded; }
+    bool is_compact_mode() const { return m_is_compact_mode; }
+    bool has_saved_miniplayer_state() const { return m_has_saved_miniplayer_state; }
     HWND get_control_window() const { return m_control_window; }
     void set_undocked(bool undocked);
     void toggle_artwork_expanded();
     void toggle_compact_mode();
+    void show_miniplayer_at_saved_position(); // Show miniplayer (any mode) at remembered position
+    void hide_and_remember_miniplayer(); // Hide and remember miniplayer state and position
     
 private:
     control_panel();
@@ -47,6 +51,8 @@ private:
     static const int BTN_PLAYPAUSE = 1003;
     static const int BTN_NEXT = 1004;
     static const int BTN_STOP = 1005;
+    static const int BTN_VOLUME = 1006;
+    static const int BTN_CLOSE = 1007;
     
     // Timer for updating time display
     static const UINT UPDATE_TIMER_ID = 4001;
@@ -72,6 +78,16 @@ private:
     int m_saved_undocked_height;
     int m_saved_expanded_width;
     int m_saved_expanded_height;
+
+    // Miniplayer position memory (for tray icon toggle - all non-docked modes)
+    int m_saved_miniplayer_x;
+    int m_saved_miniplayer_y;
+    int m_saved_miniplayer_width;
+    int m_saved_miniplayer_height;
+    bool m_has_saved_miniplayer_state; // Remember if we have a saved miniplayer state
+    bool m_saved_was_undocked;
+    bool m_saved_was_expanded;
+    bool m_saved_was_compact;
     
     // Mouse hover state for overlay
     bool m_overlay_visible;
@@ -92,7 +108,10 @@ private:
     bool m_buttons_visible;
     int m_button_opacity; // 0-100 for fade animation
     DWORD m_button_fade_start_time;
+
     DWORD m_last_button_mouse_time;
+    bool m_mouse_over_close_button;
+    int m_hovered_button; // Tracks which button ID is currently hovered
     
     // Compact mode state
     bool m_is_compact_mode;
@@ -140,6 +159,10 @@ private:
     void draw_up_arrow_with_opacity(HDC hdc, int x, int y, int size, int opacity);
     void draw_down_arrow_with_opacity(HDC hdc, int x, int y, int size, int opacity);
     void draw_roll_dots(HDC hdc, int x, int y, int size);
+    void draw_volume_icon(HDC hdc, int x, int y, int size);
+    void draw_volume_icon_with_opacity(HDC hdc, int x, int y, int size, int opacity);
+    void draw_close_icon(HDC hdc, int x, int y, int size);
+    void draw_close_icon_with_opacity(HDC hdc, int x, int y, int size, int opacity);
     void start_roll_animation(bool to_compact);
     void update_roll_animation();
     
