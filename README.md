@@ -14,10 +14,17 @@ A foobar2000 component that provides comprehensive system tray functionality wit
 - **Mouse Wheel Volume Control**: Scroll mouse wheel over tray icon to adjust volume up/down
 - **Real-time Track Information**: Hover tooltips show current artist and track information
 - **Popup Control Panel**: Single-click the tray icon to show/hide an elegant control panel with:
+  
   - High-quality album artwork display (80x80 pixels)
   - Current track title and artist information
   - Playback time display
   - Previous, Play/Pause, and Next control buttons with sharp icon rendering
+- **Multiple Display Modes**: The control panel adapts to your needs with multiple display modes:
+  
+  - Docked Mode: Standard tray popup attached to the taskbar area.
+  - Undocked (Miniplayer): Detachable window that can be dragged anywhere on screen. (Double-click artwork to toggle)
+  - Compact Mode: A tiny, unobtrusive strip showing just artwork and essential info. (Double-click artwork in Undocked mode)
+  - Expanded Artwork Mode: A large, immersive view focusing on high-quality album art. (Left-click artwork to toggle)
 - **Popup Track Notifications**: Optional popup notifications on track changes featuring:
   - Album artwork display (60x60 pixels) 
   - Track and artist information
