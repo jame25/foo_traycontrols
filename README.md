@@ -26,7 +26,7 @@ A foobar2000 component that provides comprehensive system tray functionality wit
   - Compact Mode: A tiny, unobtrusive strip showing just artwork and essential info. (Double-click artwork in Undocked mode)
   - Expanded Artwork Mode: A large, immersive view focusing on high-quality album art. (Left-click artwork to toggle)
 - **Popup Track Notifications**: Optional popup notifications on track changes featuring:
-  - Album artwork display (60x60 pixels) 
+  - Album artwork display
   - Track and artist information
   - Positioned at top-left corner with smooth slide-in animation
 - **Simple Tray Menu**: Right-click context menu provides:
