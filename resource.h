@@ -21,6 +21,8 @@
 #define IDC_POPUP_POSITION_LABEL     210
 #define IDC_POPUP_POSITION_COMBO     211
 #define IDC_DISABLE_MINIPLAYER       212
+#define IDC_POPUP_DURATION_LABEL     220
+#define IDC_POPUP_DURATION_COMBO     221
 
 // Control Panel font controls
 #define IDC_CP_ARTIST_FONT_LABEL         213
