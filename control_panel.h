@@ -53,6 +53,8 @@ private:
     static const int BTN_STOP = 1005;
     static const int BTN_VOLUME = 1006;
     static const int BTN_CLOSE = 1007;
+    static const int BTN_SHUFFLE = 1008;
+    static const int BTN_REPEAT = 1009;
     
     // Timer for updating time display
     static const UINT UPDATE_TIMER_ID = 4001;
@@ -111,7 +113,12 @@ private:
 
     DWORD m_last_button_mouse_time;
     bool m_mouse_over_close_button;
+    bool m_mouse_in_window; // Tracks if mouse is currently in the window (for collapse triangle visibility)
     int m_hovered_button; // Tracks which button ID is currently hovered
+    
+    // Shuffle and Repeat state
+    bool m_shuffle_active;
+    int m_repeat_mode; // 0 = Off, 1 = All, 2 = Track
     
     // Compact mode state
     bool m_is_compact_mode;
@@ -163,6 +170,10 @@ private:
     void draw_volume_icon_with_opacity(HDC hdc, int x, int y, int size, int opacity);
     void draw_close_icon(HDC hdc, int x, int y, int size);
     void draw_close_icon_with_opacity(HDC hdc, int x, int y, int size, int opacity);
+    void draw_collapse_triangle(HDC hdc, int x, int y, int size, int opacity);
+    void draw_shuffle_icon(HDC hdc, int x, int y, int size);
+    void draw_repeat_icon(HDC hdc, int x, int y, int size);
+    void update_playback_order_state();
     void start_roll_animation(bool to_compact);
     void update_roll_animation();
     
