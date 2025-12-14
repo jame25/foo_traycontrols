@@ -68,6 +68,87 @@ static cfg_struct_t<LOGFONT> cfg_cp_track_font(GUID{0x1234569B, 0x9abc, 0xdef0, 
 }());
 static cfg_int cfg_cp_use_custom_fonts(GUID{0x1234569D, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0);
 
+// Undocked mode font configuration
+static cfg_struct_t<LOGFONT> cfg_undocked_artist_font(GUID{0x123456A0, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, []() {
+    LOGFONT lf = {};
+    lf.lfHeight = -11;
+    lf.lfWeight = FW_NORMAL;
+    lf.lfCharSet = DEFAULT_CHARSET;
+    lf.lfOutPrecision = OUT_DEFAULT_PRECIS;
+    lf.lfClipPrecision = CLIP_DEFAULT_PRECIS;
+    lf.lfQuality = DEFAULT_QUALITY;
+    lf.lfPitchAndFamily = DEFAULT_PITCH | FF_DONTCARE;
+    wcscpy_s(lf.lfFaceName, L"Segoe UI");
+    return lf;
+}());
+static cfg_struct_t<LOGFONT> cfg_undocked_track_font(GUID{0x123456A1, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, []() {
+    LOGFONT lf = {};
+    lf.lfHeight = -14;
+    lf.lfWeight = FW_BOLD;
+    lf.lfCharSet = DEFAULT_CHARSET;
+    lf.lfOutPrecision = OUT_DEFAULT_PRECIS;
+    lf.lfClipPrecision = CLIP_DEFAULT_PRECIS;
+    lf.lfQuality = DEFAULT_QUALITY;
+    lf.lfPitchAndFamily = DEFAULT_PITCH | FF_DONTCARE;
+    wcscpy_s(lf.lfFaceName, L"Segoe UI");
+    return lf;
+}());
+static cfg_int cfg_undocked_use_custom_fonts(GUID{0x123456A2, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0);
+
+// Expanded mode font configuration
+static cfg_struct_t<LOGFONT> cfg_expanded_artist_font(GUID{0x123456B0, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, []() {
+    LOGFONT lf = {};
+    lf.lfHeight = -11;
+    lf.lfWeight = FW_NORMAL;
+    lf.lfCharSet = DEFAULT_CHARSET;
+    lf.lfOutPrecision = OUT_DEFAULT_PRECIS;
+    lf.lfClipPrecision = CLIP_DEFAULT_PRECIS;
+    lf.lfQuality = DEFAULT_QUALITY;
+    lf.lfPitchAndFamily = DEFAULT_PITCH | FF_DONTCARE;
+    wcscpy_s(lf.lfFaceName, L"Segoe UI");
+    return lf;
+}());
+static cfg_struct_t<LOGFONT> cfg_expanded_track_font(GUID{0x123456B1, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, []() {
+    LOGFONT lf = {};
+    lf.lfHeight = -14;
+    lf.lfWeight = FW_BOLD;
+    lf.lfCharSet = DEFAULT_CHARSET;
+    lf.lfOutPrecision = OUT_DEFAULT_PRECIS;
+    lf.lfClipPrecision = CLIP_DEFAULT_PRECIS;
+    lf.lfQuality = DEFAULT_QUALITY;
+    lf.lfPitchAndFamily = DEFAULT_PITCH | FF_DONTCARE;
+    wcscpy_s(lf.lfFaceName, L"Segoe UI");
+    return lf;
+}());
+static cfg_int cfg_expanded_use_custom_fonts(GUID{0x123456B2, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0);
+
+// Compact mode font configuration
+static cfg_struct_t<LOGFONT> cfg_compact_artist_font(GUID{0x123456C0, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, []() {
+    LOGFONT lf = {};
+    lf.lfHeight = -11;
+    lf.lfWeight = FW_NORMAL;
+    lf.lfCharSet = DEFAULT_CHARSET;
+    lf.lfOutPrecision = OUT_DEFAULT_PRECIS;
+    lf.lfClipPrecision = CLIP_DEFAULT_PRECIS;
+    lf.lfQuality = DEFAULT_QUALITY;
+    lf.lfPitchAndFamily = DEFAULT_PITCH | FF_DONTCARE;
+    wcscpy_s(lf.lfFaceName, L"Segoe UI");
+    return lf;
+}());
+static cfg_struct_t<LOGFONT> cfg_compact_track_font(GUID{0x123456C1, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, []() {
+    LOGFONT lf = {};
+    lf.lfHeight = -14;
+    lf.lfWeight = FW_BOLD;
+    lf.lfCharSet = DEFAULT_CHARSET;
+    lf.lfOutPrecision = OUT_DEFAULT_PRECIS;
+    lf.lfClipPrecision = CLIP_DEFAULT_PRECIS;
+    lf.lfQuality = DEFAULT_QUALITY;
+    lf.lfPitchAndFamily = DEFAULT_PITCH | FF_DONTCARE;
+    wcscpy_s(lf.lfFaceName, L"Segoe UI");
+    return lf;
+}());
+static cfg_int cfg_compact_use_custom_fonts(GUID{0x123456C2, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0);
+
 // Access functions for the configuration
 bool get_always_minimize_to_tray() {
     return cfg_always_minimize_to_tray != 0;
@@ -161,6 +242,45 @@ void reset_cp_fonts() {
     cfg_cp_use_custom_fonts = 0;
 }
 
+// Undocked mode font accessor functions
+bool get_undocked_use_custom_fonts() {
+    return cfg_undocked_use_custom_fonts != 0;
+}
+
+LOGFONT get_undocked_artist_font() {
+    return cfg_undocked_artist_font.get_value();
+}
+
+LOGFONT get_undocked_track_font() {
+    return cfg_undocked_track_font.get_value();
+}
+
+// Expanded mode font accessor functions
+bool get_expanded_use_custom_fonts() {
+    return cfg_expanded_use_custom_fonts != 0;
+}
+
+LOGFONT get_expanded_artist_font() {
+    return cfg_expanded_artist_font.get_value();
+}
+
+LOGFONT get_expanded_track_font() {
+    return cfg_expanded_track_font.get_value();
+}
+
+// Compact mode font accessor functions
+bool get_compact_use_custom_fonts() {
+    return cfg_compact_use_custom_fonts != 0;
+}
+
+LOGFONT get_compact_artist_font() {
+    return cfg_compact_artist_font.get_value();
+}
+
+LOGFONT get_compact_track_font() {
+    return cfg_compact_track_font.get_value();
+}
+
 // Helper function to get default LOGFONT
 LOGFONT get_default_font(bool is_artist, int size) {
     LOGFONT lf = {};
@@ -206,7 +326,7 @@ static const GUID guid_preferences_page_tray =
 //=============================================================================
 
 tray_preferences::tray_preferences(preferences_page_callback::ptr callback) 
-    : m_hwnd(nullptr), m_callback(callback), m_has_changes(false) {
+    : m_hwnd(nullptr), m_callback(callback), m_has_changes(false), m_current_tab(0) {
 }
 
 HWND tray_preferences::get_wnd() {
@@ -244,6 +364,9 @@ INT_PTR CALLBACK tray_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, LP
         // Initialize dark mode hooks
         p_this->m_darkMode.AddDialogWithControls(hwnd);
         
+        // Initialize tab control
+        p_this->init_tab_control();
+        
         // Initialize checkbox states
         CheckDlgButton(hwnd, IDC_ALWAYS_MINIMIZE_TO_TRAY, cfg_always_minimize_to_tray != 0 ? BST_CHECKED : BST_UNCHECKED);
         CheckDlgButton(hwnd, IDC_SHOW_POPUP_NOTIFICATION, cfg_show_popup_notification != 0 ? BST_CHECKED : BST_UNCHECKED);
@@ -280,10 +403,11 @@ INT_PTR CALLBACK tray_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, LP
         else duration_index = 6;
         SendMessage(hDurationCombo, CB_SETCURSEL, duration_index, 0);
         
-        
-        
         // Initialize font displays
         p_this->update_font_displays();
+        
+        // Show initial tab (General)
+        p_this->switch_tab(0);
         
         p_this->m_has_changes = false;
     } else {
@@ -328,23 +452,73 @@ INT_PTR CALLBACK tray_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, LP
             }
             break;
             
-        case IDC_CP_SELECT_ARTIST_FONT:
+        // Docked mode font handlers (IDC_CP_* are aliases to IDC_DOCKED_*)
+        case IDC_DOCKED_ARTIST_SELECT:
             if (HIWORD(wp) == BN_CLICKED) {
                 p_this->select_cp_artist_font();
             }
             break;
             
-        case IDC_CP_SELECT_TRACK_FONT:
+        case IDC_DOCKED_TRACK_SELECT:
             if (HIWORD(wp) == BN_CLICKED) {
                 p_this->select_cp_track_font();
             }
             break;
             
-        case IDC_CP_RESET_FONTS:
+        // Undocked mode font handlers
+        case IDC_UNDOCKED_ARTIST_SELECT:
             if (HIWORD(wp) == BN_CLICKED) {
-                p_this->reset_cp_fonts_to_default();
+                p_this->select_font_for_mode(1, true); // mode 1 = undocked, artist
             }
             break;
+            
+        case IDC_UNDOCKED_TRACK_SELECT:
+            if (HIWORD(wp) == BN_CLICKED) {
+                p_this->select_font_for_mode(1, false); // mode 1 = undocked, track
+            }
+            break;
+            
+        // Expanded mode font handlers
+        case IDC_EXPANDED_ARTIST_SELECT:
+            if (HIWORD(wp) == BN_CLICKED) {
+                p_this->select_font_for_mode(2, true); // mode 2 = expanded, artist
+            }
+            break;
+            
+        case IDC_EXPANDED_TRACK_SELECT:
+            if (HIWORD(wp) == BN_CLICKED) {
+                p_this->select_font_for_mode(2, false); // mode 2 = expanded, track
+            }
+            break;
+            
+        // Compact mode font handlers
+        case IDC_COMPACT_ARTIST_SELECT:
+            if (HIWORD(wp) == BN_CLICKED) {
+                p_this->select_font_for_mode(3, true); // mode 3 = compact, artist
+            }
+            break;
+            
+        case IDC_COMPACT_TRACK_SELECT:
+            if (HIWORD(wp) == BN_CLICKED) {
+                p_this->select_font_for_mode(3, false); // mode 3 = compact, track
+            }
+            break;
+            
+        case IDC_RESET_ALL_FONTS:
+            if (HIWORD(wp) == BN_CLICKED) {
+                p_this->reset_all_fonts_to_default();
+            }
+            break;
+        }
+        break;
+        
+    case WM_NOTIFY:
+        {
+            NMHDR* pnmhdr = reinterpret_cast<NMHDR*>(lp);
+            if (pnmhdr->idFrom == IDC_TAB_CONTROL && pnmhdr->code == TCN_SELCHANGE) {
+                int sel = TabCtrl_GetCurSel(pnmhdr->hwndFrom);
+                p_this->switch_tab(sel);
+            }
         }
         break;
         
@@ -429,18 +603,60 @@ void tray_preferences::update_font_displays() {
         uSetDlgItemText(m_hwnd, IDC_TRACK_FONT_DISPLAY, "Segoe UI, 14pt, Bold (Default)");
     }
     
-    // Update Control Panel font displays
+    // Update Docked Control Panel font displays
     if (get_cp_use_custom_fonts()) {
         LOGFONT artist_lf = get_cp_artist_font();
         pfc::string8 artist_desc = format_font_name(artist_lf);
-        uSetDlgItemText(m_hwnd, IDC_CP_ARTIST_FONT_DISPLAY, artist_desc);
+        uSetDlgItemText(m_hwnd, IDC_DOCKED_ARTIST_DISPLAY, artist_desc);
         
         LOGFONT track_lf = get_cp_track_font();
         pfc::string8 track_desc = format_font_name(track_lf);
-        uSetDlgItemText(m_hwnd, IDC_CP_TRACK_FONT_DISPLAY, track_desc);
+        uSetDlgItemText(m_hwnd, IDC_DOCKED_TRACK_DISPLAY, track_desc);
     } else {
-        uSetDlgItemText(m_hwnd, IDC_CP_ARTIST_FONT_DISPLAY, "Segoe UI, 13pt, Regular (Default)");
-        uSetDlgItemText(m_hwnd, IDC_CP_TRACK_FONT_DISPLAY, "Segoe UI, 16pt, Bold (Default)");
+        uSetDlgItemText(m_hwnd, IDC_DOCKED_ARTIST_DISPLAY, "Segoe UI, 13pt, Regular (Default)");
+        uSetDlgItemText(m_hwnd, IDC_DOCKED_TRACK_DISPLAY, "Segoe UI, 16pt, Bold (Default)");
+    }
+    
+    // Update Undocked mode font displays
+    if (cfg_undocked_use_custom_fonts) {
+        LOGFONT artist_lf = cfg_undocked_artist_font.get_value();
+        pfc::string8 artist_desc = format_font_name(artist_lf);
+        uSetDlgItemText(m_hwnd, IDC_UNDOCKED_ARTIST_DISPLAY, artist_desc);
+        
+        LOGFONT track_lf = cfg_undocked_track_font.get_value();
+        pfc::string8 track_desc = format_font_name(track_lf);
+        uSetDlgItemText(m_hwnd, IDC_UNDOCKED_TRACK_DISPLAY, track_desc);
+    } else {
+        uSetDlgItemText(m_hwnd, IDC_UNDOCKED_ARTIST_DISPLAY, "Segoe UI, 11pt, Regular (Default)");
+        uSetDlgItemText(m_hwnd, IDC_UNDOCKED_TRACK_DISPLAY, "Segoe UI, 14pt, Bold (Default)");
+    }
+    
+    // Update Expanded mode font displays
+    if (cfg_expanded_use_custom_fonts) {
+        LOGFONT artist_lf = cfg_expanded_artist_font.get_value();
+        pfc::string8 artist_desc = format_font_name(artist_lf);
+        uSetDlgItemText(m_hwnd, IDC_EXPANDED_ARTIST_DISPLAY, artist_desc);
+        
+        LOGFONT track_lf = cfg_expanded_track_font.get_value();
+        pfc::string8 track_desc = format_font_name(track_lf);
+        uSetDlgItemText(m_hwnd, IDC_EXPANDED_TRACK_DISPLAY, track_desc);
+    } else {
+        uSetDlgItemText(m_hwnd, IDC_EXPANDED_ARTIST_DISPLAY, "Segoe UI, 11pt, Regular (Default)");
+        uSetDlgItemText(m_hwnd, IDC_EXPANDED_TRACK_DISPLAY, "Segoe UI, 14pt, Bold (Default)");
+    }
+    
+    // Update Compact mode font displays
+    if (cfg_compact_use_custom_fonts) {
+        LOGFONT artist_lf = cfg_compact_artist_font.get_value();
+        pfc::string8 artist_desc = format_font_name(artist_lf);
+        uSetDlgItemText(m_hwnd, IDC_COMPACT_ARTIST_DISPLAY, artist_desc);
+        
+        LOGFONT track_lf = cfg_compact_track_font.get_value();
+        pfc::string8 track_desc = format_font_name(track_lf);
+        uSetDlgItemText(m_hwnd, IDC_COMPACT_TRACK_DISPLAY, track_desc);
+    } else {
+        uSetDlgItemText(m_hwnd, IDC_COMPACT_ARTIST_DISPLAY, "Segoe UI, 11pt, Regular (Default)");
+        uSetDlgItemText(m_hwnd, IDC_COMPACT_TRACK_DISPLAY, "Segoe UI, 14pt, Bold (Default)");
     }
 }
 
@@ -548,6 +764,100 @@ void tray_preferences::reset_cp_fonts_to_default() {
     on_changed();
 }
 
+void tray_preferences::select_font_for_mode(int mode, bool is_artist) {
+    CHOOSEFONT cf = {};
+    LOGFONT lf;
+    
+    // Get current font or default based on mode
+    switch (mode) {
+    case 1: // Undocked
+        if (cfg_undocked_use_custom_fonts) {
+            lf = is_artist ? cfg_undocked_artist_font.get_value() : cfg_undocked_track_font.get_value();
+        } else {
+            lf = get_default_font(is_artist, is_artist ? 11 : 14);
+        }
+        break;
+    case 2: // Expanded
+        if (cfg_expanded_use_custom_fonts) {
+            lf = is_artist ? cfg_expanded_artist_font.get_value() : cfg_expanded_track_font.get_value();
+        } else {
+            lf = get_default_font(is_artist, is_artist ? 11 : 14);
+        }
+        break;
+    case 3: // Compact
+        if (cfg_compact_use_custom_fonts) {
+            lf = is_artist ? cfg_compact_artist_font.get_value() : cfg_compact_track_font.get_value();
+        } else {
+            lf = get_default_font(is_artist, is_artist ? 11 : 14);
+        }
+        break;
+    default:
+        return;
+    }
+    
+    cf.lStructSize = sizeof(CHOOSEFONT);
+    cf.hwndOwner = m_hwnd;
+    cf.lpLogFont = &lf;
+    cf.Flags = CF_INITTOLOGFONTSTRUCT | CF_SCREENFONTS;
+    
+    if (ChooseFont(&cf)) {
+        // Save font based on mode
+        switch (mode) {
+        case 1: // Undocked
+            if (is_artist) {
+                cfg_undocked_artist_font = lf;
+            } else {
+                cfg_undocked_track_font = lf;
+            }
+            cfg_undocked_use_custom_fonts = 1;
+            break;
+        case 2: // Expanded
+            if (is_artist) {
+                cfg_expanded_artist_font = lf;
+            } else {
+                cfg_expanded_track_font = lf;
+            }
+            cfg_expanded_use_custom_fonts = 1;
+            break;
+        case 3: // Compact
+            if (is_artist) {
+                cfg_compact_artist_font = lf;
+            } else {
+                cfg_compact_track_font = lf;
+            }
+            cfg_compact_use_custom_fonts = 1;
+            break;
+        }
+        
+        update_font_displays();
+        on_changed();
+    }
+}
+
+void tray_preferences::reset_all_fonts_to_default() {
+    // Reset Docked mode fonts
+    cfg_cp_use_custom_fonts = 0;
+    
+    // Reset Undocked mode fonts
+    cfg_undocked_use_custom_fonts = 0;
+    
+    // Reset Expanded mode fonts
+    cfg_expanded_use_custom_fonts = 0;
+    
+    // Reset Compact mode fonts
+    cfg_compact_use_custom_fonts = 0;
+    
+    // Also reset the popup notification fonts
+    cfg_use_custom_fonts = 0;
+    
+    // Update displays and notify of change
+    update_font_displays();
+    on_changed();
+    
+    // Notify control panel to reload fonts
+    control_panel::get_instance().on_settings_changed();
+}
+
 pfc::string8 tray_preferences::format_font_name(const LOGFONT& lf) {
     pfc::string8 result;
     
@@ -572,6 +882,103 @@ pfc::string8 tray_preferences::format_font_name(const LOGFONT& lf) {
     }
     
     return result;
+}
+
+//=============================================================================
+// Tab control management
+//=============================================================================
+
+void tray_preferences::init_tab_control() {
+    if (!m_hwnd) return;
+    
+    HWND hTab = GetDlgItem(m_hwnd, IDC_TAB_CONTROL);
+    if (!hTab) return;
+    
+    // Add tabs
+    TCITEM tie = {};
+    tie.mask = TCIF_TEXT;
+    
+    tie.pszText = const_cast<LPWSTR>(L"General");
+    TabCtrl_InsertItem(hTab, 0, &tie);
+    
+    tie.pszText = const_cast<LPWSTR>(L"Fonts");
+    TabCtrl_InsertItem(hTab, 1, &tie);
+    
+    // Select first tab
+    TabCtrl_SetCurSel(hTab, 0);
+    m_current_tab = 0;
+}
+
+void tray_preferences::switch_tab(int tab) {
+    if (!m_hwnd) return;
+    
+    m_current_tab = tab;
+    
+    // General tab controls (including static text labels)
+    int general_controls[] = {
+        IDC_ALWAYS_MINIMIZE_TO_TRAY,
+        IDC_STATIC_MINIMIZE_HELP,
+        IDC_STATIC_WHEEL_HELP,
+        IDC_SHOW_POPUP_NOTIFICATION,
+        IDC_POPUP_POSITION_LABEL,
+        IDC_POPUP_POSITION_COMBO,
+        IDC_POPUP_DURATION_LABEL,
+        IDC_POPUP_DURATION_COMBO,
+        IDC_DISABLE_MINIPLAYER,
+        IDC_STATIC_MINIPLAYER_HELP
+    };
+    
+    // Fonts tab controls - all 4 modes
+    int fonts_controls[] = {
+        // Docked
+        IDC_DOCKED_TITLE,
+        IDC_DOCKED_ARTIST_LABEL,
+        IDC_DOCKED_ARTIST_DISPLAY,
+        IDC_DOCKED_ARTIST_SELECT,
+        IDC_DOCKED_TRACK_LABEL,
+        IDC_DOCKED_TRACK_DISPLAY,
+        IDC_DOCKED_TRACK_SELECT,
+        // Undocked
+        IDC_UNDOCKED_TITLE,
+        IDC_UNDOCKED_ARTIST_LABEL,
+        IDC_UNDOCKED_ARTIST_DISPLAY,
+        IDC_UNDOCKED_ARTIST_SELECT,
+        IDC_UNDOCKED_TRACK_LABEL,
+        IDC_UNDOCKED_TRACK_DISPLAY,
+        IDC_UNDOCKED_TRACK_SELECT,
+        // Expanded
+        IDC_EXPANDED_TITLE,
+        IDC_EXPANDED_ARTIST_LABEL,
+        IDC_EXPANDED_ARTIST_DISPLAY,
+        IDC_EXPANDED_ARTIST_SELECT,
+        IDC_EXPANDED_TRACK_LABEL,
+        IDC_EXPANDED_TRACK_DISPLAY,
+        IDC_EXPANDED_TRACK_SELECT,
+        // Compact
+        IDC_COMPACT_TITLE,
+        IDC_COMPACT_ARTIST_LABEL,
+        IDC_COMPACT_ARTIST_DISPLAY,
+        IDC_COMPACT_ARTIST_SELECT,
+        IDC_COMPACT_TRACK_LABEL,
+        IDC_COMPACT_TRACK_DISPLAY,
+        IDC_COMPACT_TRACK_SELECT,
+        // Reset button
+        IDC_RESET_ALL_FONTS
+    };
+    
+    // Show/hide General controls
+    int show_general = (tab == 0) ? SW_SHOW : SW_HIDE;
+    for (int id : general_controls) {
+        HWND hCtrl = GetDlgItem(m_hwnd, id);
+        if (hCtrl) ShowWindow(hCtrl, show_general);
+    }
+    
+    // Show/hide Fonts controls
+    int show_fonts = (tab == 1) ? SW_SHOW : SW_HIDE;
+    for (int id : fonts_controls) {
+        HWND hCtrl = GetDlgItem(m_hwnd, id);
+        if (hCtrl) ShowWindow(hCtrl, show_fonts);
+    }
 }
 
 //=============================================================================
