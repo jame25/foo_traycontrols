@@ -24,15 +24,61 @@
 #define IDC_POPUP_DURATION_LABEL     220
 #define IDC_POPUP_DURATION_COMBO     221
 
-// Control Panel font controls
-#define IDC_CP_ARTIST_FONT_LABEL         213
-#define IDC_CP_ARTIST_FONT_DISPLAY       214
-#define IDC_CP_SELECT_ARTIST_FONT        215
-#define IDC_CP_TRACK_FONT_LABEL          216
-#define IDC_CP_TRACK_FONT_DISPLAY        217
-#define IDC_CP_SELECT_TRACK_FONT         218
-#define IDC_CP_RESET_FONTS               219
+// Tab control
+#define IDC_TAB_CONTROL              222
 
+// Static text labels for General tab (need IDs so we can hide/show them)
+#define IDC_STATIC_MINIMIZE_HELP     223
+#define IDC_STATIC_WHEEL_HELP        224
+#define IDC_STATIC_MINIPLAYER_HELP   225
+
+// Docked mode font controls (existing, renamed for clarity)
+#define IDC_DOCKED_TITLE             230
+#define IDC_DOCKED_ARTIST_LABEL      231
+#define IDC_DOCKED_ARTIST_DISPLAY    232
+#define IDC_DOCKED_ARTIST_SELECT     233
+#define IDC_DOCKED_TRACK_LABEL       234
+#define IDC_DOCKED_TRACK_DISPLAY     235
+#define IDC_DOCKED_TRACK_SELECT      236
+
+// Undocked mode font controls
+#define IDC_UNDOCKED_TITLE           240
+#define IDC_UNDOCKED_ARTIST_LABEL    241
+#define IDC_UNDOCKED_ARTIST_DISPLAY  242
+#define IDC_UNDOCKED_ARTIST_SELECT   243
+#define IDC_UNDOCKED_TRACK_LABEL     244
+#define IDC_UNDOCKED_TRACK_DISPLAY   245
+#define IDC_UNDOCKED_TRACK_SELECT    246
+
+// Expanded mode font controls
+#define IDC_EXPANDED_TITLE           250
+#define IDC_EXPANDED_ARTIST_LABEL    251
+#define IDC_EXPANDED_ARTIST_DISPLAY  252
+#define IDC_EXPANDED_ARTIST_SELECT   253
+#define IDC_EXPANDED_TRACK_LABEL     254
+#define IDC_EXPANDED_TRACK_DISPLAY   255
+#define IDC_EXPANDED_TRACK_SELECT    256
+
+// Compact mode font controls
+#define IDC_COMPACT_TITLE            260
+#define IDC_COMPACT_ARTIST_LABEL     261
+#define IDC_COMPACT_ARTIST_DISPLAY   262
+#define IDC_COMPACT_ARTIST_SELECT    263
+#define IDC_COMPACT_TRACK_LABEL      264
+#define IDC_COMPACT_TRACK_DISPLAY    265
+#define IDC_COMPACT_TRACK_SELECT     266
+
+// Reset all fonts button
+#define IDC_RESET_ALL_FONTS          267
+
+// Keep old IDs for backward compatibility (mapped to docked)
+#define IDC_CP_ARTIST_FONT_LABEL         IDC_DOCKED_ARTIST_LABEL
+#define IDC_CP_ARTIST_FONT_DISPLAY       IDC_DOCKED_ARTIST_DISPLAY
+#define IDC_CP_SELECT_ARTIST_FONT        IDC_DOCKED_ARTIST_SELECT
+#define IDC_CP_TRACK_FONT_LABEL          IDC_DOCKED_TRACK_LABEL
+#define IDC_CP_TRACK_FONT_DISPLAY        IDC_DOCKED_TRACK_DISPLAY
+#define IDC_CP_SELECT_TRACK_FONT         IDC_DOCKED_TRACK_SELECT
+#define IDC_CP_RESET_FONTS               219
 
 #define IDC_STATIC              -1
 
