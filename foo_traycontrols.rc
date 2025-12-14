@@ -16,31 +16,66 @@ IDI_NEXT_ICON           ICON    "next_icon.ico"
 // PNG version as binary resource (fallback)
 IDR_TRAY_PNG            RCDATA  "tray_icon.png"
 
-// Preferences dialog
-IDD_PREFERENCES_TRAY DIALOGEX 0, 0, 300, 240
+// Preferences dialog with tabs
+IDD_PREFERENCES_TRAY DIALOGEX 0, 0, 300, 300
 STYLE DS_SETFONT | DS_FIXEDSYS | WS_CHILD | WS_VISIBLE | DS_CONTROL
 EXSTYLE WS_EX_CONTROLPARENT
 FONT 8, "MS Shell Dlg", 400, 0, 0x1
 BEGIN
-    GROUPBOX        "Tray Behavior", IDC_STATIC, 7, 7, 286, 130
-    CONTROL         "Always minimize to system tray", IDC_ALWAYS_MINIMIZE_TO_TRAY, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 15, 25, 200, 10
-    LTEXT           "When enabled, clicking minimize sends foobar2000 directly to the system tray.", IDC_STATIC, 15, 40, 270, 8
-    LTEXT           "Mouse wheel over tray icon adjusts volume.", IDC_STATIC, 15, 52, 270, 8
-    CONTROL         "Show popup notification on track change", IDC_SHOW_POPUP_NOTIFICATION, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 15, 67, 200, 10
-    LTEXT           "Position:", IDC_POPUP_POSITION_LABEL, 15, 85, 35, 10
-    COMBOBOX        IDC_POPUP_POSITION_COMBO, 55, 83, 80, 120, CBS_DROPDOWNLIST | CBS_HASSTRINGS | WS_VSCROLL | WS_TABSTOP
-    LTEXT           "Duration:", IDC_POPUP_DURATION_LABEL, 145, 85, 35, 10
-    COMBOBOX        IDC_POPUP_DURATION_COMBO, 185, 83, 60, 100, CBS_DROPDOWNLIST | CBS_HASSTRINGS | WS_VSCROLL | WS_TABSTOP
-    CONTROL         "Disable MiniPlayer", IDC_DISABLE_MINIPLAYER, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 15, 105, 200, 10
-    LTEXT           "When enabled, prevents the control panel from being undocked (dragged).", IDC_STATIC, 15, 120, 270, 8
+    // Tab control at the top
+    CONTROL         "", IDC_TAB_CONTROL, "SysTabControl32", 0, 7, 7, 286, 286
 
-    GROUPBOX        "Control Panel", IDC_STATIC, 7, 145, 286, 85
-    LTEXT           "Artist Font:", IDC_CP_ARTIST_FONT_LABEL, 15, 165, 45, 10
-    EDITTEXT        IDC_CP_ARTIST_FONT_DISPLAY, 65, 163, 150, 14, ES_READONLY | WS_BORDER
-    PUSHBUTTON      "Select...", IDC_CP_SELECT_ARTIST_FONT, 225, 162, 50, 16
-    LTEXT           "Track Font:", IDC_CP_TRACK_FONT_LABEL, 15, 185, 45, 10
-    EDITTEXT        IDC_CP_TRACK_FONT_DISPLAY, 65, 183, 150, 14, ES_READONLY | WS_BORDER
-    PUSHBUTTON      "Select...", IDC_CP_SELECT_TRACK_FONT, 225, 182, 50, 16
-    PUSHBUTTON      "Reset to Default", IDC_CP_RESET_FONTS, 15, 205, 80, 16
+    // === General Tab Controls (shown by default) ===
+    CONTROL         "Always minimize to system tray", IDC_ALWAYS_MINIMIZE_TO_TRAY, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 15, 35, 200, 10
+    LTEXT           "When enabled, clicking minimize sends foobar2000 directly to the system tray.", IDC_STATIC_MINIMIZE_HELP, 15, 50, 270, 8
+    LTEXT           "Mouse wheel over tray icon adjusts volume.", IDC_STATIC_WHEEL_HELP, 15, 62, 270, 8
+    CONTROL         "Show popup notification on track change", IDC_SHOW_POPUP_NOTIFICATION, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 15, 80, 200, 10
+    LTEXT           "Position:", IDC_POPUP_POSITION_LABEL, 15, 98, 35, 10
+    COMBOBOX        IDC_POPUP_POSITION_COMBO, 55, 96, 80, 120, CBS_DROPDOWNLIST | CBS_HASSTRINGS | WS_VSCROLL | WS_TABSTOP
+    LTEXT           "Duration:", IDC_POPUP_DURATION_LABEL, 145, 98, 35, 10
+    COMBOBOX        IDC_POPUP_DURATION_COMBO, 185, 96, 60, 100, CBS_DROPDOWNLIST | CBS_HASSTRINGS | WS_VSCROLL | WS_TABSTOP
+    CONTROL         "Disable MiniPlayer", IDC_DISABLE_MINIPLAYER, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 15, 120, 200, 10
+    LTEXT           "When enabled, prevents the control panel from being undocked (dragged).", IDC_STATIC_MINIPLAYER_HELP, 15, 135, 270, 8
+
+    // === Fonts Tab Controls (hidden initially) ===
+    
+    // Docked Control Panel section
+    LTEXT           "Docked Control Panel", IDC_DOCKED_TITLE, 15, 35, 120, 10
+    LTEXT           "Artist Font:", IDC_DOCKED_ARTIST_LABEL, 25, 50, 45, 10
+    EDITTEXT        IDC_DOCKED_ARTIST_DISPLAY, 75, 48, 130, 14, ES_READONLY | WS_BORDER
+    PUSHBUTTON      "Select...", IDC_DOCKED_ARTIST_SELECT, 215, 47, 50, 16
+    LTEXT           "Track Font:", IDC_DOCKED_TRACK_LABEL, 25, 68, 45, 10
+    EDITTEXT        IDC_DOCKED_TRACK_DISPLAY, 75, 66, 130, 14, ES_READONLY | WS_BORDER
+    PUSHBUTTON      "Select...", IDC_DOCKED_TRACK_SELECT, 215, 65, 50, 16
+
+    // Undocked Control Panel section
+    LTEXT           "Undocked Control Panel", IDC_UNDOCKED_TITLE, 15, 90, 120, 10
+    LTEXT           "Artist Font:", IDC_UNDOCKED_ARTIST_LABEL, 25, 105, 45, 10
+    EDITTEXT        IDC_UNDOCKED_ARTIST_DISPLAY, 75, 103, 130, 14, ES_READONLY | WS_BORDER
+    PUSHBUTTON      "Select...", IDC_UNDOCKED_ARTIST_SELECT, 215, 102, 50, 16
+    LTEXT           "Track Font:", IDC_UNDOCKED_TRACK_LABEL, 25, 123, 45, 10
+    EDITTEXT        IDC_UNDOCKED_TRACK_DISPLAY, 75, 121, 130, 14, ES_READONLY | WS_BORDER
+    PUSHBUTTON      "Select...", IDC_UNDOCKED_TRACK_SELECT, 215, 120, 50, 16
+
+    // Expanded Control Panel section
+    LTEXT           "Expanded Artwork Mode", IDC_EXPANDED_TITLE, 15, 145, 120, 10
+    LTEXT           "Artist Font:", IDC_EXPANDED_ARTIST_LABEL, 25, 160, 45, 10
+    EDITTEXT        IDC_EXPANDED_ARTIST_DISPLAY, 75, 158, 130, 14, ES_READONLY | WS_BORDER
+    PUSHBUTTON      "Select...", IDC_EXPANDED_ARTIST_SELECT, 215, 157, 50, 16
+    LTEXT           "Track Font:", IDC_EXPANDED_TRACK_LABEL, 25, 178, 45, 10
+    EDITTEXT        IDC_EXPANDED_TRACK_DISPLAY, 75, 176, 130, 14, ES_READONLY | WS_BORDER
+    PUSHBUTTON      "Select...", IDC_EXPANDED_TRACK_SELECT, 215, 175, 50, 16
+
+    // Compact Control Panel section
+    LTEXT           "Compact Mode", IDC_COMPACT_TITLE, 15, 200, 120, 10
+    LTEXT           "Artist Font:", IDC_COMPACT_ARTIST_LABEL, 25, 215, 45, 10
+    EDITTEXT        IDC_COMPACT_ARTIST_DISPLAY, 75, 213, 130, 14, ES_READONLY | WS_BORDER
+    PUSHBUTTON      "Select...", IDC_COMPACT_ARTIST_SELECT, 215, 212, 50, 16
+    LTEXT           "Track Font:", IDC_COMPACT_TRACK_LABEL, 25, 233, 45, 10
+    EDITTEXT        IDC_COMPACT_TRACK_DISPLAY, 75, 231, 130, 14, ES_READONLY | WS_BORDER
+    PUSHBUTTON      "Select...", IDC_COMPACT_TRACK_SELECT, 215, 230, 50, 16
+
+    // Reset All Fonts button (bottom right)
+    PUSHBUTTON      "Reset All", IDC_RESET_ALL_FONTS, 215, 260, 50, 16
 
 END
