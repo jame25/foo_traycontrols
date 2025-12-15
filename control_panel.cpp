@@ -935,9 +935,10 @@ void draw_hover_circle(HDC hdc, int x, int y, int size) {
 }
 
 void control_panel::draw_previous_icon(HDC hdc, int x, int y, int size) {
-    if (m_hovered_button == BTN_PREV) {
-        draw_hover_circle(hdc, x, y, size);
-    }
+    // Hover highlight removed per user request
+    // if (m_hovered_button == BTN_PREV) {
+    //     draw_hover_circle(hdc, x, y, size);
+    // }
     
     Gdiplus::Graphics graphics(hdc);
     graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
@@ -965,9 +966,10 @@ void control_panel::draw_previous_icon(HDC hdc, int x, int y, int size) {
 }
 
 void control_panel::draw_next_icon(HDC hdc, int x, int y, int size) {
-    if (m_hovered_button == BTN_NEXT) {
-        draw_hover_circle(hdc, x, y, size);
-    }
+    // Hover highlight removed per user request
+    // if (m_hovered_button == BTN_NEXT) {
+    //     draw_hover_circle(hdc, x, y, size);
+    // }
     
     Gdiplus::Graphics graphics(hdc);
     graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
@@ -995,100 +997,142 @@ void control_panel::draw_next_icon(HDC hdc, int x, int y, int size) {
 
 
 void control_panel::draw_shuffle_icon(HDC hdc, int x, int y, int size) {
-    if (m_hovered_button == BTN_SHUFFLE) {
-        draw_hover_circle(hdc, x, y, size);
-    }
+    // Hover highlight removed per user request
+    // if (m_hovered_button == BTN_SHUFFLE) {
+    //     draw_hover_circle(hdc, x, y, size);
+    // }
     
-    // Material Design Shuffle - Two crossing arrows
-    // Gray when inactive, white when active
+    // Material Design Shuffle icon from SVG
     Gdiplus::Color color = m_shuffle_active ? Gdiplus::Color(255, 255, 255, 255) : Gdiplus::Color(255, 100, 100, 100);
-    
-    int half_size = size / 2;
-    float stroke = 2.0f;
     
     Gdiplus::Graphics graphics(hdc);
     graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
     graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
     
-    Gdiplus::Pen pen(color, stroke);
+    float scale = size / 24.0f;
+    float fx = (float)x - size / 2.0f;
+    float fy = (float)y - size / 2.0f;
     
-    // Line 1: bottom-left to top-right
-    int x1 = x - half_size + 2;
-    int y1 = y + half_size / 2;
-    int x2 = x + half_size - 2;
-    int y2 = y - half_size / 2;
+    // Apply translation and scale to map 24x24 SVG to icon size
+    graphics.TranslateTransform(fx, fy);
+    graphics.ScaleTransform(scale, scale);
     
-    graphics.DrawLine(&pen, x1, y1, x2, y2);
+    Gdiplus::SolidBrush brush(color);
     
-    // Arrow head for line 1 (top-right)
-    // Simple 2-segment arrow or use lines
-    graphics.DrawLine(&pen, x2 - 4, y2, x2, y2);
-    graphics.DrawLine(&pen, x2, y2, x2, y2 + 4);
+    // SVG Path: M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41z
+    //           M14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5z
+    //           m.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z
     
-    // Line 2: top-left to bottom-right
-    int x3 = x - half_size + 2;
-    int y3 = y - half_size / 2;
-    int x4 = x + half_size - 2;
-    int y4 = y + half_size / 2;
+    Gdiplus::GraphicsPath path;
     
-    graphics.DrawLine(&pen, x3, y3, x4, y4);
+    // First shape: diagonal cross section (top-left area)
+    path.StartFigure();
+    path.AddLine(10.59f, 9.17f, 5.41f, 4.0f);
+    path.AddLine(5.41f, 4.0f, 4.0f, 5.41f);
+    path.AddLine(4.0f, 5.41f, 9.17f, 10.58f);
+    path.CloseFigure();
     
-    // Arrow head for line 2 (bottom-right)
-    graphics.DrawLine(&pen, x4 - 4, y4, x4, y4);
-    graphics.DrawLine(&pen, x4, y4, x4, y4 - 4);
+    // Second shape: main X with top-right arrowhead
+    path.StartFigure();
+    path.AddLine(14.5f, 4.0f, 16.54f, 6.04f);
+    path.AddLine(16.54f, 6.04f, 4.0f, 18.59f);
+    path.AddLine(4.0f, 18.59f, 5.41f, 20.0f);
+    path.AddLine(5.41f, 20.0f, 17.96f, 7.46f);
+    path.AddLine(17.96f, 7.46f, 20.0f, 9.5f);
+    path.AddLine(20.0f, 9.5f, 20.0f, 4.0f);
+    path.AddLine(20.0f, 4.0f, 14.5f, 4.0f);
+    path.CloseFigure();
+    
+    // Third shape: bottom-right arrowhead
+    path.StartFigure();
+    path.AddLine(14.83f, 13.41f, 13.42f, 14.82f);
+    path.AddLine(13.42f, 14.82f, 16.55f, 17.95f);
+    path.AddLine(16.55f, 17.95f, 14.5f, 20.0f);
+    path.AddLine(14.5f, 20.0f, 20.0f, 20.0f);
+    path.AddLine(20.0f, 20.0f, 20.0f, 14.5f);
+    path.AddLine(20.0f, 14.5f, 17.96f, 16.54f);
+    path.AddLine(17.96f, 16.54f, 14.83f, 13.41f);
+    path.CloseFigure();
+    
+    graphics.FillPath(&brush, &path);
+    
+    graphics.ResetTransform();
 }
 
 void control_panel::draw_repeat_icon(HDC hdc, int x, int y, int size) {
-    if (m_hovered_button == BTN_REPEAT) {
-        draw_hover_circle(hdc, x, y, size);
-    }
+    // Hover highlight removed per user request
+    // if (m_hovered_button == BTN_REPEAT) {
+    //     draw_hover_circle(hdc, x, y, size);
+    // }
     
     bool is_active = (m_repeat_mode > 0);
     Gdiplus::Color color = is_active ? Gdiplus::Color(255, 255, 255, 255) : Gdiplus::Color(255, 100, 100, 100);
     
-    int half_size = size / 2;
-    float stroke = 2.0f;
-    int arrow_size = 3;
-    
     Gdiplus::Graphics graphics(hdc);
     graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
     graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
     
-    Gdiplus::Pen pen(color, stroke);
+    float scale = size / 24.0f;
+    float fx = (float)x - size / 2.0f;
+    float fy = (float)y - size / 2.0f;
     
-    // Top arrow (pointing right) - increased height by using half_size/2 instead of half_size/3
-    int top_y = y - half_size / 2;
-    graphics.DrawLine(&pen, x - half_size + 2, top_y, x + half_size - 2, top_y);
+    // Apply translation and scale to map 24x24 SVG to icon size
+    graphics.TranslateTransform(fx, fy);
+    graphics.ScaleTransform(scale, scale);
     
-    // Arrow head
-    graphics.DrawLine(&pen, x + half_size - 2 - arrow_size, top_y - arrow_size, x + half_size - 2, top_y);
-    graphics.DrawLine(&pen, x + half_size - 2 - arrow_size, top_y + arrow_size, x + half_size - 2, top_y);
+    Gdiplus::SolidBrush brush(color);
     
-    // Bottom arrow (pointing left) - increased height by using half_size/2 instead of half_size/3
-    int bottom_y = y + half_size / 2;
-    graphics.DrawLine(&pen, x + half_size - 2, bottom_y, x - half_size + 2, bottom_y);
+    // SVG Path: M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z
+    // This is a rectangular repeat icon with arrows on right and left
     
-    // Arrow head
-    graphics.DrawLine(&pen, x - half_size + 2 + arrow_size, bottom_y - arrow_size, x - half_size + 2, bottom_y);
-    graphics.DrawLine(&pen, x - half_size + 2 + arrow_size, bottom_y + arrow_size, x - half_size + 2, bottom_y);
+    Gdiplus::GraphicsPath path;
     
-    // Vertical connectors on sides
-    graphics.DrawLine(&pen, x + half_size - 2, top_y, x + half_size - 2, bottom_y);
-    graphics.DrawLine(&pen, x - half_size + 2, bottom_y, x - half_size + 2, top_y);
-
-    // If Track Repeat (Mode 2), draw a small "1" in the center
+    // First shape: Top arrow (pointing right)
+    // M7 7 h10 v3 l4-4 -4-4 v3 H5 v6 h2 V7 z
+    path.StartFigure();
+    path.AddLine(7.0f, 7.0f, 17.0f, 7.0f);   // h10
+    path.AddLine(17.0f, 7.0f, 17.0f, 10.0f); // v3
+    path.AddLine(17.0f, 10.0f, 21.0f, 6.0f); // l4-4 (arrow tip)
+    path.AddLine(21.0f, 6.0f, 17.0f, 2.0f);  // -4-4
+    path.AddLine(17.0f, 2.0f, 17.0f, 5.0f);  // v3
+    path.AddLine(17.0f, 5.0f, 5.0f, 5.0f);   // H5
+    path.AddLine(5.0f, 5.0f, 5.0f, 11.0f);   // v6
+    path.AddLine(5.0f, 11.0f, 7.0f, 11.0f);  // h2
+    path.AddLine(7.0f, 11.0f, 7.0f, 7.0f);   // V7
+    path.CloseFigure();
+    
+    // Second shape: Bottom arrow (pointing left)
+    // m10 10 (relative from last point = 17,17) -> actually starts at 17,17
+    // H7 v-3 l-4 4 4 4 v-3 h12 v-6 h-2 v4 z
+    path.StartFigure();
+    path.AddLine(17.0f, 17.0f, 7.0f, 17.0f);   // H7
+    path.AddLine(7.0f, 17.0f, 7.0f, 14.0f);    // v-3
+    path.AddLine(7.0f, 14.0f, 3.0f, 18.0f);    // l-4 4 (arrow tip)
+    path.AddLine(3.0f, 18.0f, 7.0f, 22.0f);    // 4 4
+    path.AddLine(7.0f, 22.0f, 7.0f, 19.0f);    // v-3
+    path.AddLine(7.0f, 19.0f, 19.0f, 19.0f);   // h12
+    path.AddLine(19.0f, 19.0f, 19.0f, 13.0f);  // v-6
+    path.AddLine(19.0f, 13.0f, 17.0f, 13.0f);  // h-2
+    path.AddLine(17.0f, 13.0f, 17.0f, 17.0f);  // v4
+    path.CloseFigure();
+    
+    // If Track Repeat (Mode 2), add the "1" in the center from repeat_one SVG
+    // SVG path segment: m-4-2V9h-1l-2 1v1h1.5v4H13z (relative to 17,17 = absolute 13,15)
     if (m_repeat_mode == 2) {
-        // Use GDI+ Font
-        Gdiplus::FontFamily fontFamily(L"Arial");
-        Gdiplus::Font font(&fontFamily, (float)size/2, Gdiplus::FontStyleBold, Gdiplus::UnitPixel);
-        Gdiplus::SolidBrush textBrush(Gdiplus::Color(255, 255, 255, 255));
-        Gdiplus::StringFormat format;
-        format.SetAlignment(Gdiplus::StringAlignmentCenter);
-        format.SetLineAlignment(Gdiplus::StringAlignmentCenter);
-        
-        Gdiplus::RectF rect((float)(x - size/2), (float)(y - size/2), (float)size, (float)size);
-        graphics.DrawString(L"1", -1, &font, rect, &format, &textBrush);
+        path.StartFigure();
+        path.AddLine(13.0f, 15.0f, 13.0f, 9.0f);   // V9
+        path.AddLine(13.0f, 9.0f, 12.0f, 9.0f);    // h-1
+        path.AddLine(12.0f, 9.0f, 10.0f, 10.0f);   // l-2 1
+        path.AddLine(10.0f, 10.0f, 10.0f, 11.0f);  // v1
+        path.AddLine(10.0f, 11.0f, 11.5f, 11.0f);  // h1.5
+        path.AddLine(11.5f, 11.0f, 11.5f, 15.0f);  // v4
+        path.AddLine(11.5f, 15.0f, 13.0f, 15.0f);  // H13
+        path.CloseFigure();
     }
+    
+    graphics.FillPath(&brush, &path);
+    
+    graphics.ResetTransform();
 }
 
 void control_panel::draw_up_arrow(HDC hdc, int x, int y, int size) {
@@ -1467,9 +1511,10 @@ void control_panel::draw_pause_icon_with_opacity(HDC hdc, int x, int y, int size
 }
 
 void control_panel::draw_previous_icon_with_opacity(HDC hdc, int x, int y, int size, int opacity) {
-    if (m_hovered_button == BTN_PREV) {
-        draw_hover_circle(hdc, x, y, size);
-    }
+    // Hover highlight removed per user request
+    // if (m_hovered_button == BTN_PREV) {
+    //     draw_hover_circle(hdc, x, y, size);
+    // }
     
     Gdiplus::Graphics graphics(hdc);
     graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
@@ -1499,9 +1544,10 @@ void control_panel::draw_previous_icon_with_opacity(HDC hdc, int x, int y, int s
 }
 
 void control_panel::draw_next_icon_with_opacity(HDC hdc, int x, int y, int size, int opacity) {
-    if (m_hovered_button == BTN_NEXT) {
-        draw_hover_circle(hdc, x, y, size);
-    }
+    // Hover highlight removed per user request
+    // if (m_hovered_button == BTN_NEXT) {
+    //     draw_hover_circle(hdc, x, y, size);
+    // }
     
     Gdiplus::Graphics graphics(hdc);
     graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
@@ -4524,8 +4570,8 @@ void control_panel::draw_compact_control_overlay(HDC hdc, int window_width, int 
     // Shuffle(24) + space(10) + Prev(24) + space(10) + Play(36) + space(10) + Next(24) + space(10) + Repeat(24)
     int total_buttons_width = (4 * button_size) + play_button_size + (4 * button_spacing);
 
-    // Center the buttons horizontally in the text area
-    int buttons_start_x = text_left + (text_area_width - total_buttons_width) / 2;
+    // Center the buttons horizontally in the text area (shifted left slightly per user request)
+    int buttons_start_x = text_left + (text_area_width - total_buttons_width) / 2 - 15;
 
     // Position buttons slightly below center
     // Ideally center vertically based on the largest button (Play)
