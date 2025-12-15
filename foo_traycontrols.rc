@@ -35,6 +35,11 @@ BEGIN
     COMBOBOX        IDC_POPUP_DURATION_COMBO, 185, 96, 60, 100, CBS_DROPDOWNLIST | CBS_HASSTRINGS | WS_VSCROLL | WS_TABSTOP
     CONTROL         "Disable MiniPlayer", IDC_DISABLE_MINIPLAYER, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 15, 120, 200, 10
     CONTROL         "When enabled, prevents the control panel from being undocked (dragged).", IDC_STATIC_MINIPLAYER_HELP, "Static", SS_LEFT | SS_NOPREFIX, 15, 135, 270, 8
+    
+    // Slide-to-Side Options
+    CONTROL         "Disable Slide-to-Side animation", IDC_DISABLE_SLIDE_TO_SIDE, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 15, 150, 200, 10
+    LTEXT           "Slide Speed:", IDC_SLIDE_DURATION_LABEL, 15, 168, 50, 10
+    COMBOBOX        IDC_SLIDE_DURATION_COMBO, 70, 166, 80, 100, CBS_DROPDOWNLIST | CBS_HASSTRINGS | WS_VSCROLL | WS_TABSTOP
 
     // === Fonts Tab Controls (hidden initially) ===
     
