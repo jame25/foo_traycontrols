@@ -1933,11 +1933,11 @@ void control_panel::handle_button_click(int button_id) {
             }
             return; // No track info update needed
 
-        case BTN_CLOSE:
-            // Close the miniplayer and clear saved state
-            m_has_saved_miniplayer_state = false;
-            hide_control_panel_immediate();
-            return;
+        // BTN_CLOSE removed per user request
+        // case BTN_CLOSE:
+        //     m_has_saved_miniplayer_state = false;
+        //     hide_control_panel_immediate();
+        //     return;
             
         case BTN_SHUFFLE:
             {
@@ -2493,15 +2493,7 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                                pt.y < resize_border || pt.y > client_rect.bottom - resize_border;
                 
                 if (!at_border) {
-                    // First check for CLOSE button in top-left
-                    if (panel->m_overlay_visible && pt.x <= 40 && pt.y <= 40) {
-                        panel->m_is_artwork_expanded = false;
-                        
-                        // Restore undocked size
-                        SetWindowPos(hwnd, NULL, 0, 0, panel->m_saved_undocked_width, panel->m_saved_undocked_height, SWP_NOMOVE | SWP_NOZORDER);
-                        InvalidateRect(hwnd, NULL, TRUE);
-                        return 0;
-                    }
+                    // Top-left corner click removed per user request - only collapse triangle works now
                     
                     // Check for COLLAPSE triangle in top-right (new logic)
                     RECT client_rect;
@@ -2592,28 +2584,9 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                 }
                 */
 
-                // Check if cursor is over close button (top-left) to toggle visibility state
+                // Close button removed per user request - no longer handling mouse hover for it
+                
                 if (panel->m_is_undocked && !panel->m_is_artwork_expanded && !panel->m_is_compact_mode) {
-                    bool mouse_over_close = false;
-                    int close_x = 15;
-                    int close_y = 15;
-                    if (pt.x >= close_x - 12 && pt.x <= close_x + 12 && pt.y >= close_y - 12 && pt.y <= close_y + 12) {
-                        mouse_over_close = true;
-                    }
-                    
-                    if (mouse_over_close != panel->m_mouse_over_close_button) {
-                        panel->m_mouse_over_close_button = mouse_over_close;
-                        // Invalidate just the close button area
-                        RECT close_rect = {close_x - 15, close_y - 15, close_x + 15, close_y + 15};
-                        InvalidateRect(hwnd, &close_rect, TRUE);
-                    }
-                    
-                    // Handle actual CLOSE click here if it wasn't handled
-                    if (mouse_over_close) {
-                         panel->hide_control_panel(); // Or handle_button_click(BTN_CLOSE)
-                         return 0;
-                    }
-
                     // Check for COLLAPSE triangle (Top-Right)
                     // Action: Switch to Compact Mode
                     RECT client_rect;
@@ -2678,15 +2651,7 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                          }
                     }
                 }
-                // Check if click is on close button (top-left corner, only in undocked miniplayer mode)
-                if (panel->m_is_undocked && !panel->m_is_artwork_expanded && !panel->m_is_compact_mode) {
-                    int close_x = 15;
-                    int close_y = 15;
-                    if (pt.x >= close_x - 10 && pt.x <= close_x + 10 && pt.y >= close_y - 10 && pt.y <= close_y + 10) {
-                        panel->handle_button_click(BTN_CLOSE);
-                        return 0;
-                    }
-                }
+                // Close button removed per user request - no longer needed
                 // Check if click is in album art area
                 if (panel->m_is_artwork_expanded) {
                     // In artwork expanded mode, single clicks do nothing (allows dragging)
