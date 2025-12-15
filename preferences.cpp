@@ -14,6 +14,8 @@ static cfg_int cfg_show_popup_notification(GUID{0x12345681, 0x9abc, 0xdef0, {0x1
 static cfg_int cfg_popup_position(GUID{0x12345685, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0); // 0=Top Left, 1=Middle Left, 2=Bottom Left, 3=Top Right, 4=Middle Right, 5=Bottom Right
 static cfg_int cfg_disable_miniplayer(GUID{0x12345686, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0);
 static cfg_int cfg_popup_duration(GUID{0x12345687, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 3000); // Default 3 seconds (3000ms)
+static cfg_int cfg_disable_slide_to_side(GUID{0x12345688, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0);
+static cfg_int cfg_slide_duration(GUID{0x12345689, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 200); // Default 200ms
 
 
 // Font configuration - store LOGFONT structure as binary data
@@ -176,6 +178,14 @@ int get_popup_duration() {
     if (duration < 1000) duration = 1000;
     if (duration > 10000) duration = 10000;
     return duration;
+}
+
+bool get_disable_slide_to_side() {
+    return cfg_disable_slide_to_side != 0;
+}
+
+int get_slide_duration() {
+    return cfg_slide_duration;
 }
 
 
@@ -376,6 +386,7 @@ INT_PTR CALLBACK tray_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, LP
         CheckDlgButton(hwnd, IDC_ALWAYS_MINIMIZE_TO_TRAY, cfg_always_minimize_to_tray != 0 ? BST_CHECKED : BST_UNCHECKED);
         CheckDlgButton(hwnd, IDC_SHOW_POPUP_NOTIFICATION, cfg_show_popup_notification != 0 ? BST_CHECKED : BST_UNCHECKED);
         CheckDlgButton(hwnd, IDC_DISABLE_MINIPLAYER, cfg_disable_miniplayer != 0 ? BST_CHECKED : BST_UNCHECKED);
+        CheckDlgButton(hwnd, IDC_DISABLE_SLIDE_TO_SIDE, cfg_disable_slide_to_side != 0 ? BST_CHECKED : BST_UNCHECKED);
         
         // Initialize popup position combobox (6 positions: left and right sides)
         HWND hCombo = GetDlgItem(hwnd, IDC_POPUP_POSITION_COMBO);
@@ -407,6 +418,24 @@ INT_PTR CALLBACK tray_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, LP
         else if (stored_duration <= 7000) duration_index = 5;
         else duration_index = 6;
         SendMessage(hDurationCombo, CB_SETCURSEL, duration_index, 0);
+
+        // Initialize slide duration combobox
+        HWND hSlideDurationCombo = GetDlgItem(hwnd, IDC_SLIDE_DURATION_COMBO);
+        SendMessage(hSlideDurationCombo, CB_ADDSTRING, 0, (LPARAM)L"Very Fast (100ms)");
+        SendMessage(hSlideDurationCombo, CB_ADDSTRING, 0, (LPARAM)L"Fast (200ms)");
+        SendMessage(hSlideDurationCombo, CB_ADDSTRING, 0, (LPARAM)L"Normal (300ms)");
+        SendMessage(hSlideDurationCombo, CB_ADDSTRING, 0, (LPARAM)L"Slow (400ms)");
+        SendMessage(hSlideDurationCombo, CB_ADDSTRING, 0, (LPARAM)L"Very Slow (500ms)");
+        
+        // Convert stored slide duration to combo index
+        int slide_index = 1; // Default to 200ms (index 1)
+        int stored_slide_duration = cfg_slide_duration;
+        if (stored_slide_duration <= 100) slide_index = 0;
+        else if (stored_slide_duration <= 200) slide_index = 1;
+        else if (stored_slide_duration <= 300) slide_index = 2;
+        else if (stored_slide_duration <= 400) slide_index = 3;
+        else slide_index = 4;
+        SendMessage(hSlideDurationCombo, CB_SETCURSEL, slide_index, 0);
         
         // Initialize font displays
         p_this->update_font_displays();
@@ -427,6 +456,7 @@ INT_PTR CALLBACK tray_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, LP
         case IDC_ALWAYS_MINIMIZE_TO_TRAY:
         case IDC_SHOW_POPUP_NOTIFICATION:
         case IDC_DISABLE_MINIPLAYER:
+        case IDC_DISABLE_SLIDE_TO_SIDE:
             if (HIWORD(wp) == BN_CLICKED) {
                 p_this->on_changed();
             }
@@ -434,6 +464,7 @@ INT_PTR CALLBACK tray_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, LP
             
         case IDC_POPUP_POSITION_COMBO:
         case IDC_POPUP_DURATION_COMBO:
+        case IDC_SLIDE_DURATION_COMBO:
             if (HIWORD(wp) == CBN_SELCHANGE) {
                 p_this->on_changed();
             }
@@ -548,11 +579,13 @@ bool tray_preferences::has_changed() {
     int current_minimize_to_tray = (IsDlgButtonChecked(m_hwnd, IDC_ALWAYS_MINIMIZE_TO_TRAY) == BST_CHECKED) ? 1 : 0;
     int current_show_popup = (IsDlgButtonChecked(m_hwnd, IDC_SHOW_POPUP_NOTIFICATION) == BST_CHECKED) ? 1 : 0;
     int current_disable_miniplayer = (IsDlgButtonChecked(m_hwnd, IDC_DISABLE_MINIPLAYER) == BST_CHECKED) ? 1 : 0;
+    int current_disable_slide = (IsDlgButtonChecked(m_hwnd, IDC_DISABLE_SLIDE_TO_SIDE) == BST_CHECKED) ? 1 : 0;
     int current_popup_position = (int)SendMessage(GetDlgItem(m_hwnd, IDC_POPUP_POSITION_COMBO), CB_GETCURSEL, 0, 0);
     
     return (current_minimize_to_tray != cfg_always_minimize_to_tray) || 
            (current_show_popup != cfg_show_popup_notification) ||
            (current_disable_miniplayer != cfg_disable_miniplayer) ||
+           (current_disable_slide != cfg_disable_slide_to_side) ||
            (current_popup_position != cfg_popup_position);
 }
 
@@ -561,6 +594,7 @@ void tray_preferences::apply_settings() {
         cfg_always_minimize_to_tray = (IsDlgButtonChecked(m_hwnd, IDC_ALWAYS_MINIMIZE_TO_TRAY) == BST_CHECKED) ? 1 : 0;
         cfg_show_popup_notification = (IsDlgButtonChecked(m_hwnd, IDC_SHOW_POPUP_NOTIFICATION) == BST_CHECKED) ? 1 : 0;
         cfg_disable_miniplayer = (IsDlgButtonChecked(m_hwnd, IDC_DISABLE_MINIPLAYER) == BST_CHECKED) ? 1 : 0;
+        cfg_disable_slide_to_side = (IsDlgButtonChecked(m_hwnd, IDC_DISABLE_SLIDE_TO_SIDE) == BST_CHECKED) ? 1 : 0;
         cfg_popup_position = (int)SendMessage(GetDlgItem(m_hwnd, IDC_POPUP_POSITION_COMBO), CB_GETCURSEL, 0, 0);
 
         // Convert duration combo index to milliseconds
@@ -568,6 +602,13 @@ void tray_preferences::apply_settings() {
         int duration_values[] = {1000, 2000, 3000, 4000, 5000, 7000, 10000};
         if (duration_index >= 0 && duration_index < 7) {
             cfg_popup_duration = duration_values[duration_index];
+        }
+
+        // Convert slide duration combo index to milliseconds
+        int slide_index = (int)SendMessage(GetDlgItem(m_hwnd, IDC_SLIDE_DURATION_COMBO), CB_GETCURSEL, 0, 0);
+        int slide_values[] = {100, 200, 300, 400, 500};
+        if (slide_index >= 0 && slide_index < 5) {
+            cfg_slide_duration = slide_values[slide_index];
         }
 
         // Notify tray manager and control panel of settings change
@@ -581,6 +622,7 @@ void tray_preferences::reset_settings() {
         CheckDlgButton(m_hwnd, IDC_ALWAYS_MINIMIZE_TO_TRAY, cfg_always_minimize_to_tray != 0 ? BST_CHECKED : BST_UNCHECKED);
         CheckDlgButton(m_hwnd, IDC_SHOW_POPUP_NOTIFICATION, cfg_show_popup_notification != 0 ? BST_CHECKED : BST_UNCHECKED);
         CheckDlgButton(m_hwnd, IDC_DISABLE_MINIPLAYER, cfg_disable_miniplayer != 0 ? BST_CHECKED : BST_UNCHECKED);
+        CheckDlgButton(m_hwnd, IDC_DISABLE_SLIDE_TO_SIDE, cfg_disable_slide_to_side != 0 ? BST_CHECKED : BST_UNCHECKED);
         SendMessage(GetDlgItem(m_hwnd, IDC_POPUP_POSITION_COMBO), CB_SETCURSEL, cfg_popup_position, 0);
         
         
@@ -932,7 +974,11 @@ void tray_preferences::switch_tab(int tab) {
         IDC_POPUP_DURATION_LABEL,
         IDC_POPUP_DURATION_COMBO,
         IDC_DISABLE_MINIPLAYER,
-        IDC_STATIC_MINIPLAYER_HELP
+        IDC_STATIC_MINIPLAYER_HELP,
+        // Slide-to-Side options
+        IDC_DISABLE_SLIDE_TO_SIDE,
+        IDC_SLIDE_DURATION_LABEL,
+        IDC_SLIDE_DURATION_COMBO
     };
     
     // Fonts tab controls - all 4 modes
