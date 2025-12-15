@@ -4531,8 +4531,9 @@ void control_panel::draw_compact_control_overlay(HDC hdc, int window_width, int 
     int button_y = margin + (window_height - 2 * margin - play_button_size) / 2 + 5; 
     // So button_y should be the vertical center line.
     
-    // Correct vertical centering: window_height / 2
-    int center_y_line = window_height / 2;
+    // Correct vertical centering: center within the overlay area (0 to overlay_bottom)
+    // Add small offset (+5) to lower buttons slightly for better visual balance
+    int center_y_line = (overlay_bottom / 2) + 5;
 
     // Calculate button CENTER positions
     // Start x is the left edge of the group.
