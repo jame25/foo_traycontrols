@@ -18,24 +18,23 @@ IDR_TRAY_PNG            RCDATA  "tray_icon.png"
 
 // Preferences dialog with tabs
 IDD_PREFERENCES_TRAY DIALOGEX 0, 0, 300, 300
-STYLE DS_SETFONT | DS_FIXEDSYS | WS_CHILD | WS_VISIBLE | DS_CONTROL
-EXSTYLE WS_EX_CONTROLPARENT
-FONT 8, "MS Shell Dlg", 400, 0, 0x1
+STYLE DS_SETFONT | WS_CHILD
+FONT 8, "Microsoft Sans Serif", 400, 0, 0x0
 BEGIN
     // Tab control at the top
     CONTROL         "", IDC_TAB_CONTROL, "SysTabControl32", 0, 7, 7, 286, 286
 
     // === General Tab Controls (shown by default) ===
     CONTROL         "Always minimize to system tray", IDC_ALWAYS_MINIMIZE_TO_TRAY, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 15, 35, 200, 10
-    LTEXT           "When enabled, clicking minimize sends foobar2000 directly to the system tray.", IDC_STATIC_MINIMIZE_HELP, 15, 50, 270, 8
-    LTEXT           "Mouse wheel over tray icon adjusts volume.", IDC_STATIC_WHEEL_HELP, 15, 62, 270, 8
+    CONTROL         "When enabled, clicking minimize sends foobar2000 directly to the system tray.", IDC_STATIC_MINIMIZE_HELP, "Static", SS_LEFT | SS_NOPREFIX, 15, 50, 270, 8
+    CONTROL         "Mouse wheel over tray icon adjusts volume.", IDC_STATIC_WHEEL_HELP, "Static", SS_LEFT | SS_NOPREFIX, 15, 62, 270, 8
     CONTROL         "Show popup notification on track change", IDC_SHOW_POPUP_NOTIFICATION, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 15, 80, 200, 10
     LTEXT           "Position:", IDC_POPUP_POSITION_LABEL, 15, 98, 35, 10
     COMBOBOX        IDC_POPUP_POSITION_COMBO, 55, 96, 80, 120, CBS_DROPDOWNLIST | CBS_HASSTRINGS | WS_VSCROLL | WS_TABSTOP
     LTEXT           "Duration:", IDC_POPUP_DURATION_LABEL, 145, 98, 35, 10
     COMBOBOX        IDC_POPUP_DURATION_COMBO, 185, 96, 60, 100, CBS_DROPDOWNLIST | CBS_HASSTRINGS | WS_VSCROLL | WS_TABSTOP
     CONTROL         "Disable MiniPlayer", IDC_DISABLE_MINIPLAYER, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 15, 120, 200, 10
-    LTEXT           "When enabled, prevents the control panel from being undocked (dragged).", IDC_STATIC_MINIPLAYER_HELP, 15, 135, 270, 8
+    CONTROL         "When enabled, prevents the control panel from being undocked (dragged).", IDC_STATIC_MINIPLAYER_HELP, "Static", SS_LEFT | SS_NOPREFIX, 15, 135, 270, 8
 
     // === Fonts Tab Controls (hidden initially) ===
     
