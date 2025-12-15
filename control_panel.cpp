@@ -2407,11 +2407,14 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                     
                     int total_buttons_width = (4 * button_size) + play_button_size + (4 * button_spacing);
                     
-                    int buttons_start_x = text_left + (text_area_width - total_buttons_width) / 2;
+                    // Must match the drawing offset (-15) for proper click detection
+                    int buttons_start_x = text_left + (text_area_width - total_buttons_width) / 2 - 15;
                     
-                    // Button Y center line
-                    int center_y_line = margin + (window_height - 2 * margin) / 2 + 5;
-                    int button_y = center_y_line; // Use center Y for click check
+                    // Button Y center line - must match drawing calculation using overlay_bottom
+                    int progress_bar_height = 5;
+                    int overlay_bottom = window_height - progress_bar_height - 2 - (int)(window_height * 0.1) - 8;
+                    int center_y_line = (overlay_bottom / 2) + 5;
+                    int button_y = center_y_line;
                     
                     int shuffle_x = buttons_start_x + button_size / 2;
                     int prev_x = shuffle_x + button_size/2 + button_spacing + button_size/2;
