@@ -36,6 +36,11 @@ public:
     void show_miniplayer_at_saved_position(); // Show miniplayer (any mode) at remembered position
     void hide_and_remember_miniplayer(); // Hide and remember miniplayer state and position
     
+    // Slide-to-side feature (panel peeks from screen edge)
+    void slide_to_side();
+    void slide_back_from_side();
+    bool is_slid_to_side() const { return m_is_slid_to_side; }
+    
 private:
     control_panel();
     ~control_panel();
@@ -185,6 +190,19 @@ private:
     int m_final_x, m_final_y;
     static const int ANIMATION_STEPS = 20;
     static const int ANIMATION_DURATION = 300; // ms
+    
+    // Slide-to-side animation state
+    bool m_is_slid_to_side;           // True when panel is slid to screen edge
+    bool m_sliding_animation;         // True during slide animation
+    bool m_sliding_to_side;           // Direction: true = sliding to side, false = sliding back
+    int m_pre_slide_x, m_pre_slide_y; // Position before sliding
+    int m_slide_start_x;              // Animation start X position
+    int m_slide_target_x;             // Animation target X position
+    int m_slide_animation_step;       // Current animation step
+    static const UINT SLIDE_TIMER_ID = 4010;
+    static const int SLIDE_ANIMATION_STEPS = 15;
+    static const int SLIDE_ANIMATION_DURATION = 200; // ms
+    void update_slide_animation();
     
     // Window management
     void create_control_window();
