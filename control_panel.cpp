@@ -1,6 +1,7 @@
 #include "stdafx.h"
 #include "control_panel.h"
 #include "preferences.h"
+#include "preferences.h"
 #include "volume_popup.h"
 
 // Timer constants
@@ -9,6 +10,7 @@
 #define OVERLAY_TIMER_ID 4004
 #define FADE_TIMER_ID 4005
 #define BUTTON_FADE_TIMER_ID 9001
+#define SLIDE_TIMER_ID 4010
 
 // Static instance
 control_panel* control_panel::s_instance = nullptr;
@@ -85,6 +87,14 @@ control_panel::control_panel()
     , m_hovered_button(0) // Initialize hover state
     , m_shuffle_active(false)
     , m_repeat_mode(0)
+    , m_is_slid_to_side(false)
+    , m_sliding_animation(false)
+    , m_sliding_to_side(false)
+    , m_pre_slide_x(0)
+    , m_pre_slide_y(0)
+    , m_slide_start_x(0)
+    , m_slide_target_x(0)
+    , m_slide_animation_step(0)
 {
     m_last_click_pos.x = 0;
     m_last_click_pos.y = 0;
@@ -260,6 +270,20 @@ void control_panel::hide_control_panel_immediate() {
     KillTimer(m_control_window, UPDATE_TIMER_ID);
     KillTimer(m_control_window, UPDATE_TIMER_ID + 1);
     KillTimer(m_control_window, TIMEOUT_TIMER_ID);
+    KillTimer(m_control_window, SLIDE_TIMER_ID);
+    
+    // Reset slide-to-side state so panel reopens at original position
+    if (m_is_slid_to_side && m_pre_slide_x != 0) {
+        // Restore position before hiding
+        RECT window_rect;
+        GetWindowRect(m_control_window, &window_rect);
+        int window_height = window_rect.bottom - window_rect.top;
+        int window_width = window_rect.right - window_rect.left;
+        SetWindowPos(m_control_window, nullptr, m_pre_slide_x, window_rect.top, 
+                     window_width, window_height, SWP_NOACTIVATE | SWP_NOZORDER);
+    }
+    m_is_slid_to_side = false;
+    m_sliding_animation = false;
     
     // Hide immediately without animation
     ShowWindow(m_control_window, SW_HIDE);
@@ -2295,6 +2319,94 @@ void control_panel::update_animation() {
     }
 }
 
+void control_panel::slide_to_side() {
+    if (m_sliding_animation || m_is_slid_to_side || !m_control_window || !m_visible || get_disable_slide_to_side()) {
+        return;
+    }
+    
+    // Get current window position
+    RECT window_rect;
+    GetWindowRect(m_control_window, &window_rect);
+    int window_width = window_rect.right - window_rect.left;
+    
+    // Save current position for slide-back
+    m_pre_slide_x = window_rect.left;
+    m_pre_slide_y = window_rect.top;
+    
+    // Calculate target position: right edge of screen with 70px peek visible
+    int screen_width = GetSystemMetrics(SM_CXSCREEN);
+    const int PEEK_AMOUNT = 70;
+    
+    m_slide_start_x = window_rect.left;
+    m_slide_target_x = screen_width - PEEK_AMOUNT;
+    
+    // Start slide animation
+    m_sliding_animation = true;
+    m_sliding_to_side = true;
+    m_slide_animation_step = 0;
+    
+    SetTimer(m_control_window, SLIDE_TIMER_ID, SLIDE_ANIMATION_DURATION / SLIDE_ANIMATION_STEPS, nullptr);
+}
+
+void control_panel::slide_back_from_side() {
+    if (m_sliding_animation || !m_is_slid_to_side || !m_control_window || !m_visible) {
+        return;
+    }
+    
+    // Get current window position
+    RECT window_rect;
+    GetWindowRect(m_control_window, &window_rect);
+    
+    m_slide_start_x = window_rect.left;
+    m_slide_target_x = m_pre_slide_x;
+    
+    // Start slide animation
+    m_sliding_animation = true;
+    m_sliding_to_side = false;
+    m_slide_animation_step = 0;
+    
+    SetTimer(m_control_window, SLIDE_TIMER_ID, SLIDE_ANIMATION_DURATION / SLIDE_ANIMATION_STEPS, nullptr);
+}
+
+void control_panel::update_slide_animation() {
+    if (!m_sliding_animation) {
+        return;
+    }
+    
+    m_slide_animation_step++;
+    
+    if (m_slide_animation_step >= SLIDE_ANIMATION_STEPS) {
+        // Animation complete
+        m_sliding_animation = false;
+        KillTimer(m_control_window, SLIDE_TIMER_ID);
+        
+        if (m_sliding_to_side) {
+            m_is_slid_to_side = true;
+        } else {
+            m_is_slid_to_side = false;
+        }
+        
+        // Final position
+        RECT window_rect;
+        GetWindowRect(m_control_window, &window_rect);
+        int window_height = window_rect.bottom - window_rect.top;
+        int window_width = window_rect.right - window_rect.left;
+        
+        SetWindowPos(m_control_window, HWND_TOPMOST, m_slide_target_x, window_rect.top, 
+                     window_width, window_height, SWP_NOACTIVATE);
+    } else {
+        // Calculate current position using ease-out curve
+        float progress = (float)m_slide_animation_step / SLIDE_ANIMATION_STEPS;
+        float eased_progress = 1.0f - (1.0f - progress) * (1.0f - progress); // Ease-out quadratic
+        
+        int current_x = m_slide_start_x + (int)((m_slide_target_x - m_slide_start_x) * eased_progress);
+        
+        // Move window to current position
+        SetWindowPos(m_control_window, HWND_TOPMOST, current_x, m_pre_slide_y, 0, 0, 
+                     SWP_NOSIZE | SWP_NOACTIVATE);
+    }
+}
+
 LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
     control_panel* panel = nullptr;
     
@@ -2348,6 +2460,17 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                 int window_width = client_rect.right - client_rect.left;
                 int window_height = client_rect.bottom - client_rect.top;
                 
+                // Slide-to-side: Check for click on right edge (last 40px) or slide back if already slid
+                const int SLIDE_CLICK_ZONE = 40;
+                if (panel->m_is_slid_to_side) {
+                    // If slid, any click brings it back
+                    panel->slide_back_from_side();
+                    return 0;
+                } else if (pt.x >= window_width - SLIDE_CLICK_ZONE) {
+                    // Right edge clicked - slide to side
+                    panel->slide_to_side();
+                    return 0;
+                }
                 
                 // Check if click is on artwork in compact mode
                 int margin = 5;
@@ -2470,6 +2593,19 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                 GetClientRect(hwnd, &client_rect);
                 int window_width = client_rect.right - client_rect.left;
 
+                // Slide-to-side: Check for click on right edge (last 40px) or slide back if already slid
+                // Exclude top-right corner (collapse triangle area)
+                const int SLIDE_CLICK_ZONE = 40;
+                if (panel->m_is_slid_to_side) {
+                    // If slid, any click brings it back
+                    panel->slide_back_from_side();
+                    return 0;
+                } else if (pt.x >= window_width - SLIDE_CLICK_ZONE && pt.y > 40) {
+                    // Right edge clicked (below collapse triangle) - slide to side
+                    panel->slide_to_side();
+                    return 0;
+                }
+
                 // Check for collapse triangle click in top-right corner
                 if (pt.x >= window_width - 40 && pt.y <= 40) {
                     // Switch from undocked to compact mode
@@ -2499,6 +2635,7 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                     RECT client_rect;
                     GetClientRect(hwnd, &client_rect);
                     int window_width = client_rect.right - client_rect.left;
+                    int window_height = client_rect.bottom - client_rect.top;
                     if (panel->m_overlay_visible && pt.x >= window_width - 40 && pt.y <= 40) {
                         panel->m_is_artwork_expanded = false;
                         
@@ -2507,10 +2644,25 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                         InvalidateRect(hwnd, NULL, TRUE);
                         return 0;
                     }
+                    
+                    // Slide-to-side: Check for click on right edge or slide back if already slid
+                    // Right edge zone is between resize_border and SLIDE_CLICK_ZONE from right edge
+                    // Exclude top-right corner (collapse triangle) and bottom overlay
+                    const int SLIDE_CLICK_ZONE = 40;
+                    const int overlay_height = 70;
+                    if (panel->m_is_slid_to_side) {
+                        // If slid, any click brings it back
+                        panel->slide_back_from_side();
+                        return 0;
+                    } else if (pt.x >= window_width - SLIDE_CLICK_ZONE - resize_border && 
+                               pt.x < window_width - resize_border &&
+                               pt.y > 40 && pt.y < window_height - overlay_height) {
+                        // Right edge clicked (below collapse triangle, above control overlay) - slide to side
+                        panel->slide_to_side();
+                        return 0;
+                    }
 
-                    // Then check for control button clicks in bottom overlay area
-                    int window_height = client_rect.bottom - client_rect.top;
-                    const int overlay_height = 70; // Increased height for better visibility
+                    // Then check for control button clicks in bottom overlay area (overlay_height already defined above)
                     
                     if (panel->m_overlay_visible && pt.y >= window_height - overlay_height) {
 
@@ -3084,12 +3236,13 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
             break;
             
         case WM_MOUSELEAVE:
-            // Start immediate fade when mouse leaves the window
+            // Hide overlay immediately when mouse leaves the window (no fade animation)
             if (panel && panel->m_is_artwork_expanded && panel->m_overlay_visible) {
-
                 KillTimer(hwnd, OVERLAY_TIMER_ID);
-                panel->m_fade_start_time = GetTickCount();
-                SetTimer(hwnd, FADE_TIMER_ID, 50, nullptr); // Start fade immediately
+                KillTimer(hwnd, FADE_TIMER_ID);
+                panel->m_overlay_visible = false;
+                panel->m_overlay_opacity = 0;
+                InvalidateRect(hwnd, nullptr, FALSE);
             }
             
             // Clear hover state on leave
@@ -3141,12 +3294,24 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                     RECT client_rect;
                     GetClientRect(hwnd, &client_rect);
                     const int resize_border = 8; // 8 pixel border for resizing
+                    int window_width = client_rect.right - client_rect.left;
+                    int window_height = client_rect.bottom - client_rect.top;
+                    const int overlay_height = 70;
                     
                     // Check for resize areas (corners and edges)
                     bool at_left = pt.x < resize_border;
                     bool at_right = pt.x > client_rect.right - resize_border;
                     bool at_top = pt.y < resize_border;
                     bool at_bottom = pt.y > client_rect.bottom - resize_border;
+                    
+                    // Slide-to-side: Allow clicks on right edge for slide feature
+                    // But preserve corners for resizing, and exclude top (collapse triangle) and bottom (controls)
+                    const int SLIDE_CLICK_ZONE = 40;
+                    if (pt.x >= window_width - SLIDE_CLICK_ZONE && 
+                        pt.y > 40 && pt.y < window_height - overlay_height &&
+                        !at_top && !at_bottom) {
+                        return HTCLIENT; // Allow WM_LBUTTONDOWN for slide-to-side
+                    }
                     
                     // Return appropriate resize handles
                     if (at_left && at_top) return HTTOPLEFT;
@@ -3201,9 +3366,14 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                     bool at_left = pt.x < resize_border;
                     bool at_right = pt.x > window_width - resize_border;
                     
-                    // Return horizontal resize handles only
+                    // Return resize handles for left edge only - right edge is for slide-to-side
                     if (at_left) return HTLEFT;
-                    if (at_right) return HTRIGHT;
+                    
+                    // Slide-to-side: Allow clicks on right edge for slide feature
+                    const int SLIDE_CLICK_ZONE = 40;
+                    if (pt.x >= window_width - SLIDE_CLICK_ZONE) {
+                        return HTCLIENT; // Allow WM_LBUTTONDOWN for slide-to-side
+                    }
                     
                     // Check text area behavior - always return HTCLIENT for consistent mouse handling
                     int text_area_left = margin + art_size + margin;
@@ -3232,6 +3402,12 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                     
                     RECT client_rect;
                     GetClientRect(hwnd, &client_rect);
+                    
+                    // IF SLID TO SIDE: Force HTCLIENT to allow click to slide back
+                    // This allows WM_LBUTTONDOWN to capture the click and call slide_back_from_side
+                    if (panel->m_is_slid_to_side) {
+                        return HTCLIENT;
+                    }
                     
                     // Calculate adaptive button and artwork positions
                     int window_width = client_rect.right - client_rect.left;
@@ -3275,19 +3451,22 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                         return HTCLIENT; // Allow click handling for collapse triangle
                     }
 
-                    // Check for horizontal resize areas only (left and right edges)
+                    // Slide-to-side: Allow clicks on right edge for slide feature (below collapse triangle)
+                    const int SLIDE_CLICK_ZONE = 40;
+                    if (pt.x >= window_width - SLIDE_CLICK_ZONE && pt.y > 40) {
+                        return HTCLIENT; // Allow WM_LBUTTONDOWN for slide-to-side
+                    }
+
+                    // Check for horizontal resize areas only (left edge - right edge is for slide-to-side)
                     const int resize_border = 6;
                     bool at_left = pt.x < resize_border;
-                    bool at_right = pt.x > window_width - resize_border;
                     
-                    // Only return resize handles if not in button or artwork areas
+                    // Only return resize handle for left edge if not in button or artwork areas
                     bool in_button_area = (pt.y >= button_y - 10 && pt.y <= button_y + 10);
                     bool in_artwork_area = (pt.x >= 15 && pt.x < 15 + art_size && pt.y >= 15 && pt.y < 15 + art_size);
                     
                     if (!in_button_area && !in_artwork_area) {
-                        // Return horizontal resize handles only
                         if (at_left) return HTLEFT;
-                        if (at_right) return HTRIGHT;
                     }
                     
                     // Allow dragging from everywhere else (unless disabled)
@@ -3636,6 +3815,10 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                     InvalidateRect(hwnd, nullptr, TRUE);
                 }
                 return 0;
+            } else if (wparam == SLIDE_TIMER_ID) {
+                // Handle slide-to-side animation
+                if (panel) panel->update_slide_animation();
+                return 0;
             }
             break;
             
@@ -3983,6 +4166,11 @@ void control_panel::paint_artwork_expanded(HDC hdc, const RECT& client_rect) {
             // Ignore errors - placeholder will remain plain gray
         }
         
+        // Draw overlay even when no artwork (controls should appear on hover)
+        if (m_overlay_visible) {
+            draw_track_info_overlay(buffer_dc, window_width, window_height);
+            draw_control_overlay(buffer_dc, window_width, window_height);
+        }
     }
     
     // Copy the complete buffered image to the screen in one operation
@@ -4181,8 +4369,8 @@ void control_panel::paint_compact_mode(HDC hdc, const RECT& rect) {
     SetTextColor(hdc, RGB(255, 255, 255));
     SetBkMode(hdc, TRANSPARENT);
     
-    // Calculate text area  
-    int text_left = margin + art_size + margin;
+    // Calculate text area (shifted right slightly per user request)
+    int text_left = margin + art_size + margin + 10;
     int text_right = window_width - margin; // No dots, use full width
     
     // Draw song title (use configured track font, fallback to default if not set)
@@ -4244,7 +4432,8 @@ void control_panel::paint_compact_mode(HDC hdc, const RECT& rect) {
     }
     
     // Draw elapsed time (count up, like Docked and Undocked modes)
-    int elapsed_min = (int)(m_current_time / 60);
+    if (m_is_playing) {
+        int elapsed_min = (int)(m_current_time / 60);
     int elapsed_sec = (int)m_current_time % 60;
     
     wchar_t time_str[16];
@@ -4258,8 +4447,13 @@ void control_panel::paint_compact_mode(HDC hdc, const RECT& rect) {
     SelectObject(hdc, time_font);
     SetTextColor(hdc, RGB(255, 255, 255)); // White to match track title
     
-    RECT time_rect = {progress_bar_left + progress_bar_width + 5, progress_bar_y - 10, window_width - margin, progress_bar_y + progress_bar_height + 6};
-    DrawText(hdc, time_str, -1, &time_rect, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+        RECT time_rect = {progress_bar_left + progress_bar_width + 5, progress_bar_y - 10, window_width - margin, progress_bar_y + progress_bar_height + 6};
+        DrawText(hdc, time_str, -1, &time_rect, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+        
+        if (need_delete_time_font) {
+            DeleteObject(time_font);
+        }
+    }
     
     // Draw compact control overlay if hovering over text area
     draw_compact_control_overlay(hdc, window_width, window_height);
@@ -4272,12 +4466,11 @@ void control_panel::paint_compact_mode(HDC hdc, const RECT& rect) {
     if (need_delete_artist) {
         DeleteObject(artist_font);
     }
-    if (need_delete_time_font) {
-        DeleteObject(time_font);
-    }
 }
 
 void control_panel::draw_time_info(HDC hdc, const RECT& client_rect) {
+    if (!m_is_playing) return;
+
     SetTextColor(hdc, RGB(255, 255, 255)); // Same color as track title
     SetBkMode(hdc, TRANSPARENT);
     
@@ -4303,23 +4496,24 @@ void control_panel::draw_time_info(HDC hdc, const RECT& client_rect) {
 }
 
 void control_panel::draw_track_info_overlay(HDC hdc, int window_width, int window_height) {
-    if (m_current_title.is_empty() && m_current_artist.is_empty()) return;
+    // Don't return early when no title/artist - overlay should still appear for controls
     
-    // Create semi-transparent overlay background at the top
+    // Create semi-transparent overlay background at the top using GDI+ alpha blending (glass effect)
     int overlay_height = 70; // Height of the overlay area
-    RECT overlay_rect = {0, 0, window_width, overlay_height};
     
-    // Create solid overlay with consistent grey color - simulate fading by skipping frames
-    const int grey_color = 40; // Consistent grey color
-    
-    // Create a solid overlay with opacity-adjusted color to avoid flickering
     if (m_overlay_opacity > 0) {
-        // Scale the grey color based on opacity (darker = more opaque)
-        int opacity_adjusted_color = (grey_color * m_overlay_opacity) / 100;
-        RECT full_overlay = {0, 0, window_width, overlay_height};
-        HBRUSH overlay_brush = CreateSolidBrush(RGB(opacity_adjusted_color, opacity_adjusted_color, opacity_adjusted_color));
-        FillRect(hdc, &full_overlay, overlay_brush);
-        DeleteObject(overlay_brush);
+        // Use GDI+ for true alpha blending (glass effect)
+        Gdiplus::Graphics graphics(hdc);
+        graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+        
+        // Calculate alpha based on overlay opacity (0-100 -> 0-255 range, but make it semi-transparent)
+        // Use around 60% max opacity for glass effect
+        int alpha = (180 * m_overlay_opacity) / 100;
+        
+        Gdiplus::SolidBrush overlayBrush(Gdiplus::Color(alpha, 20, 20, 20));
+        // Start at -1 to eliminate sub-pixel gap at top edge from anti-aliasing
+        Gdiplus::RectF overlayRect(-1.0f, -1.0f, (float)window_width + 2.0f, (float)overlay_height + 1.0f);
+        graphics.FillRectangle(&overlayBrush, overlayRect);
     }
     
     // Draw track info text on top of the overlay (only when overlay has opacity)
@@ -4382,18 +4576,20 @@ void control_panel::draw_track_info_overlay(HDC hdc, int window_width, int windo
 }
 
 void control_panel::draw_control_overlay(HDC hdc, int window_width, int window_height) {
-    // Create bottom overlay with same opacity behavior as top overlay
+    // Create bottom overlay with glass effect using GDI+ alpha blending
     const int overlay_height = 70; // Height for control buttons
-    const int grey_color = 40; // Same color as top overlay
     
-    // Create bottom overlay with opacity-adjusted color to avoid flickering
     if (m_overlay_opacity > 0) {
-        // Scale the grey color based on opacity (darker = more opaque)
-        int opacity_adjusted_color = (grey_color * m_overlay_opacity) / 100;
-        RECT bottom_overlay = {0, window_height - overlay_height, window_width, window_height};
-        HBRUSH overlay_brush = CreateSolidBrush(RGB(opacity_adjusted_color, opacity_adjusted_color, opacity_adjusted_color));
-        FillRect(hdc, &bottom_overlay, overlay_brush);
-        DeleteObject(overlay_brush);
+        // Use GDI+ for true alpha blending (glass effect)
+        Gdiplus::Graphics graphics(hdc);
+        graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+        
+        // Calculate alpha based on overlay opacity (around 60% max opacity for glass effect)
+        int alpha = (180 * m_overlay_opacity) / 100;
+        
+        Gdiplus::SolidBrush overlayBrush(Gdiplus::Color(alpha, 20, 20, 20));
+        Gdiplus::RectF overlayRect(0.0f, (float)(window_height - overlay_height), (float)window_width, (float)overlay_height);
+        graphics.FillRectangle(&overlayBrush, overlayRect);
         
         // Draw control buttons (Previous, Play/Pause, Next)
         int button_size = 24; // Size of each button except play
