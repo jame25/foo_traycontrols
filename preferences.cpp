@@ -2,6 +2,8 @@
 #include "preferences.h"
 #include "tray_manager.h"
 #include "control_panel.h"
+#include <uxtheme.h>
+#pragma comment(lib, "uxtheme.lib")
 
 // External declaration from main.cpp
 extern HINSTANCE g_hIns;
@@ -364,6 +366,9 @@ INT_PTR CALLBACK tray_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, LP
         // Initialize dark mode hooks
         p_this->m_darkMode.AddDialogWithControls(hwnd);
         
+        // Enable tab page texture to fix text shadow rendering
+        EnableThemeDialogTexture(hwnd, ETDT_ENABLETAB);
+        
         // Initialize tab control
         p_this->init_tab_control();
         
@@ -521,6 +526,8 @@ INT_PTR CALLBACK tray_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, LP
             }
         }
         break;
+        
+    // Note: WM_CTLCOLORSTATIC removed - shadow effect may be a foobar2000 framework issue
         
     case WM_DESTROY:
         p_this->m_hwnd = nullptr;
