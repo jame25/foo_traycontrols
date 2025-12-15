@@ -650,12 +650,12 @@ void popup_window::draw_track_info(HDC hdc, const RECT& client_rect) {
         title_font = CreateFontIndirect(&title_lf);
     } else {
         // Default fonts - title should be larger and bold, artist regular weight
-        title_font = CreateFont(17, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+        title_font = CreateFont(19, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
                                 DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                                DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
-        artist_font = CreateFont(16, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                                DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Microsoft YaHei");
+        artist_font = CreateFont(18, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
                                  DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                                 DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+                                 DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Microsoft YaHei");
     }
     
     // Draw title first (top line)
