@@ -4229,24 +4229,23 @@ void control_panel::paint_compact_mode(HDC hdc, const RECT& rect) {
         DeleteObject(progress_fill_brush);
     }
     
-    // Draw time remaining
-    double time_remaining = m_track_length - m_current_time;
-    if (time_remaining < 0) time_remaining = 0;
+    // Draw elapsed time (count up, like Docked and Undocked modes)
+    int elapsed_min = (int)(m_current_time / 60);
+    int elapsed_sec = (int)m_current_time % 60;
     
-    int remaining_min = (int)(time_remaining / 60);
-    int remaining_sec = (int)time_remaining % 60;
+    wchar_t time_str[16];
+    swprintf_s(time_str, 16, L"%d:%02d", elapsed_min, elapsed_sec);
     
-    wchar_t time_remaining_str[16];
-    swprintf_s(time_remaining_str, 16, L"-%d:%02d", remaining_min, remaining_sec);
-    
-    HFONT time_font = CreateFont(17, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+    // Use a slightly smaller font for the timer in compact mode
+    HFONT time_font = CreateFont(-14, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
                                  DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                                  DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+    bool need_delete_time_font = true;
     SelectObject(hdc, time_font);
-    SetTextColor(hdc, RGB(160, 160, 160));
+    SetTextColor(hdc, RGB(255, 255, 255)); // White to match track title
     
-    RECT time_rect = {progress_bar_left + progress_bar_width + 5, progress_bar_y - 8, window_width - margin, progress_bar_y + progress_bar_height + 8};
-    DrawText(hdc, time_remaining_str, -1, &time_rect, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+    RECT time_rect = {progress_bar_left + progress_bar_width + 5, progress_bar_y - 10, window_width - margin, progress_bar_y + progress_bar_height + 6};
+    DrawText(hdc, time_str, -1, &time_rect, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
     
     // Draw compact control overlay if hovering over text area
     draw_compact_control_overlay(hdc, window_width, window_height);
@@ -4259,7 +4258,9 @@ void control_panel::paint_compact_mode(HDC hdc, const RECT& rect) {
     if (need_delete_artist) {
         DeleteObject(artist_font);
     }
-    DeleteObject(time_font);
+    if (need_delete_time_font) {
+        DeleteObject(time_font);
+    }
 }
 
 void control_panel::draw_time_info(HDC hdc, const RECT& client_rect) {
