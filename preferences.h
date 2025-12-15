@@ -9,6 +9,8 @@ bool get_show_popup_notification();
 int get_popup_position();
 bool get_disable_miniplayer();
 int get_popup_duration(); // Returns popup duration in milliseconds (1000-10000)
+bool get_disable_slide_to_side();
+int get_slide_duration(); // Returns slide duration in milliseconds
 
 
 // Font configuration functions
