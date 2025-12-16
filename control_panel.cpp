@@ -391,9 +391,14 @@ void control_panel::show_undocked_miniplayer() {
         return;
     }
     
-    // If MiniPlayer is fully visible, hide it and remember position
+    // If MiniPlayer is fully visible, either slide to side or hide
     if (m_visible) {
-        hide_and_remember_miniplayer();
+        // If "Always Slide-to-Side" is enabled, slide instead of hiding
+        if (get_always_slide_to_side()) {
+            slide_to_side();
+        } else {
+            hide_and_remember_miniplayer();
+        }
         return;
     }
 
