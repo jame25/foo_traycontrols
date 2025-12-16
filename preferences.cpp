@@ -16,6 +16,7 @@ static cfg_int cfg_disable_miniplayer(GUID{0x12345686, 0x9abc, 0xdef0, {0x12, 0x
 static cfg_int cfg_popup_duration(GUID{0x12345687, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 3000); // Default 3 seconds (3000ms)
 static cfg_int cfg_disable_slide_to_side(GUID{0x12345688, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0);
 static cfg_int cfg_slide_duration(GUID{0x12345689, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 200); // Default 200ms
+static cfg_int cfg_use_rounded_corners(GUID{0x12345690, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 1); // Default ON (Win11 style)
 
 
 // Font configuration - store LOGFONT structure as binary data
@@ -186,6 +187,10 @@ bool get_disable_slide_to_side() {
 
 int get_slide_duration() {
     return cfg_slide_duration;
+}
+
+bool get_use_rounded_corners() {
+    return cfg_use_rounded_corners != 0;
 }
 
 
@@ -387,6 +392,7 @@ INT_PTR CALLBACK tray_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, LP
         CheckDlgButton(hwnd, IDC_SHOW_POPUP_NOTIFICATION, cfg_show_popup_notification != 0 ? BST_CHECKED : BST_UNCHECKED);
         CheckDlgButton(hwnd, IDC_DISABLE_MINIPLAYER, cfg_disable_miniplayer != 0 ? BST_CHECKED : BST_UNCHECKED);
         CheckDlgButton(hwnd, IDC_DISABLE_SLIDE_TO_SIDE, cfg_disable_slide_to_side != 0 ? BST_CHECKED : BST_UNCHECKED);
+        CheckDlgButton(hwnd, IDC_USE_ROUNDED_CORNERS, cfg_use_rounded_corners != 0 ? BST_CHECKED : BST_UNCHECKED);
         
         // Initialize popup position combobox (6 positions: left and right sides)
         HWND hCombo = GetDlgItem(hwnd, IDC_POPUP_POSITION_COMBO);
@@ -457,6 +463,7 @@ INT_PTR CALLBACK tray_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, LP
         case IDC_SHOW_POPUP_NOTIFICATION:
         case IDC_DISABLE_MINIPLAYER:
         case IDC_DISABLE_SLIDE_TO_SIDE:
+        case IDC_USE_ROUNDED_CORNERS:
             if (HIWORD(wp) == BN_CLICKED) {
                 p_this->on_changed();
             }
@@ -595,6 +602,7 @@ void tray_preferences::apply_settings() {
         cfg_show_popup_notification = (IsDlgButtonChecked(m_hwnd, IDC_SHOW_POPUP_NOTIFICATION) == BST_CHECKED) ? 1 : 0;
         cfg_disable_miniplayer = (IsDlgButtonChecked(m_hwnd, IDC_DISABLE_MINIPLAYER) == BST_CHECKED) ? 1 : 0;
         cfg_disable_slide_to_side = (IsDlgButtonChecked(m_hwnd, IDC_DISABLE_SLIDE_TO_SIDE) == BST_CHECKED) ? 1 : 0;
+        cfg_use_rounded_corners = (IsDlgButtonChecked(m_hwnd, IDC_USE_ROUNDED_CORNERS) == BST_CHECKED) ? 1 : 0;
         cfg_popup_position = (int)SendMessage(GetDlgItem(m_hwnd, IDC_POPUP_POSITION_COMBO), CB_GETCURSEL, 0, 0);
 
         // Convert duration combo index to milliseconds
@@ -623,6 +631,7 @@ void tray_preferences::reset_settings() {
         CheckDlgButton(m_hwnd, IDC_SHOW_POPUP_NOTIFICATION, cfg_show_popup_notification != 0 ? BST_CHECKED : BST_UNCHECKED);
         CheckDlgButton(m_hwnd, IDC_DISABLE_MINIPLAYER, cfg_disable_miniplayer != 0 ? BST_CHECKED : BST_UNCHECKED);
         CheckDlgButton(m_hwnd, IDC_DISABLE_SLIDE_TO_SIDE, cfg_disable_slide_to_side != 0 ? BST_CHECKED : BST_UNCHECKED);
+        CheckDlgButton(m_hwnd, IDC_USE_ROUNDED_CORNERS, cfg_use_rounded_corners != 0 ? BST_CHECKED : BST_UNCHECKED);
         SendMessage(GetDlgItem(m_hwnd, IDC_POPUP_POSITION_COMBO), CB_SETCURSEL, cfg_popup_position, 0);
         
         
@@ -978,7 +987,9 @@ void tray_preferences::switch_tab(int tab) {
         // Slide-to-Side options
         IDC_DISABLE_SLIDE_TO_SIDE,
         IDC_SLIDE_DURATION_LABEL,
-        IDC_SLIDE_DURATION_COMBO
+        IDC_SLIDE_DURATION_COMBO,
+        // Window style options
+        IDC_USE_ROUNDED_CORNERS
     };
     
     // Fonts tab controls - all 4 modes
