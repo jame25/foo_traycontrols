@@ -41,6 +41,9 @@ BEGIN
     LTEXT           "Slide Speed:", IDC_SLIDE_DURATION_LABEL, 15, 168, 50, 10
     COMBOBOX        IDC_SLIDE_DURATION_COMBO, 70, 166, 80, 100, CBS_DROPDOWNLIST | CBS_HASSTRINGS | WS_VSCROLL | WS_TABSTOP
 
+    // Window Style Options
+    CONTROL         "Use rounded corners (Windows 11 only)", IDC_USE_ROUNDED_CORNERS, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 15, 190, 200, 10
+
     // === Fonts Tab Controls (hidden initially) ===
     
     // Docked Control Panel section
