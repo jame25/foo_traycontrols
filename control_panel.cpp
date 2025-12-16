@@ -3,6 +3,8 @@
 #include "preferences.h"
 #include "preferences.h"
 #include "volume_popup.h"
+#include <dwmapi.h>
+#pragma comment(lib, "dwmapi.lib")
 
 // Timer constants
 #define TIMEOUT_TIMER_ID 9999  // Use unique timer ID to avoid conflicts
@@ -383,6 +385,18 @@ void control_panel::show_miniplayer_at_saved_position() {
 }
 
 void control_panel::show_undocked_miniplayer() {
+    // If MiniPlayer is slid-to-side (peeking), slide it back out
+    if (m_visible && m_is_slid_to_side) {
+        slide_back_from_side();
+        return;
+    }
+    
+    // If MiniPlayer is fully visible, hide it and remember position
+    if (m_visible) {
+        hide_and_remember_miniplayer();
+        return;
+    }
+
     // Initialize if needed
     if (!m_initialized) {
         initialize();
@@ -395,20 +409,43 @@ void control_panel::show_undocked_miniplayer() {
     // Update track info and load cover art
     update_track_info();
 
-    // Set to Undocked mode (not expanded, not compact)
-    m_is_undocked = true;
-    m_is_artwork_expanded = false;
-    m_is_compact_mode = false;
+    // Restore saved mode if available, otherwise default to Undocked
+    if (m_has_saved_miniplayer_state) {
+        m_is_undocked = m_saved_was_undocked;
+        m_is_artwork_expanded = m_saved_was_expanded;
+        m_is_compact_mode = m_saved_was_compact;
+    } else {
+        // Default to Undocked mode for first launch
+        m_is_undocked = true;
+        m_is_artwork_expanded = false;
+        m_is_compact_mode = false;
+    }
 
-    // Use saved undocked dimensions or defaults
-    int width = m_saved_undocked_width > 0 ? m_saved_undocked_width : 338;
-    int height = m_saved_undocked_height > 0 ? m_saved_undocked_height : 120;
+    // Set dimensions based on mode
+    int width, height;
+    if (m_is_artwork_expanded) {
+        width = m_saved_expanded_width > 0 ? m_saved_expanded_width : 400;
+        height = m_saved_expanded_height > 0 ? m_saved_expanded_height : 400;
+    } else if (m_is_compact_mode) {
+        width = m_saved_compact_width > 0 ? m_saved_compact_width : 320;
+        height = 75;
+    } else {
+        // Undocked mode
+        width = m_saved_undocked_width > 0 ? m_saved_undocked_width : 338;
+        height = m_saved_undocked_height > 0 ? m_saved_undocked_height : 120;
+    }
 
-    // Center on screen
-    int screen_width = GetSystemMetrics(SM_CXSCREEN);
-    int screen_height = GetSystemMetrics(SM_CYSCREEN);
-    int x = (screen_width - width) / 2;
-    int y = (screen_height - height) / 2;
+    // Use saved position if available, otherwise center on screen
+    int x, y;
+    if (m_has_saved_miniplayer_state && m_saved_miniplayer_x >= 0 && m_saved_miniplayer_y >= 0) {
+        x = m_saved_miniplayer_x;
+        y = m_saved_miniplayer_y;
+    } else {
+        int screen_width = GetSystemMetrics(SM_CXSCREEN);
+        int screen_height = GetSystemMetrics(SM_CYSCREEN);
+        x = (screen_width - width) / 2;
+        y = (screen_height - height) / 2;
+    }
 
     // Position and show the window
     SetWindowPos(m_control_window, HWND_TOPMOST, x, y, width, height, SWP_NOACTIVATE);
@@ -614,6 +651,9 @@ void control_panel::create_control_window() {
     if (!m_control_window) {
         throw exception_win32(GetLastError());
     }
+    
+    // Apply window corner preference (rounded/square corners)
+    apply_window_corner_preference();
 }
 
 void control_panel::position_control_panel() {
@@ -1730,10 +1770,24 @@ void control_panel::on_settings_changed() {
     // Reload fonts when settings change
     load_fonts();
     
+    // Apply window corner preference
+    apply_window_corner_preference();
+    
     // Trigger repaint if visible
     if (m_visible && m_control_window) {
         InvalidateRect(m_control_window, nullptr, TRUE);
     }
+}
+
+void control_panel::apply_window_corner_preference() {
+    if (!m_control_window) return;
+    
+    // DWMWA_WINDOW_CORNER_PREFERENCE = 33
+    // DWMWCP_DONOTROUND = 1 (square corners)
+    // DWMWCP_ROUND = 2 (rounded corners)
+    // DWMWCP_ROUNDSMALL = 3 (small rounded corners)
+    DWORD corner_pref = get_use_rounded_corners() ? 2 : 1;
+    DwmSetWindowAttribute(m_control_window, 33, &corner_pref, sizeof(corner_pref));
 }
 
 void control_panel::set_undocked(bool undocked) {
