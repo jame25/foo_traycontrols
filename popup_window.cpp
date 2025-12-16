@@ -1,6 +1,8 @@
 #include "stdafx.h"
 #include "popup_window.h"
 #include "preferences.h"
+#include <dwmapi.h>
+#pragma comment(lib, "dwmapi.lib")
 
 // Static instance
 popup_window* popup_window::s_instance = nullptr;
@@ -137,6 +139,12 @@ void popup_window::on_settings_changed() {
         hide_popup();
     }
     
+    // Update window corner preference
+    if (m_popup_window) {
+        DWORD corner_pref = get_use_rounded_corners() ? 2 : 1;
+        DwmSetWindowAttribute(m_popup_window, 33, &corner_pref, sizeof(corner_pref));
+    }
+    
     // If popup is currently visible, update its position
     if (m_visible && !m_animating) {
         position_popup();
@@ -181,6 +189,11 @@ void popup_window::create_popup_window() {
     if (!m_popup_window) {
         throw exception_win32(GetLastError());
     }
+    
+    // Apply window corner preference (rounded/square corners)
+    // DWMWA_WINDOW_CORNER_PREFERENCE = 33
+    DWORD corner_pref = get_use_rounded_corners() ? 2 : 1;
+    DwmSetWindowAttribute(m_popup_window, 33, &corner_pref, sizeof(corner_pref));
 }
 
 void popup_window::position_popup() {
@@ -650,10 +663,10 @@ void popup_window::draw_track_info(HDC hdc, const RECT& client_rect) {
         title_font = CreateFontIndirect(&title_lf);
     } else {
         // Default fonts - title should be larger and bold, artist regular weight
-        title_font = CreateFont(19, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+        title_font = CreateFont(21, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
                                 DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                                 DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Microsoft YaHei");
-        artist_font = CreateFont(18, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+        artist_font = CreateFont(20, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
                                  DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                                  DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Microsoft YaHei");
     }
