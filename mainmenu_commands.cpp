@@ -46,7 +46,7 @@ public:
     bool get_description(t_uint32 p_index, pfc::string_base & p_out) override {
         switch(p_index) {
             case cmd_launch_miniplayer: 
-                p_out = "Opens the MiniPlayer in Undocked mode."; 
+                p_out = "Opens the MiniPlayer in Undocked mode at its previous position."; 
                 return true;
             default: 
                 return false;
