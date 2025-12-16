@@ -217,6 +217,7 @@ private:
     HBITMAP convert_album_art_to_bitmap_original(album_art_data_ptr art_data);
     void load_fonts();
     void cleanup_fonts();
+    void apply_window_corner_preference();
     
     // Event handlers
     void handle_button_click(int button_id);
