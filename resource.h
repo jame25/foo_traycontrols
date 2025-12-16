@@ -26,6 +26,7 @@
 #define IDC_DISABLE_SLIDE_TO_SIDE    226
 #define IDC_SLIDE_DURATION_LABEL     227
 #define IDC_SLIDE_DURATION_COMBO     228
+#define IDC_ALWAYS_SLIDE_TO_SIDE     229
 
 // Tab control
 #define IDC_TAB_CONTROL              222
