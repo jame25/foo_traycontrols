@@ -74,6 +74,9 @@
 // Reset all fonts button
 #define IDC_RESET_ALL_FONTS          267
 
+// Window corner style option
+#define IDC_USE_ROUNDED_CORNERS      270
+
 // Keep old IDs for backward compatibility (mapped to docked)
 #define IDC_CP_ARTIST_FONT_LABEL         IDC_DOCKED_ARTIST_LABEL
 #define IDC_CP_ARTIST_FONT_DISPLAY       IDC_DOCKED_ARTIST_DISPLAY
