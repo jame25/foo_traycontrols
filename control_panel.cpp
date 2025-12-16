@@ -382,6 +382,60 @@ void control_panel::show_miniplayer_at_saved_position() {
     InvalidateRect(m_control_window, nullptr, TRUE);
 }
 
+void control_panel::show_undocked_miniplayer() {
+    // Initialize if needed
+    if (!m_initialized) {
+        initialize();
+    }
+
+    if (!m_control_window) {
+        create_control_window();
+    }
+
+    // Update track info and load cover art
+    update_track_info();
+
+    // Set to Undocked mode (not expanded, not compact)
+    m_is_undocked = true;
+    m_is_artwork_expanded = false;
+    m_is_compact_mode = false;
+
+    // Use saved undocked dimensions or defaults
+    int width = m_saved_undocked_width > 0 ? m_saved_undocked_width : 338;
+    int height = m_saved_undocked_height > 0 ? m_saved_undocked_height : 120;
+
+    // Center on screen
+    int screen_width = GetSystemMetrics(SM_CXSCREEN);
+    int screen_height = GetSystemMetrics(SM_CYSCREEN);
+    int x = (screen_width - width) / 2;
+    int y = (screen_height - height) / 2;
+
+    // Position and show the window
+    SetWindowPos(m_control_window, HWND_TOPMOST, x, y, width, height, SWP_NOACTIVATE);
+    ShowWindow(m_control_window, SW_SHOWNOACTIVATE);
+    m_visible = true;
+
+    // Reset slide state
+    m_is_slid_to_side = false;
+
+    // Enable mouse tracking for button fade functionality
+    TRACKMOUSEEVENT tme = {0};
+    tme.cbSize = sizeof(TRACKMOUSEEVENT);
+    tme.dwFlags = TME_LEAVE;
+    tme.hwndTrack = m_control_window;
+    TrackMouseEvent(&tme);
+
+    // Reset button opacity and visibility
+    m_buttons_visible = true;
+    m_button_opacity = 100;
+
+    // Start update timer
+    SetTimer(m_control_window, UPDATE_TIMER_ID, 500, nullptr);
+
+    // Trigger repaint
+    InvalidateRect(m_control_window, nullptr, TRUE);
+}
+
 void control_panel::update_track_info() {
     // Force cleanup of old artwork before loading new
     cleanup_cover_art();
