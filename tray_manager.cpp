@@ -651,8 +651,17 @@ LRESULT CALLBACK tray_manager::tray_window_proc(HWND hwnd, UINT msg, WPARAM wpar
                     bool is_miniplayer = panel.is_undocked() || panel.is_artwork_expanded() || panel.is_compact_mode();
 
                     if (is_visible && is_miniplayer) {
-                        // Miniplayer (any non-docked mode) is visible - hide it and remember state/position
-                        panel.hide_and_remember_miniplayer();
+                        // Check if MiniPlayer is slid to side - if so, slide it back
+                        if (panel.is_slid_to_side()) {
+                            panel.slide_back_from_side();
+                        }
+                        // If "Always Slide-to-Side" is enabled, slide instead of hiding
+                        else if (get_always_slide_to_side()) {
+                            panel.slide_to_side();
+                        } else {
+                            // Miniplayer (any non-docked mode) is visible - hide it and remember state/position
+                            panel.hide_and_remember_miniplayer();
+                        }
                     } else if (panel.has_saved_miniplayer_state()) {
                         // Was in a miniplayer mode before - restore it at saved position
                         panel.show_miniplayer_at_saved_position();
