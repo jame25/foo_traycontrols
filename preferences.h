@@ -11,6 +11,7 @@ bool get_disable_miniplayer();
 int get_popup_duration(); // Returns popup duration in milliseconds (1000-10000)
 bool get_disable_slide_to_side();
 int get_slide_duration(); // Returns slide duration in milliseconds
+bool get_use_rounded_corners(); // Windows 11 style rounded corners
 
 
 // Font configuration functions
