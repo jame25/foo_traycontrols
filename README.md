@@ -15,29 +15,68 @@ A foobar2000 component that provides comprehensive system tray functionality wit
 - **Real-time Track Information**: Hover tooltips show current artist and track information
 - **Popup Control Panel**: Single-click the tray icon to show/hide an elegant control panel with:
   
-  - High-quality album artwork display (80x80 pixels)
+  - High-quality album artwork display
   - Current track title and artist information
-  - Playback time display
-  - Previous, Play/Pause, and Next control buttons with sharp icon rendering
-- **Multiple Display Modes**: The control panel adapts to your needs with multiple display modes:
-  
-  - Docked Mode: Standard tray popup attached to the taskbar area.
-  - Undocked (Miniplayer): Detachable window that can be dragged anywhere on screen. (Double-click artwork to toggle)
-  - Compact Mode: A tiny, unobtrusive strip showing just artwork and essential info. (Double-click artwork in Undocked mode)
-  - Expanded Artwork Mode: A large, immersive view focusing on high-quality album art. (Left-click artwork to toggle)
-- **Popup Track Notifications**: Optional popup notifications on track changes featuring:
-  - Album artwork display
-  - Track and artist information
-  - Smooth slide-in animation
-- **Simple Tray Menu**: Right-click context menu provides:
-  - Show/Hide foobar2000 window
-  - Exit application
+  - Playback time display with seek bar
+  - Previous, Play/Pause, Next, Shuffle, and Repeat control buttons
+### Multiple Display Modes
+The control panel adapts to your needs with four distinct display modes:
 
-### Preferences
-- **Settings Integration**: Accessible via foobar2000's Preferences → Tools → Tray Controls
+1. **Docked Mode**: Standard tray popup attached to the taskbar area
+   - Simplified controls: Previous, Play/Pause, Next only (Shuffle/Repeat hidden)
+   - Auto-hides after 5 seconds
+   
+2. **Undocked (MiniPlayer)**: Detachable window that can be dragged anywhere on screen
+   - Full playback controls including Shuffle and Repeat
+   - Remembers window position between sessions
+   - **Collapse Triangle**: Small white triangle in top-right corner to switch to Compact mode
+   
+3. **Compact Mode**: A tiny, unobtrusive strip showing just artwork and essential info
+   
+4. **Expanded Artwork Mode**: A large, immersive view focusing on high-quality album art
+   - Hover overlays with smooth fade animations for controls
+   - Respects album art aspect ratio
+   - **Collapse Triangle**: Small white triangle in top-right corner to restore Undocked mode
+     
+### Slide-to-Side Panel (Panel Peek)
+- **Panel Peek**: Single-click on the edge of the panel (Expanded, Undocked, or Compact modes) slides the panel to the side of the screen, leaving 70px visible ("peeking")
+- **Restore**: Click anywhere on the slid panel to slide it back to its original position
+- **Always Slide-to-Side Option**: When enabled, the MiniPlayer slides to the side instead of closing
+   
+### Toolbar Button
+- **Launch MiniPlayer**: Accessible via View → Tray Controls → Launch MiniPlayer
+- Can be added to the foobar2000 toolbar for quick access
+- Toggles the MiniPlayer visibility (shows/hides, or slides back if peeking)
+
+### Popup Track Notifications
+Optional popup notifications on track changes featuring:
+- Album artwork display
+- Track and artist information
+- Smooth slide-in animation
+- Configurable display position (top-left, top-right, bottom-left, bottom-right)
+- Configurable display duration (1-10 seconds)
+  
+### Preferences (Tabbed Interface)
+Accessible via foobar2000's Preferences → Tools → Tray Controls
+
+#### General Tab
 - **Always Minimize to Tray**: When enabled, clicking the minimize button hides the window to the system tray
 - **Show Popup Notification**: Enable/disable popup notifications on track changes
-- **Persistent Configuration**: Settings are saved in foobar2000's configuration system
+- **Popup Position**: Choose where track change notifications appear
+- **Popup Duration**: Adjust how long notifications remain visible (1-10 seconds)
+- **Disable MiniPlayer**: Option to disable the MiniPlayer functionality
+- **Disable Slide-to-Side**: Disable the panel slide peek functionality
+- **Always Slide-to-Side**: MiniPlayer slides instead of closing when toggle button is clicked
+- **Slide Duration**: Configure the animation speed for slide animations
+- **Use Rounded Corners**: Toggle Windows 11 style rounded corners on/off
+
+#### Fonts Tab
+Mode-specific font customization for all display modes:
+- **Docked Control Panel**: Artist and Track fonts
+- **Undocked Control Panel**: Artist and Track fonts
+- **Expanded Artwork Mode**: Artist and Track fonts
+- **Compact Mode**: Artist and Track fonts
+- **Reset All Button**: Restore all fonts to system defaults (Segoe UI)
 
 ## Technical Implementation
 
@@ -49,9 +88,10 @@ A foobar2000 component that provides comprehensive system tray functionality wit
   - `initquit` service for component lifecycle
   - `play_callback_static` for real-time playback events
   - `preferences_page_v3` for settings UI
+  - `mainmenu_commands` for toolbar integration
 - **Singleton Pattern**: Uses singleton managers for reliable state management
 - **GDI+ Image Processing**: High-quality album art rendering with aspect ratio preservation
-- **Animation System**: Smooth slide-out animations with easing curves for enhanced user experience
+- **Animation System**: Smooth slide-out animations with ease-out quadratic curves for enhanced user experience
 
 ### Real-time Updates
 - **Track Change Detection**: Automatically updates tooltips, control panel, and popup notifications when songs change
@@ -59,6 +99,7 @@ A foobar2000 component that provides comprehensive system tray functionality wit
 - **Metadata Integration**: Extracts artist and title from track metadata, with fallback to filename
 - **Album Art Processing**: Dynamically loads and processes album artwork with high-quality scaling
 - **Position Updates**: Real-time playback position display in control panel
+- **Shuffle/Repeat State Sync**: Synchronizes with foobar2000's playback order settings
 
 ## Files Structure
 
@@ -67,7 +108,8 @@ A foobar2000 component that provides comprehensive system tray functionality wit
 - `tray_manager.h/cpp` - Main tray functionality and window management
 - `control_panel.h/cpp` - Popup control panel with album art and playback controls
 - `popup_window.h/cpp` - Track change notification popup with slide animations
-- `preferences.h/cpp` - Settings page implementation with persistent storage
+- `preferences.h/cpp` - Settings page implementation with tabbed interface and persistent storage
+- `mainmenu_commands.cpp` - Toolbar button command registration
 - `stdafx.h/cpp` - Precompiled headers for faster compilation
 
 ### Resources
@@ -76,11 +118,14 @@ A foobar2000 component that provides comprehensive system tray functionality wit
 - `tray_icon.ico` - Custom tray icon (16x16 and 32x32 sizes)
 - `tray_icon.png` - Source icon image
 - `play_icon.ico`, `pause_icon.ico`, `previous_icon.ico`, `next_icon.ico` - Control button icons
+- `miniplayer_icon.ico` - MiniPlayer window icon
 
 ### Build System
 - `foo_traycontrols.vcxproj` - Visual Studio project file
 - `foo_traycontrols.def` - Export definitions
-- `build-simple-traycontrols-x64.bat` - Quick build script
+- `build-simple-traycontrols-x64.bat` - Quick build script for 64-bit
+- `build-simple-traycontrols-x86.bat` - Quick build script for 32-bit
+- `rebuild-all-v143-x64.bat` - Full rebuild script with v143 toolset
 
 ## Building
 
@@ -110,12 +155,26 @@ build-simple-traycontrols-x64.bat
 
 ### Basic Operation
 1. The tray icon appears automatically when the component loads
-2. Single-click the tray icon to show/hide the popup control panel
+2. Single-click the tray icon to show/hide the popup control panel (Docked mode)
 3. Right-click the tray icon for window controls (Show/Hide foobar2000, Exit)
-4. Scroll mouse wheel over the tray icon to adjust volume (always enabled)
+4. Scroll mouse wheel over the tray icon to adjust volume
 5. Hover over the icon to see current track information
-6. Control panel automatically hides after 7 seconds of inactivity (with gliding animation)
-7. Optional popup notifications appear on track changes (if enabled in preferences)
+6. Control panel automatically hides after 5 seconds of inactivity (Docked mode)
+
+### MiniPlayer Operation
+1. Drag the MiniPlayer window anywhere on screen
+2. Double-click artwork again to switch to Compact mode
+3. Left-click artwork to expand to full Expanded Artwork mode
+4. Click the collapse triangle (top-right) to return to previous mode
+5. Click the right edge of the panel to slide it to the side ("peek" mode)
+6. Click the peeking panel to slide it back
+
+### Toolbar Button
+1. Right-click the foobar2000 toolbar → Customize...
+2. Find "Tray Controls: Launch MiniPlayer" in the available buttons
+3. Icon available [here](https://github.com/jame25/foo_traycontrols/blob/main/miniplayer_icon.ico)
+4. Add it to your toolbar
+5. Click the button to toggle the MiniPlayer (or use View → Tray Controls → Launch MiniPlayer)
 
 ### Minimize to Tray
 1. Go to Preferences → Tools → Tray Controls
@@ -126,9 +185,22 @@ build-simple-traycontrols-x64.bat
 ### Popup Notifications
 1. Go to Preferences → Tools → Tray Controls
 2. Enable "Show popup notification on track change"
-3. Click Apply
-4. Popup notifications will appear at top-left corner when tracks change
-5. Each notification displays album art, track title, and artist information
+3. Configure popup position and duration
+4. Click Apply
+5. Popup notifications will appear when tracks change
+
+### Custom Fonts
+1. Go to Preferences → Tools → Tray Controls
+2. Switch to the "Fonts" tab
+3. Click "Choose..." next to any font setting to customize
+4. Use "Reset All" to restore default fonts
+
+## Requirements
+
+- **foobar2000**: Version 1.6+ (64-bit recommended)
+- **Windows**: 7 or later (Windows 10/11 recommended for rounded corners support)
+- **Build Tools**: Visual Studio 2022+ with v143 toolset and Windows 10/11 SDK
+- **Dependencies**: GDI+ (included with Windows), shlwapi.lib, dwmapi.lib
 
 ## Requirements
 
@@ -136,12 +208,6 @@ build-simple-traycontrols-x64.bat
 - **Windows**: 7 or later (Windows 10+ recommended)
 - **Build Tools**: Visual Studio 2022+ with v143 toolset and Windows 10/11 SDK
 - **Dependencies**: GDI+ (included with Windows), shlwapi.lib
-
-## Limitations
-
-- **"Minimize on Close" Not Supported**: Due to foobar2000 SDK limitations, intercepting the close button to minimize instead of exit is not reliably possible
-- **Timer-based Detection**: Uses polling for window state changes due to foobar2000's custom message handling
-- **Windows Only**: Component is designed specifically for Windows system tray
 
 ## Development Notes
 
