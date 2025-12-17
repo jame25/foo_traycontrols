@@ -4701,7 +4701,8 @@ void control_panel::draw_control_overlay(HDC hdc, int window_width, int window_h
         int alpha = (180 * m_overlay_opacity) / 100;
         
         Gdiplus::SolidBrush overlayBrush(Gdiplus::Color(alpha, 20, 20, 20));
-        Gdiplus::RectF overlayRect(0.0f, (float)(window_height - overlay_height), (float)window_width, (float)overlay_height);
+        // Start at -1 and extend extra pixels to eliminate sub-pixel gap at edges from anti-aliasing
+        Gdiplus::RectF overlayRect(-1.0f, (float)(window_height - overlay_height), (float)window_width + 2.0f, (float)overlay_height + 1.0f);
         graphics.FillRectangle(&overlayBrush, overlayRect);
         
         // Draw control buttons (Previous, Play/Pause, Next)
