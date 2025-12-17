@@ -22,6 +22,7 @@ const UINT IDM_NEXT = 1004;
 const UINT IDM_RESTORE = 1005;
 const UINT IDM_UPDATE_TOOLTIP = 1006;
 const UINT IDM_EXIT = 1007;
+const UINT IDM_TOGGLE_MINIPLAYER = 1008;
 
 // Static instance
 tray_manager* tray_manager::s_instance = nullptr;
@@ -512,7 +513,13 @@ void tray_manager::show_context_menu(int x, int y) {
     HMENU menu = CreatePopupMenu();
     if (!menu) return;
     
-    // Show appropriate menu item based on window visibility
+    // Show MiniPlayer toggle menu item
+    auto& panel = control_panel::get_instance();
+    bool miniplayer_visible = panel.get_control_window() && IsWindowVisible(panel.get_control_window()) &&
+                              (panel.is_undocked() || panel.is_artwork_expanded() || panel.is_compact_mode());
+    AppendMenu(menu, MF_STRING, IDM_TOGGLE_MINIPLAYER, miniplayer_visible ? L"Close MiniPlayer" : L"Open MiniPlayer");
+    
+    // Show appropriate menu item based on foobar2000 window visibility
     bool is_visible = IsWindowVisible(m_main_window);
     AppendMenu(menu, MF_STRING, IDM_RESTORE, is_visible ? L"Hide foobar2000" : L"Show foobar2000");
     AppendMenu(menu, MF_STRING, IDM_EXIT, L"Exit");
@@ -530,6 +537,22 @@ void tray_manager::show_context_menu(int x, int y) {
 
 void tray_manager::handle_menu_command(int cmd) {
     switch (cmd) {
+    case IDM_TOGGLE_MINIPLAYER:
+        {
+            // Toggle MiniPlayer visibility - actually close when visible
+            auto& panel = control_panel::get_instance();
+            bool miniplayer_visible = panel.get_control_window() && IsWindowVisible(panel.get_control_window()) &&
+                                      (panel.is_undocked() || panel.is_artwork_expanded() || panel.is_compact_mode());
+            if (miniplayer_visible) {
+                // Close the MiniPlayer (not slide-to-side)
+                panel.hide_and_remember_miniplayer();
+            } else {
+                // Open the MiniPlayer
+                panel.show_undocked_miniplayer();
+            }
+        }
+        break;
+        
     case IDM_RESTORE:
         // Toggle window visibility
         if (IsWindowVisible(m_main_window)) {
