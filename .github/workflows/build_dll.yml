@@ -3,10 +3,12 @@ name: Build Translation DLL
 on:
   push:
     branches: [ "main" ]
+    # Triggers on changes to source code or resource files
     paths:
       - '**/*.rc'
       - '**/*.cpp'
       - '**/*.h'
+      - '**/*.vcxproj'
   workflow_dispatch:
 
 jobs:
@@ -20,15 +22,15 @@ jobs:
     - name: Setup MSBuild
       uses: microsoft/setup-msbuild@v2
 
-    - name: Restore NuGet packages
-      run: nuget restore foo_traycontrols.sln
-
-    - name: Build Solution
-      # Builds the standard Release configuration
-      run: msbuild foo_traycontrols.sln /p:Configuration=Release /p:Platform=x64
+    - name: Build Project
+      # CHANGED: Points directly to the .vcxproj file
+      run: msbuild foo_traycontrols.vcxproj /p:Configuration=Release /p:Platform=x64
 
     - name: Upload DLL Artifact
       uses: actions/upload-artifact@v4
       with:
         name: foo_traycontrols_compiled
+        # Verify this output path. Sometimes building a single project 
+        # puts the output in "x64/Release" or just "Release".
         path: x64/Release/foo_traycontrols.dll
+        if-no-files-found: error
