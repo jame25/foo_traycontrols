@@ -1,0 +1,1 @@
+E:\foo_traycontrols\lib\foobar2000_SDK\foobar2000\foobar2000_component_client\Release\foobar2000_component_client.lib
