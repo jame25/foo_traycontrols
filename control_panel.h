@@ -158,6 +158,18 @@ private:
     HFONT m_artist_font;
     HFONT m_track_font;
     
+    // Theme colors (dark/light mode support)
+    bool m_is_dark_mode;
+    COLORREF m_bg_color;          // Background color
+    COLORREF m_text_color;        // Primary text color (track title, time)
+    COLORREF m_text_dim_color;    // Dimmed text color (artist)
+    COLORREF m_placeholder_color; // Cover art placeholder
+    COLORREF m_progress_bg_color; // Progress bar background
+    COLORREF m_progress_fill_color; // Progress bar fill (accent)
+    COLORREF m_icon_color;        // Icon/button color
+    void update_theme_colors();   // Updates colors based on theme mode setting
+    bool detect_foobar_dark_mode(); // Detects foobar2000 main window theme
+
     // Vector icon drawing
     void draw_play_icon(HDC hdc, int x, int y, int size);
     void draw_pause_icon(HDC hdc, int x, int y, int size);
