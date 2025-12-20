@@ -1196,8 +1196,13 @@ void control_panel::draw_shuffle_icon(HDC hdc, int x, int y, int size) {
     if (m_shuffle_active) {
         color = Gdiplus::Color(255, GetRValue(m_icon_color), GetGValue(m_icon_color), GetBValue(m_icon_color));
     } else {
-        // Dimmed inactive color - use text_dim_color or a muted version
-        color = Gdiplus::Color(255, GetRValue(m_text_dim_color), GetGValue(m_text_dim_color), GetBValue(m_text_dim_color));
+        // Dimmed inactive color - use lighter color in light mode for better contrast
+        if (m_is_dark_mode) {
+            color = Gdiplus::Color(255, GetRValue(m_text_dim_color), GetGValue(m_text_dim_color), GetBValue(m_text_dim_color));
+        } else {
+            // Light mode: use much lighter gray so inactive icons are clearly faded
+            color = Gdiplus::Color(255, 200, 200, 200);
+        }
     }
     
     Gdiplus::Graphics graphics(hdc);
@@ -1266,8 +1271,13 @@ void control_panel::draw_repeat_icon(HDC hdc, int x, int y, int size) {
     if (is_active) {
         color = Gdiplus::Color(255, GetRValue(m_icon_color), GetGValue(m_icon_color), GetBValue(m_icon_color));
     } else {
-        // Dimmed inactive color - use text_dim_color or a muted version
-        color = Gdiplus::Color(255, GetRValue(m_text_dim_color), GetGValue(m_text_dim_color), GetBValue(m_text_dim_color));
+        // Dimmed inactive color - use lighter color in light mode for better contrast
+        if (m_is_dark_mode) {
+            color = Gdiplus::Color(255, GetRValue(m_text_dim_color), GetGValue(m_text_dim_color), GetBValue(m_text_dim_color));
+        } else {
+            // Light mode: use much lighter gray so inactive icons are clearly faded
+            color = Gdiplus::Color(255, 200, 200, 200);
+        }
     }
     
     Gdiplus::Graphics graphics(hdc);
@@ -4267,11 +4277,7 @@ void control_panel::paint_control_panel(HDC hdc) {
 
     // Draw Previous button
     int prev_x = center_x - button_spacing;
-    if (m_is_undocked && !m_is_artwork_expanded) {
-        draw_previous_icon_with_opacity(hdc, prev_x, button_y, icon_size, m_button_opacity);
-    } else {
-        draw_previous_icon(hdc, prev_x, button_y, icon_size);
-    }
+    draw_previous_icon(hdc, prev_x, button_y, icon_size);
 
     // Draw Play/Pause button (Larger)
     if (m_is_undocked && !m_is_artwork_expanded) {
@@ -4290,11 +4296,7 @@ void control_panel::paint_control_panel(HDC hdc) {
 
     // Draw Next button
     int next_x = center_x + button_spacing;
-    if (m_is_undocked && !m_is_artwork_expanded) {
-        draw_next_icon_with_opacity(hdc, next_x, button_y, icon_size, m_button_opacity);
-    } else {
-        draw_next_icon(hdc, next_x, button_y, icon_size);
-    }
+    draw_next_icon(hdc, next_x, button_y, icon_size);
     
     // Draw Shuffle and Repeat ONLY in undocked mode
     if (m_is_undocked) {
