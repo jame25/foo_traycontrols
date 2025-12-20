@@ -82,6 +82,12 @@
 #define IDC_THEME_MODE_LABEL         271
 #define IDC_THEME_MODE_COMBO         272
 
+// Timer font controls (shared across Docked, Undocked, Compact modes)
+#define IDC_TIMER_TITLE              280
+#define IDC_TIMER_FONT_LABEL         281
+#define IDC_TIMER_FONT_DISPLAY       282
+#define IDC_TIMER_FONT_SELECT        283
+
 
 // Keep old IDs for backward compatibility (mapped to docked)
 #define IDC_CP_ARTIST_FONT_LABEL         IDC_DOCKED_ARTIST_LABEL
