@@ -410,14 +410,36 @@ void control_panel::show_miniplayer_at_saved_position() {
 }
 
 void control_panel::show_undocked_miniplayer() {
+    // If the docked panel is currently animating (closing), wait for animation to complete
+    // This prevents the animation from being interrupted when user opens MiniPlayer via tray menu
+    if (m_animating && m_closing) {
+        // Let the animation complete - do nothing and return
+        // The user will need to click again after the animation finishes
+        return;
+    }
+    
     // If MiniPlayer is slid-to-side (peeking), slide it back out
     if (m_visible && m_is_slid_to_side) {
         slide_back_from_side();
         return;
     }
     
-    // If MiniPlayer is fully visible, either slide to side or hide
-    if (m_visible) {
+    // If in Docked mode (visible but not undocked/expanded/compact), close it first and proceed
+    // This allows the MiniPlayer to open when clicking "Launch MiniPlayer" while docked popup is shown
+    if (m_visible && !m_is_undocked && !m_is_artwork_expanded && !m_is_compact_mode) {
+        // Kill all timers and hide immediately - don't animate since we're switching modes
+        KillTimer(m_control_window, UPDATE_TIMER_ID);
+        KillTimer(m_control_window, UPDATE_TIMER_ID + 1);
+        KillTimer(m_control_window, TIMEOUT_TIMER_ID);
+        KillTimer(m_control_window, ANIMATION_TIMER_ID);
+        m_animating = false;
+        m_closing = false;
+        ShowWindow(m_control_window, SW_HIDE);
+        m_visible = false;
+        // Don't return - proceed to show MiniPlayer below
+    }
+    // If MiniPlayer (Undocked/Expanded/Compact) is fully visible, either slide to side or hide
+    else if (m_visible) {
         // If "Always Slide-to-Side" is enabled, slide instead of hiding
         if (get_always_slide_to_side()) {
             slide_to_side();
