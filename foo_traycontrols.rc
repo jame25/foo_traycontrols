@@ -44,6 +44,9 @@ BEGIN
 
     // Window Style Options
     CONTROL         "Use rounded corners (Windows 11 only)", IDC_USE_ROUNDED_CORNERS, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 15, 197, 200, 10
+    LTEXT           "Theme Mode:", IDC_THEME_MODE_LABEL, 15, 215, 50, 10
+    COMBOBOX        IDC_THEME_MODE_COMBO, 70, 213, 40, 100, CBS_DROPDOWNLIST | CBS_HASSTRINGS | WS_VSCROLL | WS_TABSTOP
+
 
     // === Fonts Tab Controls (hidden initially) ===
     
