@@ -157,6 +157,7 @@ private:
     // Custom fonts
     HFONT m_artist_font;
     HFONT m_track_font;
+    HFONT m_timer_font;
     
     // Theme colors (dark/light mode support)
     bool m_is_dark_mode;
