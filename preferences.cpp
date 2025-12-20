@@ -16,7 +16,7 @@ static cfg_int cfg_disable_miniplayer(GUID{0x12345686, 0x9abc, 0xdef0, {0x12, 0x
 static cfg_int cfg_popup_duration(GUID{0x12345687, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 3000); // Default 3 seconds (3000ms)
 static cfg_int cfg_disable_slide_to_side(GUID{0x12345688, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0);
 static cfg_int cfg_slide_duration(GUID{0x12345689, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 200); // Default 200ms
-static cfg_int cfg_always_slide_to_side(GUID{0x1234568A, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0); // Default OFF
+static cfg_int cfg_always_slide_to_side(GUID{0x1234568A, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 1); // Default ON
 static cfg_int cfg_use_rounded_corners(GUID{0x12345690, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 1); // Default ON (Win11 style)
 static cfg_int cfg_theme_mode(GUID{0x12345691, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0); // 0=Auto, 1=Force Dark, 2=Force Light
 
@@ -373,7 +373,22 @@ void tray_preferences::apply() {
 }
 
 void tray_preferences::reset() {
+    // Reset General tab settings
     reset_settings();
+    
+    // Reset Fonts tab settings (all modes)
+    cfg_cp_use_custom_fonts = 0;      // Docked mode
+    cfg_undocked_use_custom_fonts = 0; // Undocked mode
+    cfg_expanded_use_custom_fonts = 0; // Expanded mode
+    cfg_compact_use_custom_fonts = 0;  // Compact mode
+    cfg_use_custom_fonts = 0;          // Popup notification
+    
+    // Update font displays to show defaults
+    update_font_displays();
+    
+    // Notify control panel to reload fonts
+    control_panel::get_instance().on_settings_changed();
+    
     m_has_changes = false;
     m_callback->on_state_changed();
 }
@@ -651,14 +666,33 @@ void tray_preferences::apply_settings() {
 
 void tray_preferences::reset_settings() {
     if (m_hwnd) {
-        CheckDlgButton(m_hwnd, IDC_ALWAYS_MINIMIZE_TO_TRAY, cfg_always_minimize_to_tray != 0 ? BST_CHECKED : BST_UNCHECKED);
-        CheckDlgButton(m_hwnd, IDC_SHOW_POPUP_NOTIFICATION, cfg_show_popup_notification != 0 ? BST_CHECKED : BST_UNCHECKED);
-        CheckDlgButton(m_hwnd, IDC_DISABLE_MINIPLAYER, cfg_disable_miniplayer != 0 ? BST_CHECKED : BST_UNCHECKED);
-        CheckDlgButton(m_hwnd, IDC_DISABLE_SLIDE_TO_SIDE, cfg_disable_slide_to_side != 0 ? BST_CHECKED : BST_UNCHECKED);
-        CheckDlgButton(m_hwnd, IDC_ALWAYS_SLIDE_TO_SIDE, cfg_always_slide_to_side != 0 ? BST_CHECKED : BST_UNCHECKED);
-        CheckDlgButton(m_hwnd, IDC_USE_ROUNDED_CORNERS, cfg_use_rounded_corners != 0 ? BST_CHECKED : BST_UNCHECKED);
-        SendMessage(GetDlgItem(m_hwnd, IDC_POPUP_POSITION_COMBO), CB_SETCURSEL, cfg_popup_position, 0);
-        SendMessage(GetDlgItem(m_hwnd, IDC_THEME_MODE_COMBO), CB_SETCURSEL, cfg_theme_mode, 0);
+        // Reset config variables to factory defaults
+        cfg_always_minimize_to_tray = 0;  // Default: OFF
+        cfg_show_popup_notification = 1;  // Default: ON
+        cfg_popup_position = 0;           // Default: Top Left
+        cfg_disable_miniplayer = 0;       // Default: OFF
+        cfg_popup_duration = 3000;        // Default: 3 seconds
+        cfg_disable_slide_to_side = 0;    // Default: OFF
+        cfg_slide_duration = 200;         // Default: 200ms (Fast)
+        cfg_always_slide_to_side = 1;     // Default: ON
+        cfg_use_rounded_corners = 1;      // Default: ON
+        cfg_theme_mode = 0;               // Default: Auto
+        
+        // Update UI controls to reflect defaults
+        CheckDlgButton(m_hwnd, IDC_ALWAYS_MINIMIZE_TO_TRAY, BST_UNCHECKED);
+        CheckDlgButton(m_hwnd, IDC_SHOW_POPUP_NOTIFICATION, BST_CHECKED);
+        CheckDlgButton(m_hwnd, IDC_DISABLE_MINIPLAYER, BST_UNCHECKED);
+        CheckDlgButton(m_hwnd, IDC_DISABLE_SLIDE_TO_SIDE, BST_UNCHECKED);
+        CheckDlgButton(m_hwnd, IDC_ALWAYS_SLIDE_TO_SIDE, BST_CHECKED);
+        CheckDlgButton(m_hwnd, IDC_USE_ROUNDED_CORNERS, BST_CHECKED);
+        SendMessage(GetDlgItem(m_hwnd, IDC_POPUP_POSITION_COMBO), CB_SETCURSEL, 0, 0);        // Top Left
+        SendMessage(GetDlgItem(m_hwnd, IDC_POPUP_DURATION_COMBO), CB_SETCURSEL, 2, 0);        // 3 seconds (index 2)
+        SendMessage(GetDlgItem(m_hwnd, IDC_SLIDE_DURATION_COMBO), CB_SETCURSEL, 1, 0);        // Fast 200ms (index 1)
+        SendMessage(GetDlgItem(m_hwnd, IDC_THEME_MODE_COMBO), CB_SETCURSEL, 0, 0);            // Auto
+        
+        // Notify components of settings change
+        tray_manager::get_instance().on_settings_changed();
+        control_panel::get_instance().on_settings_changed();
         
         update_font_displays();
     }
