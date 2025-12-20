@@ -539,15 +539,15 @@ void tray_manager::handle_menu_command(int cmd) {
     switch (cmd) {
     case IDM_TOGGLE_MINIPLAYER:
         {
-            // Toggle MiniPlayer visibility - actually close when visible
+            // Toggle MiniPlayer visibility
             auto& panel = control_panel::get_instance();
             bool miniplayer_visible = panel.get_control_window() && IsWindowVisible(panel.get_control_window()) &&
                                       (panel.is_undocked() || panel.is_artwork_expanded() || panel.is_compact_mode());
             if (miniplayer_visible) {
-                // Close the MiniPlayer (not slide-to-side)
+                // Close the MiniPlayer and save state for later restoration via menu
                 panel.hide_and_remember_miniplayer();
             } else {
-                // Open the MiniPlayer
+                // Open the MiniPlayer (restores saved position/mode if available)
                 panel.show_undocked_miniplayer();
             }
         }
@@ -685,14 +685,12 @@ LRESULT CALLBACK tray_manager::tray_window_proc(HWND hwnd, UINT msg, WPARAM wpar
                             // Miniplayer (any non-docked mode) is visible - hide it and remember state/position
                             panel.hide_and_remember_miniplayer();
                         }
-                    } else if (panel.has_saved_miniplayer_state()) {
-                        // Was in a miniplayer mode before - restore it at saved position
-                        panel.show_miniplayer_at_saved_position();
                     } else if (is_visible) {
                         // Docked panel is visible - hide it
                         panel.hide_control_panel_immediate();
                     } else {
-                        // Nothing visible, no saved state - show docked panel
+                        // Nothing visible - always show docked panel (ignore saved MiniPlayer state)
+                        // User can restore MiniPlayer via the tray menu "Open MiniPlayer" option
                         panel.show_control_panel_simple();
                     }
                 }
