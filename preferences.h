@@ -13,6 +13,8 @@ bool get_disable_slide_to_side();
 int get_slide_duration(); // Returns slide duration in milliseconds
 bool get_use_rounded_corners(); // Windows 11 style rounded corners
 bool get_always_slide_to_side(); // Always slide instead of close
+int get_theme_mode(); // 0=Auto, 1=Force Dark, 2=Force Light
+
 
 
 // Font configuration functions
