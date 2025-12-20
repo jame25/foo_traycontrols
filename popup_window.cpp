@@ -669,13 +669,13 @@ void popup_window::draw_track_info(HDC hdc, const RECT& client_rect) {
         artist_font = CreateFontIndirect(&artist_lf);
         title_font = CreateFontIndirect(&title_lf);
     } else {
-        // Default fonts matching Docked Control Panel defaults (13pt artist, 16pt track)
-        title_font = CreateFont(get_dpi_scaled_font_height(16), 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+        // Default fonts matching Docked Control Panel defaults (9pt artist, 11pt track)
+        title_font = CreateFont(get_dpi_scaled_font_height(11), 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
                                 DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                                DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
-        artist_font = CreateFont(get_dpi_scaled_font_height(13), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                                DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Microsoft YaHei");
+        artist_font = CreateFont(get_dpi_scaled_font_height(9), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
                                  DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                                 DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+                                 DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Microsoft YaHei");
     }
     
     // Draw title first (top line)
