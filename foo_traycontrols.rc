@@ -86,7 +86,4 @@ BEGIN
     EDITTEXT        IDC_COMPACT_TRACK_DISPLAY, 75, 231, 130, 14, ES_READONLY | WS_BORDER
     PUSHBUTTON      "Select...", IDC_COMPACT_TRACK_SELECT, 215, 230, 50, 16
 
-    // Reset All Fonts button (bottom right)
-    PUSHBUTTON      "Reset All", IDC_RESET_ALL_FONTS, 215, 260, 50, 16
-
 END
