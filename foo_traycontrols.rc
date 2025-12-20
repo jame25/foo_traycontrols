@@ -86,4 +86,10 @@ BEGIN
     EDITTEXT        IDC_COMPACT_TRACK_DISPLAY, 75, 231, 130, 14, ES_READONLY | WS_BORDER
     PUSHBUTTON      "Select...", IDC_COMPACT_TRACK_SELECT, 215, 230, 50, 16
 
+    // Timer Display section (shared across Docked, Undocked, Compact)
+    LTEXT           "Timer Display", IDC_TIMER_TITLE, 15, 255, 120, 10
+    LTEXT           "Timer Font:", IDC_TIMER_FONT_LABEL, 25, 270, 45, 10
+    EDITTEXT        IDC_TIMER_FONT_DISPLAY, 75, 268, 130, 14, ES_READONLY | WS_BORDER
+    PUSHBUTTON      "Select...", IDC_TIMER_FONT_SELECT, 215, 267, 50, 16
+
 END
