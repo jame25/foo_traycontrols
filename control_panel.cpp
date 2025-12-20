@@ -1800,8 +1800,8 @@ void control_panel::load_fonts() {
             m_artist_font = CreateFontIndirect(&artist_lf);
             m_track_font = CreateFontIndirect(&track_lf);
         } else {
-            LOGFONT artist_lf = get_default_font(true, 11);
-            LOGFONT track_lf = get_default_font(false, 14);
+            LOGFONT artist_lf = get_default_font(true, 9);
+            LOGFONT track_lf = get_default_font(false, 11);
             m_artist_font = CreateFontIndirect(&artist_lf);
             m_track_font = CreateFontIndirect(&track_lf);
         }
@@ -1813,8 +1813,8 @@ void control_panel::load_fonts() {
             m_artist_font = CreateFontIndirect(&artist_lf);
             m_track_font = CreateFontIndirect(&track_lf);
         } else {
-            LOGFONT artist_lf = get_default_font(true, 11);
-            LOGFONT track_lf = get_default_font(false, 14);
+            LOGFONT artist_lf = get_default_font(true, 9);
+            LOGFONT track_lf = get_default_font(false, 11);
             m_artist_font = CreateFontIndirect(&artist_lf);
             m_track_font = CreateFontIndirect(&track_lf);
         }
@@ -1826,8 +1826,8 @@ void control_panel::load_fonts() {
             m_artist_font = CreateFontIndirect(&artist_lf);
             m_track_font = CreateFontIndirect(&track_lf);
         } else {
-            LOGFONT artist_lf = get_default_font(true, 11);
-            LOGFONT track_lf = get_default_font(false, 14);
+            LOGFONT artist_lf = get_default_font(true, 9);
+            LOGFONT track_lf = get_default_font(false, 11);
             m_artist_font = CreateFontIndirect(&artist_lf);
             m_track_font = CreateFontIndirect(&track_lf);
         }
@@ -1839,8 +1839,8 @@ void control_panel::load_fonts() {
             m_artist_font = CreateFontIndirect(&artist_lf);
             m_track_font = CreateFontIndirect(&track_lf);
         } else {
-            LOGFONT artist_lf = get_default_font(true, 13);
-            LOGFONT track_lf = get_default_font(false, 16);
+            LOGFONT artist_lf = get_default_font(true, 9);
+            LOGFONT track_lf = get_default_font(false, 11);
             m_artist_font = CreateFontIndirect(&artist_lf);
             m_track_font = CreateFontIndirect(&track_lf);
         }
