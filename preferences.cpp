@@ -581,12 +581,6 @@ INT_PTR CALLBACK tray_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, LP
                 p_this->select_font_for_mode(3, false); // mode 3 = compact, track
             }
             break;
-            
-        case IDC_RESET_ALL_FONTS:
-            if (HIWORD(wp) == BN_CLICKED) {
-                p_this->reset_all_fonts_to_default();
-            }
-            break;
         }
         break;
         
@@ -1087,9 +1081,7 @@ void tray_preferences::switch_tab(int tab) {
         IDC_COMPACT_ARTIST_SELECT,
         IDC_COMPACT_TRACK_LABEL,
         IDC_COMPACT_TRACK_DISPLAY,
-        IDC_COMPACT_TRACK_SELECT,
-        // Reset button
-        IDC_RESET_ALL_FONTS
+        IDC_COMPACT_TRACK_SELECT
     };
     
     // Show/hide General controls
