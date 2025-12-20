@@ -658,27 +658,24 @@ void popup_window::draw_track_info(HDC hdc, const RECT& client_rect) {
     SetTextColor(hdc, RGB(255, 255, 255));
     SetBkMode(hdc, TRANSPARENT);
     
-    // Use custom fonts if available, otherwise fallback to defaults
+    // Use Docked Control Panel fonts for consistency between popup and docked panel
     HFONT artist_font, title_font;
     
-    if (get_use_custom_fonts()) {
-        LOGFONT artist_lf = get_artist_font();
-        LOGFONT title_lf = get_track_font();
-        
-        // Scale fonts down slightly for popup (popup is smaller than control panel)
-        artist_lf.lfHeight = (artist_lf.lfHeight * 3) / 4;  // 75% of original size
-        title_lf.lfHeight = (title_lf.lfHeight * 3) / 4;    // 75% of original size
+    if (get_cp_use_custom_fonts()) {
+        // Use Docked Control Panel custom fonts
+        LOGFONT artist_lf = get_cp_artist_font();
+        LOGFONT title_lf = get_cp_track_font();
         
         artist_font = CreateFontIndirect(&artist_lf);
         title_font = CreateFontIndirect(&title_lf);
     } else {
-        // Default fonts - title should be larger and bold, artist regular weight
-        title_font = CreateFont(get_dpi_scaled_font_height(21), 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+        // Default fonts matching Docked Control Panel defaults (13pt artist, 16pt track)
+        title_font = CreateFont(get_dpi_scaled_font_height(16), 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
                                 DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                                DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Microsoft YaHei");
-        artist_font = CreateFont(get_dpi_scaled_font_height(20), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                                DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+        artist_font = CreateFont(get_dpi_scaled_font_height(13), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
                                  DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                                 DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Microsoft YaHei");
+                                 DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
     }
     
     // Draw title first (top line)
