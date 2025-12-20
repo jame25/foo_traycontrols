@@ -156,6 +156,21 @@ static cfg_struct_t<LOGFONT> cfg_compact_track_font(GUID{0x123456C1, 0x9abc, 0xd
 }());
 static cfg_int cfg_compact_use_custom_fonts(GUID{0x123456C2, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0);
 
+// Timer font configuration (shared across Docked, Undocked, Compact modes)
+static cfg_struct_t<LOGFONT> cfg_timer_font(GUID{0x123456D0, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, []() {
+    LOGFONT lf = {};
+    lf.lfHeight = -12; // 9pt at 96 DPI
+    lf.lfWeight = FW_NORMAL;
+    lf.lfCharSet = DEFAULT_CHARSET;
+    lf.lfOutPrecision = OUT_DEFAULT_PRECIS;
+    lf.lfClipPrecision = CLIP_DEFAULT_PRECIS;
+    lf.lfQuality = DEFAULT_QUALITY;
+    lf.lfPitchAndFamily = DEFAULT_PITCH | FF_DONTCARE;
+    wcscpy_s(lf.lfFaceName, L"Microsoft YaHei");
+    return lf;
+}());
+static cfg_int cfg_timer_use_custom_font(GUID{0x123456D1, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0);
+
 // Access functions for the configuration
 bool get_always_minimize_to_tray() {
     return cfg_always_minimize_to_tray != 0;
@@ -311,6 +326,15 @@ LOGFONT get_compact_track_font() {
     return cfg_compact_track_font.get_value();
 }
 
+// Timer font accessor functions
+bool get_timer_use_custom_font() {
+    return cfg_timer_use_custom_font != 0;
+}
+
+LOGFONT get_timer_font() {
+    return cfg_timer_font.get_value();
+}
+
 // Helper function to get default LOGFONT
 LOGFONT get_default_font(bool is_artist, int size) {
     LOGFONT lf = {};
@@ -382,6 +406,7 @@ void tray_preferences::reset() {
     cfg_expanded_use_custom_fonts = 0; // Expanded mode
     cfg_compact_use_custom_fonts = 0;  // Compact mode
     cfg_use_custom_fonts = 0;          // Popup notification
+    cfg_timer_use_custom_font = 0;     // Timer font
     
     // Update font displays to show defaults
     update_font_displays();
@@ -581,6 +606,12 @@ INT_PTR CALLBACK tray_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, LP
                 p_this->select_font_for_mode(3, false); // mode 3 = compact, track
             }
             break;
+            
+        case IDC_TIMER_FONT_SELECT:
+            if (HIWORD(wp) == BN_CLICKED) {
+                p_this->select_timer_font();
+            }
+            break;
         }
         break;
         
@@ -769,6 +800,15 @@ void tray_preferences::update_font_displays() {
         uSetDlgItemText(m_hwnd, IDC_COMPACT_ARTIST_DISPLAY, "Microsoft YaHei, 9pt (Default)");
         uSetDlgItemText(m_hwnd, IDC_COMPACT_TRACK_DISPLAY, "Microsoft YaHei, 11pt, Bold (Default)");
     }
+    
+    // Update Timer font display
+    if (cfg_timer_use_custom_font) {
+        LOGFONT timer_lf = cfg_timer_font.get_value();
+        pfc::string8 timer_desc = format_font_name(timer_lf);
+        uSetDlgItemText(m_hwnd, IDC_TIMER_FONT_DISPLAY, timer_desc);
+    } else {
+        uSetDlgItemText(m_hwnd, IDC_TIMER_FONT_DISPLAY, "Microsoft YaHei, 9pt (Default)");
+    }
 }
 
 void tray_preferences::select_artist_font() {
@@ -945,6 +985,34 @@ void tray_preferences::select_font_for_mode(int mode, bool is_artist) {
     }
 }
 
+void tray_preferences::select_timer_font() {
+    CHOOSEFONT cf = {};
+    LOGFONT lf;
+    
+    // Get current timer font or default
+    if (cfg_timer_use_custom_font) {
+        lf = cfg_timer_font.get_value();
+    } else {
+        lf = get_default_font(true, 9); // 9pt like artist font
+    }
+    
+    cf.lStructSize = sizeof(CHOOSEFONT);
+    cf.hwndOwner = m_hwnd;
+    cf.lpLogFont = &lf;
+    cf.Flags = CF_INITTOLOGFONTSTRUCT | CF_SCREENFONTS;
+    
+    if (ChooseFont(&cf)) {
+        cfg_timer_font = lf;
+        cfg_timer_use_custom_font = 1;
+        
+        update_font_displays();
+        on_changed();
+        
+        // Notify control panel to reload fonts
+        control_panel::get_instance().on_settings_changed();
+    }
+}
+
 void tray_preferences::reset_all_fonts_to_default() {
     // Reset Docked mode fonts
     cfg_cp_use_custom_fonts = 0;
@@ -1081,7 +1149,12 @@ void tray_preferences::switch_tab(int tab) {
         IDC_COMPACT_ARTIST_SELECT,
         IDC_COMPACT_TRACK_LABEL,
         IDC_COMPACT_TRACK_DISPLAY,
-        IDC_COMPACT_TRACK_SELECT
+        IDC_COMPACT_TRACK_SELECT,
+        // Timer (shared)
+        IDC_TIMER_TITLE,
+        IDC_TIMER_FONT_LABEL,
+        IDC_TIMER_FONT_DISPLAY,
+        IDC_TIMER_FONT_SELECT
     };
     
     // Show/hide General controls
