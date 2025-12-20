@@ -4690,11 +4690,11 @@ void control_panel::paint_compact_mode(HDC hdc, const RECT& rect) {
         wchar_t time_str[16];
         swprintf_s(time_str, 16, L"%d:%02d", elapsed_min, elapsed_sec);
         
-        // Use the same font as track title for consistency
-        HFONT time_font = m_track_font;
+        // Use the same font as artist for timer display
+        HFONT time_font = m_artist_font;
         bool need_delete_time_font = false;
         if (!time_font) {
-            time_font = CreateFont(get_dpi_scaled_font_height(15), 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+            time_font = CreateFont(get_dpi_scaled_font_height(9), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
                                    DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                                    DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Microsoft YaHei");
             need_delete_time_font = true;
@@ -4736,13 +4736,13 @@ void control_panel::draw_time_info(HDC hdc, const RECT& client_rect) {
     pfc::string8 time_str;
     time_str << pfc::format_int(current_min, 2) << ":" << pfc::format_int(current_sec, 2);
     
-    // Use the same font as track title for consistency
-    HFONT time_font = m_track_font;
+    // Use the same font as artist for timer display
+    HFONT time_font = m_artist_font;
     bool need_delete_time_font = false;
     if (!time_font) {
-        time_font = CreateFont(get_dpi_scaled_font_height(14), 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+        time_font = CreateFont(get_dpi_scaled_font_height(9), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
                                DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                               DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+                               DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Microsoft YaHei");
         need_delete_time_font = true;
     }
     HFONT old_font = (HFONT)SelectObject(hdc, time_font);
