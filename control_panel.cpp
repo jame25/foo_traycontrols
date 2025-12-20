@@ -1845,6 +1845,15 @@ void control_panel::load_fonts() {
             m_track_font = CreateFontIndirect(&track_lf);
         }
     }
+    
+    // Load timer font (shared across all modes except Expanded)
+    if (get_timer_use_custom_font()) {
+        LOGFONT timer_lf = get_timer_font();
+        m_timer_font = CreateFontIndirect(&timer_lf);
+    } else {
+        LOGFONT timer_lf = get_default_font(true, 9); // 9pt like artist
+        m_timer_font = CreateFontIndirect(&timer_lf);
+    }
 }
 
 void control_panel::cleanup_fonts() {
@@ -1855,6 +1864,10 @@ void control_panel::cleanup_fonts() {
     if (m_track_font) {
         DeleteObject(m_track_font);
         m_track_font = nullptr;
+    }
+    if (m_timer_font) {
+        DeleteObject(m_timer_font);
+        m_timer_font = nullptr;
     }
 }
 
@@ -4690,24 +4703,14 @@ void control_panel::paint_compact_mode(HDC hdc, const RECT& rect) {
         wchar_t time_str[16];
         swprintf_s(time_str, 16, L"%d:%02d", elapsed_min, elapsed_sec);
         
-        // Use the same font as artist for timer display
-        HFONT time_font = m_artist_font;
-        bool need_delete_time_font = false;
-        if (!time_font) {
-            time_font = CreateFont(get_dpi_scaled_font_height(9), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-                                   DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                                   DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Microsoft YaHei");
-            need_delete_time_font = true;
-        }
-        SelectObject(hdc, time_font);
-        SetTextColor(hdc, m_text_color); // Match track title color
+        // Use the configurable timer font
+        HFONT old_font = (HFONT)SelectObject(hdc, m_timer_font);
+        SetTextColor(hdc, m_text_color); // Match artist color
         
         RECT time_rect = {progress_bar_left + progress_bar_width + 5, progress_bar_y - 10, window_width - margin, progress_bar_y + progress_bar_height + 6};
         DrawText(hdc, time_str, -1, &time_rect, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
         
-        if (need_delete_time_font) {
-            DeleteObject(time_font);
-        }
+        SelectObject(hdc, old_font);
     }
     
     // Draw compact control overlay if hovering over text area
@@ -4736,25 +4739,14 @@ void control_panel::draw_time_info(HDC hdc, const RECT& client_rect) {
     pfc::string8 time_str;
     time_str << pfc::format_int(current_min, 2) << ":" << pfc::format_int(current_sec, 2);
     
-    // Use the same font as artist for timer display
-    HFONT time_font = m_artist_font;
-    bool need_delete_time_font = false;
-    if (!time_font) {
-        time_font = CreateFont(get_dpi_scaled_font_height(9), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-                               DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                               DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Microsoft YaHei");
-        need_delete_time_font = true;
-    }
-    HFONT old_font = (HFONT)SelectObject(hdc, time_font);
+    // Use the configurable timer font
+    HFONT old_font = (HFONT)SelectObject(hdc, m_timer_font);
     
     RECT time_rect = {client_rect.right - 60, 20, client_rect.right - 10, 45};
     pfc::stringcvt::string_wide_from_utf8 wide_time(time_str.c_str());
     DrawText(hdc, wide_time.get_ptr(), -1, &time_rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
     
     SelectObject(hdc, old_font);
-    if (need_delete_time_font) {
-        DeleteObject(time_font);
-    }
 }
 
 void control_panel::draw_track_info_overlay(HDC hdc, int window_width, int window_height) {
