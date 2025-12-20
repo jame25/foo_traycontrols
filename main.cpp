@@ -125,7 +125,41 @@ public:
     unsigned get_flags() override { return 0; }
 };
 
+// Theme change callback to update control panel when dark mode is toggled
+// This inherits from ui_config_callback_impl which auto-registers/unregisters
+class theme_change_callback : public ui_config_callback_impl {
+public:
+    void ui_colors_changed() override {
+        // Immediately update theme colors when dark mode is toggled in foobar2000
+        control_panel::get_instance().on_settings_changed();
+        // Also update popup window if it's visible
+        popup_window::get_instance().on_settings_changed();
+    }
+    
+    void ui_fonts_changed() override {
+        // Also handle font changes (just in case)
+        control_panel::get_instance().on_settings_changed();
+    }
+};
+
+// Theme callback instance - must be instantiated after services are available
+static std::unique_ptr<theme_change_callback> g_theme_callback;
+
+// Theme callback initializer - creates the callback after services are available
+class theme_callback_init : public initquit {
+public:
+    void on_init() override {
+        // Create theme change callback
+        g_theme_callback = std::make_unique<theme_change_callback>();
+    }
+    
+    void on_quit() override {
+        // Destroy theme change callback
+        g_theme_callback.reset();
+    }
+};
+
 // Service factory registrations
 static initquit_factory_t<tray_init> g_tray_init_factory;
+static initquit_factory_t<theme_callback_init> g_theme_callback_init_factory;
 static play_callback_static_factory_t<tray_play_callback> g_tray_play_callback_factory;
-
