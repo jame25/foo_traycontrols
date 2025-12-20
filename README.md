@@ -38,6 +38,12 @@ The control panel adapts to your needs with four distinct display modes:
    - Hover overlays with smooth fade animations for controls
    - Respects album art aspect ratio
    - **Collapse Triangle**: Small white triangle in top-right corner to restore Undocked mode
+
+### Dark / Light Mode Support
+- **Auto-detect**: Automatically follows foobar2000's dark mode setting (Default UI)
+- **Force Dark/Light**: Override with forced dark or light mode via preferences
+- **Real-time Updates**: Theme changes apply immediately
+- **Applies to All Modes**: Docked, Undocked, Expanded, Compact, and Popup notifications
      
 ### Slide-to-Side Panel (Panel Peek)
 - **Panel Peek**: Single-click on the edge of the panel (Expanded, Undocked, or Compact modes) slides the panel to the side of the screen, leaving 70px visible ("peeking")
@@ -70,6 +76,7 @@ Accessible via foobar2000's Preferences → Tools → Tray Controls
 - **Always Slide-to-Side**: MiniPlayer slides instead of closing when toggle button is clicked
 - **Slide Duration**: Configure the animation speed for slide animations
 - **Use Rounded Corners**: Toggle Windows 11 style rounded corners on/off
+- **Theme Mode**: Choose Auto (follows foobar2000), Force Dark, or Force Light mode
 
 #### Fonts Tab
 Mode-specific font customization for all display modes:
@@ -198,17 +205,10 @@ build-simple-traycontrols-x64.bat
 
 ## Requirements
 
-- **foobar2000**: Version 1.6+ (64-bit recommended)
+- **foobar2000**: Version 2.0+ (64-bit recommended for dark mode support)
 - **Windows**: 7 or later (Windows 10/11 recommended for rounded corners support)
 - **Build Tools**: Visual Studio 2022+ with v143 toolset and Windows 10/11 SDK
 - **Dependencies**: GDI+ (included with Windows), shlwapi.lib, dwmapi.lib
-
-## Requirements
-
-- **foobar2000**: Version 1.6+ (64-bit)
-- **Windows**: 7 or later (Windows 10+ recommended)
-- **Build Tools**: Visual Studio 2022+ with v143 toolset and Windows 10/11 SDK
-- **Dependencies**: GDI+ (included with Windows), shlwapi.lib
 
 ## Development Notes
 
