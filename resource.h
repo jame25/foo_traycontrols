@@ -78,6 +78,11 @@
 // Window corner style option
 #define IDC_USE_ROUNDED_CORNERS      270
 
+// Theme mode option (Dark/Light/Auto)
+#define IDC_THEME_MODE_LABEL         271
+#define IDC_THEME_MODE_COMBO         272
+
+
 // Keep old IDs for backward compatibility (mapped to docked)
 #define IDC_CP_ARTIST_FONT_LABEL         IDC_DOCKED_ARTIST_LABEL
 #define IDC_CP_ARTIST_FONT_DISPLAY       IDC_DOCKED_ARTIST_DISPLAY
