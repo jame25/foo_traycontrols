@@ -49,6 +49,10 @@ bool get_compact_use_custom_fonts();
 LOGFONT get_compact_artist_font();
 LOGFONT get_compact_track_font();
 
+// Timer font configuration functions (shared across modes)
+bool get_timer_use_custom_font();
+LOGFONT get_timer_font();
+
 // Preferences page instance - the actual dialog
 class tray_preferences : public preferences_page_instance {
 private:
@@ -88,6 +92,7 @@ private:
     void init_tab_control();
     void switch_tab(int tab);
     void select_font_for_mode(int mode, bool is_artist); // mode: 1=undocked, 2=expanded, 3=compact
+    void select_timer_font();
     void reset_all_fonts_to_default();
 };
 
