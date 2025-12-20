@@ -10,6 +10,16 @@ popup_window* popup_window::s_instance = nullptr;
 // External declaration from main.cpp
 extern HINSTANCE g_hIns;
 
+// Helper function to get DPI-scaled font height from point size
+// Returns negative value as required by CreateFont for character height
+static int get_dpi_scaled_font_height(int point_size) {
+    HDC hdc = GetDC(nullptr);
+    int dpi = GetDeviceCaps(hdc, LOGPIXELSY);
+    int height = -MulDiv(point_size, dpi, 72);  // Points to pixels: size * dpi / 72
+    ReleaseDC(nullptr, hdc);
+    return height;
+}
+
 //=============================================================================
 // popup_window - Singleton popup notification window
 //=============================================================================
@@ -535,7 +545,7 @@ void popup_window::paint_popup(HDC hdc) {
                 // Fallback to text if icon can't be loaded
                 SetTextColor(hdc, RGB(200, 200, 200));
                 SetBkMode(hdc, TRANSPARENT);
-                HFONT symbol_font = CreateFont(24, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                HFONT symbol_font = CreateFont(get_dpi_scaled_font_height(24), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
                                                DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                                                DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI Symbol");
                 HFONT old_symbol_font = (HFONT)SelectObject(hdc, symbol_font);
@@ -549,7 +559,7 @@ void popup_window::paint_popup(HDC hdc) {
             // Draw musical note symbol for local files
             SetTextColor(hdc, RGB(200, 200, 200));
             SetBkMode(hdc, TRANSPARENT);
-            HFONT symbol_font = CreateFont(24, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+            HFONT symbol_font = CreateFont(get_dpi_scaled_font_height(24), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
                                            DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                                            DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI Symbol");
             HFONT old_symbol_font = (HFONT)SelectObject(hdc, symbol_font);
@@ -663,10 +673,10 @@ void popup_window::draw_track_info(HDC hdc, const RECT& client_rect) {
         title_font = CreateFontIndirect(&title_lf);
     } else {
         // Default fonts - title should be larger and bold, artist regular weight
-        title_font = CreateFont(21, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+        title_font = CreateFont(get_dpi_scaled_font_height(21), 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
                                 DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                                 DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Microsoft YaHei");
-        artist_font = CreateFont(20, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+        artist_font = CreateFont(get_dpi_scaled_font_height(20), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
                                  DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                                  DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Microsoft YaHei");
     }
