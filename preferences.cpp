@@ -18,6 +18,7 @@ static cfg_int cfg_disable_slide_to_side(GUID{0x12345688, 0x9abc, 0xdef0, {0x12,
 static cfg_int cfg_slide_duration(GUID{0x12345689, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 200); // Default 200ms
 static cfg_int cfg_always_slide_to_side(GUID{0x1234568A, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0); // Default OFF
 static cfg_int cfg_use_rounded_corners(GUID{0x12345690, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 1); // Default ON (Win11 style)
+static cfg_int cfg_theme_mode(GUID{0x12345691, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0); // 0=Auto, 1=Force Dark, 2=Force Light
 
 
 // Font configuration - store LOGFONT structure as binary data
@@ -198,6 +199,13 @@ bool get_always_slide_to_side() {
     return cfg_always_slide_to_side != 0;
 }
 
+int get_theme_mode() {
+    int mode = cfg_theme_mode;
+    // Clamp to valid range (0=Auto, 1=Force Dark, 2=Force Light)
+    if (mode < 0) mode = 0;
+    if (mode > 2) mode = 2;
+    return mode;
+}
 
 // Font configuration access functions
 bool get_use_custom_fonts() {
@@ -307,17 +315,12 @@ LOGFONT get_compact_track_font() {
 LOGFONT get_default_font(bool is_artist, int size) {
     LOGFONT lf = {};
     
-    // Try multiple approaches to ensure correct font size
-    // Method 1: Simple negative point size (original approach)
-    lf.lfHeight = -size;
-    
-    // Method 2: Alternative - try DPI calculation if simple method fails
-    if (size < 10) { // If we're getting constrained to small sizes
-        HDC hdc = GetDC(nullptr);
-        int dpi = GetDeviceCaps(hdc, LOGPIXELSY);
-        lf.lfHeight = -MulDiv(size, dpi, 72);
-        ReleaseDC(nullptr, hdc);
-    }
+    // Always apply DPI scaling to ensure fonts display correctly on high-DPI displays
+    // Convert point size to device pixels using current DPI
+    HDC hdc = GetDC(nullptr);
+    int dpi = GetDeviceCaps(hdc, LOGPIXELSY);
+    lf.lfHeight = -MulDiv(size, dpi, 72);  // Points to pixels: size * dpi / 72
+    ReleaseDC(nullptr, hdc);
     
     lf.lfWeight = is_artist ? FW_NORMAL : FW_BOLD; // Artist regular, Track bold
     lf.lfCharSet = DEFAULT_CHARSET;
@@ -449,6 +452,14 @@ INT_PTR CALLBACK tray_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, LP
         else slide_index = 4;
         SendMessage(hSlideDurationCombo, CB_SETCURSEL, slide_index, 0);
         
+        // Initialize theme mode combobox
+        HWND hThemeModeCombo = GetDlgItem(hwnd, IDC_THEME_MODE_COMBO);
+        SendMessage(hThemeModeCombo, CB_ADDSTRING, 0, (LPARAM)L"Auto");
+        SendMessage(hThemeModeCombo, CB_ADDSTRING, 0, (LPARAM)L"Dark");
+        SendMessage(hThemeModeCombo, CB_ADDSTRING, 0, (LPARAM)L"Light");
+        SendMessage(hThemeModeCombo, CB_SETCURSEL, cfg_theme_mode, 0);
+
+        
         // Initialize font displays
         p_this->update_font_displays();
         
@@ -479,10 +490,12 @@ INT_PTR CALLBACK tray_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, LP
         case IDC_POPUP_POSITION_COMBO:
         case IDC_POPUP_DURATION_COMBO:
         case IDC_SLIDE_DURATION_COMBO:
+        case IDC_THEME_MODE_COMBO:
             if (HIWORD(wp) == CBN_SELCHANGE) {
                 p_this->on_changed();
             }
             break;
+
             
         case IDC_SELECT_ARTIST_FONT:
             if (HIWORD(wp) == BN_CLICKED) {
@@ -627,6 +640,9 @@ void tray_preferences::apply_settings() {
             cfg_slide_duration = slide_values[slide_index];
         }
 
+        // Save theme mode
+        cfg_theme_mode = (int)SendMessage(GetDlgItem(m_hwnd, IDC_THEME_MODE_COMBO), CB_GETCURSEL, 0, 0);
+
         // Notify tray manager and control panel of settings change
         tray_manager::get_instance().on_settings_changed();
         control_panel::get_instance().on_settings_changed();
@@ -642,7 +658,7 @@ void tray_preferences::reset_settings() {
         CheckDlgButton(m_hwnd, IDC_ALWAYS_SLIDE_TO_SIDE, cfg_always_slide_to_side != 0 ? BST_CHECKED : BST_UNCHECKED);
         CheckDlgButton(m_hwnd, IDC_USE_ROUNDED_CORNERS, cfg_use_rounded_corners != 0 ? BST_CHECKED : BST_UNCHECKED);
         SendMessage(GetDlgItem(m_hwnd, IDC_POPUP_POSITION_COMBO), CB_SETCURSEL, cfg_popup_position, 0);
-        
+        SendMessage(GetDlgItem(m_hwnd, IDC_THEME_MODE_COMBO), CB_SETCURSEL, cfg_theme_mode, 0);
         
         update_font_displays();
     }
@@ -999,7 +1015,9 @@ void tray_preferences::switch_tab(int tab) {
         IDC_SLIDE_DURATION_COMBO,
         IDC_ALWAYS_SLIDE_TO_SIDE,
         // Window style options
-        IDC_USE_ROUNDED_CORNERS
+        IDC_USE_ROUNDED_CORNERS,
+        IDC_THEME_MODE_LABEL,
+        IDC_THEME_MODE_COMBO
     };
     
     // Fonts tab controls - all 4 modes
