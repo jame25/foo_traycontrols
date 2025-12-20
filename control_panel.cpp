@@ -20,6 +20,16 @@ control_panel* control_panel::s_instance = nullptr;
 // External declaration from main.cpp
 extern HINSTANCE g_hIns;
 
+// Helper function to get DPI-scaled font height from point size
+// Returns negative value as required by CreateFont for character height
+static int get_dpi_scaled_font_height(int point_size) {
+    HDC hdc = GetDC(nullptr);
+    int dpi = GetDeviceCaps(hdc, LOGPIXELSY);
+    int height = -MulDiv(point_size, dpi, 72);  // Points to pixels: size * dpi / 72
+    ReleaseDC(nullptr, hdc);
+    return height;
+}
+
 //=============================================================================
 // control_panel - Media control panel popup
 //=============================================================================
@@ -97,9 +107,21 @@ control_panel::control_panel()
     , m_slide_start_x(0)
     , m_slide_target_x(0)
     , m_slide_animation_step(0)
+    // Theme colors - default to dark mode
+    , m_is_dark_mode(true)
+    , m_bg_color(RGB(32, 32, 32))
+    , m_text_color(RGB(255, 255, 255))
+    , m_text_dim_color(RGB(180, 180, 180))
+    , m_placeholder_color(RGB(60, 60, 60))
+    , m_progress_bg_color(RGB(80, 80, 80))
+    , m_progress_fill_color(RGB(100, 149, 237))
+    , m_icon_color(RGB(255, 255, 255))
 {
     m_last_click_pos.x = 0;
     m_last_click_pos.y = 0;
+    
+    // Update theme colors based on current settings
+    update_theme_colors();
 }
 
 control_panel::~control_panel() {
@@ -162,6 +184,9 @@ void control_panel::show_control_panel(bool force_docked) {
     // Sync shuffle/repeat state with foobar2000
     update_playback_order_state();
     
+    // Update theme colors in case foobar2000 theme changed
+    update_theme_colors();
+    
     // Position control panel
     position_control_panel();
     
@@ -218,7 +243,7 @@ void control_panel::show_control_panel_simple() {
     m_is_undocked = false;
     m_is_artwork_expanded = false;
     m_is_compact_mode = false; // Ensure compact mode is disabled in docked state
-    m_has_saved_miniplayer_state = false; // Clear miniplayer memory when showing docked panel
+    // Note: Do NOT clear m_has_saved_miniplayer_state here - preserve it for menu restoration
 
     // Reset undocked overlay state
     m_undocked_overlay_visible = false;
@@ -1000,12 +1025,20 @@ void control_panel::draw_play_icon(HDC hdc, int x, int y, int size) {
     graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
     graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf); // For precision
 
-    // Draw white circle background
+    // Determine colors: In Undocked + light mode, use black circle with white icon
+    COLORREF circle_color = m_icon_color;
+    COLORREF icon_color = m_bg_color;
+    if (m_is_undocked && !m_is_dark_mode) {
+        circle_color = RGB(0, 0, 0);       // Black circle
+        icon_color = RGB(255, 255, 255);   // White icon
+    }
+
+    // Draw circle background
     int radius = size / 2;
-    Gdiplus::SolidBrush bg_brush(Gdiplus::Color(255, 255, 255, 255));
+    Gdiplus::SolidBrush bg_brush(Gdiplus::Color(255, GetRValue(circle_color), GetGValue(circle_color), GetBValue(circle_color)));
     graphics.FillEllipse(&bg_brush, x - radius, y - radius, size, size); // size is diameter
 
-    // Draw black triangle icon inside
+    // Draw triangle icon inside
     int icon_height = size * 4 / 10;
     int half_icon = icon_height / 2;
     int icon_width = icon_height; 
@@ -1016,7 +1049,7 @@ void control_panel::draw_play_icon(HDC hdc, int x, int y, int size) {
     triangle[1] = Gdiplus::Point(x - icon_width/2 + center_offset_x, y + half_icon);
     triangle[2] = Gdiplus::Point(x + icon_width/2 + center_offset_x, y);
     
-    Gdiplus::SolidBrush icon_brush(Gdiplus::Color(255, 0, 0, 0));
+    Gdiplus::SolidBrush icon_brush(Gdiplus::Color(255, GetRValue(icon_color), GetGValue(icon_color), GetBValue(icon_color)));
     graphics.FillPolygon(&icon_brush, triangle, 3);
 }
 
@@ -1025,12 +1058,20 @@ void control_panel::draw_pause_icon(HDC hdc, int x, int y, int size) {
     graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
     graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
 
-    // Draw white circle background
+    // Determine colors: In Undocked + light mode, use black circle with white icon
+    COLORREF circle_color = m_icon_color;
+    COLORREF icon_color = m_bg_color;
+    if (m_is_undocked && !m_is_dark_mode) {
+        circle_color = RGB(0, 0, 0);       // Black circle
+        icon_color = RGB(255, 255, 255);   // White icon
+    }
+
+    // Draw circle background
     int radius = size / 2;
-    Gdiplus::SolidBrush bg_brush(Gdiplus::Color(255, 255, 255, 255));
+    Gdiplus::SolidBrush bg_brush(Gdiplus::Color(255, GetRValue(circle_color), GetGValue(circle_color), GetBValue(circle_color)));
     graphics.FillEllipse(&bg_brush, x - radius, y - radius, size, size);
 
-    // Draw black bars inside
+    // Draw bars inside
     int icon_height = size * 4 / 10;
     int half_icon = icon_height / 2;
     int bar_width = icon_height / 3;
@@ -1038,7 +1079,7 @@ void control_panel::draw_pause_icon(HDC hdc, int x, int y, int size) {
     
     int offset = gap / 2;
     
-    Gdiplus::SolidBrush icon_brush(Gdiplus::Color(255, 0, 0, 0));
+    Gdiplus::SolidBrush icon_brush(Gdiplus::Color(255, GetRValue(icon_color), GetGValue(icon_color), GetBValue(icon_color)));
     
     graphics.FillRectangle(&icon_brush, x - offset - bar_width, y - half_icon, bar_width, icon_height);
     graphics.FillRectangle(&icon_brush, x + offset, y - half_icon, bar_width, icon_height);
@@ -1067,7 +1108,8 @@ void control_panel::draw_previous_icon(HDC hdc, int x, int y, int size) {
     graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
     graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
 
-    Gdiplus::SolidBrush brush(Gdiplus::Color(255, 200, 200, 200));
+    // Use theme-aware icon color
+    Gdiplus::SolidBrush brush(Gdiplus::Color(255, GetRValue(m_icon_color), GetGValue(m_icon_color), GetBValue(m_icon_color)));
 
     int icon_h = size * 6 / 10; 
     int bar_width = 3; 
@@ -1098,7 +1140,8 @@ void control_panel::draw_next_icon(HDC hdc, int x, int y, int size) {
     graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
     graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
 
-    Gdiplus::SolidBrush brush(Gdiplus::Color(255, 200, 200, 200));
+    // Use theme-aware icon color
+    Gdiplus::SolidBrush brush(Gdiplus::Color(255, GetRValue(m_icon_color), GetGValue(m_icon_color), GetBValue(m_icon_color)));
 
     int icon_h = size * 6 / 10;
     int bar_width = 3;
@@ -1126,7 +1169,14 @@ void control_panel::draw_shuffle_icon(HDC hdc, int x, int y, int size) {
     // }
     
     // Material Design Shuffle icon from SVG
-    Gdiplus::Color color = m_shuffle_active ? Gdiplus::Color(255, 255, 255, 255) : Gdiplus::Color(255, 100, 100, 100);
+    // Active: use full icon color, Inactive: use dimmed version
+    Gdiplus::Color color;
+    if (m_shuffle_active) {
+        color = Gdiplus::Color(255, GetRValue(m_icon_color), GetGValue(m_icon_color), GetBValue(m_icon_color));
+    } else {
+        // Dimmed inactive color - use text_dim_color or a muted version
+        color = Gdiplus::Color(255, GetRValue(m_text_dim_color), GetGValue(m_text_dim_color), GetBValue(m_text_dim_color));
+    }
     
     Gdiplus::Graphics graphics(hdc);
     graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
@@ -1189,7 +1239,14 @@ void control_panel::draw_repeat_icon(HDC hdc, int x, int y, int size) {
     // }
     
     bool is_active = (m_repeat_mode > 0);
-    Gdiplus::Color color = is_active ? Gdiplus::Color(255, 255, 255, 255) : Gdiplus::Color(255, 100, 100, 100);
+    // Active: use full icon color, Inactive: use dimmed version
+    Gdiplus::Color color;
+    if (is_active) {
+        color = Gdiplus::Color(255, GetRValue(m_icon_color), GetGValue(m_icon_color), GetBValue(m_icon_color));
+    } else {
+        // Dimmed inactive color - use text_dim_color or a muted version
+        color = Gdiplus::Color(255, GetRValue(m_text_dim_color), GetGValue(m_text_dim_color), GetBValue(m_text_dim_color));
+    }
     
     Gdiplus::Graphics graphics(hdc);
     graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
@@ -1524,7 +1581,9 @@ void control_panel::draw_collapse_triangle(HDC hdc, int x, int y, int size, int 
     // Ensure minimum visibility
     if (alpha < 50) alpha = 50; 
     
-    Gdiplus::SolidBrush brush(Gdiplus::Color(alpha, 255, 255, 255));
+    // Use black for light mode, white for dark mode
+    int color_value = m_is_dark_mode ? 255 : 0;
+    Gdiplus::SolidBrush brush(Gdiplus::Color(alpha, color_value, color_value, color_value));
     
     // Triangle pointing diagonally down-left from top-right corner
     // Or just a standard triangle pointing down or left?
@@ -1587,15 +1646,28 @@ void control_panel::draw_play_icon_with_opacity(HDC hdc, int x, int y, int size,
     graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
     graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
 
-    // Simulate opacity by scaling color from dark grey (0%) to white (100%)
-    int bg_val = 32 + ((255 - 32) * opacity) / 100;
+    // Determine circle and icon colors based on theme
+    int circle_r, circle_g, circle_b;
+    int icon_r, icon_g, icon_b;
+    
+    if (m_is_dark_mode) {
+        // Dark mode: fade circle from dark grey (32) to white (255)
+        int bg_val = 32 + ((255 - 32) * opacity) / 100;
+        circle_r = circle_g = circle_b = bg_val;
+        icon_r = icon_g = icon_b = 0; // Black icon
+    } else {
+        // Light mode (Undocked): fade circle from grey (32) to black (0)
+        int bg_val = 32 - (32 * opacity) / 100;
+        circle_r = circle_g = circle_b = bg_val;
+        icon_r = icon_g = icon_b = 255; // White icon
+    }
     
     // Draw circle
     int radius = size / 2;
-    Gdiplus::SolidBrush bg_brush(Gdiplus::Color(255, bg_val, bg_val, bg_val));
+    Gdiplus::SolidBrush bg_brush(Gdiplus::Color(255, circle_r, circle_g, circle_b));
     graphics.FillEllipse(&bg_brush, x - radius, y - radius, size, size);
     
-    // Draw black icon
+    // Draw icon
     int icon_height = size * 4 / 10;
     int half_icon = icon_height / 2;
     int icon_width = icon_height; 
@@ -1606,7 +1678,7 @@ void control_panel::draw_play_icon_with_opacity(HDC hdc, int x, int y, int size,
     triangle[1] = Gdiplus::Point(x - icon_width/2 + center_offset_x, y + half_icon);
     triangle[2] = Gdiplus::Point(x + icon_width/2 + center_offset_x, y);
     
-    Gdiplus::SolidBrush icon_brush(Gdiplus::Color(255, 0, 0, 0)); 
+    Gdiplus::SolidBrush icon_brush(Gdiplus::Color(255, icon_r, icon_g, icon_b)); 
     graphics.FillPolygon(&icon_brush, triangle, 3);
 }
 
@@ -1615,20 +1687,35 @@ void control_panel::draw_pause_icon_with_opacity(HDC hdc, int x, int y, int size
     graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
     graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
     
+    // Determine circle and icon colors based on theme
+    int circle_r, circle_g, circle_b;
+    int icon_r, icon_g, icon_b;
+    
+    if (m_is_dark_mode) {
+        // Dark mode: fade circle from dark grey (32) to white (255)
+        int bg_val = 32 + ((255 - 32) * opacity) / 100;
+        circle_r = circle_g = circle_b = bg_val;
+        icon_r = icon_g = icon_b = 0; // Black icon
+    } else {
+        // Light mode (Undocked): fade circle from grey (32) to black (0)
+        int bg_val = 32 - (32 * opacity) / 100;
+        circle_r = circle_g = circle_b = bg_val;
+        icon_r = icon_g = icon_b = 255; // White icon
+    }
+    
     // Background circle
-    int bg_val = 32 + ((255 - 32) * opacity) / 100;
     int radius = size / 2;
-    Gdiplus::SolidBrush bg_brush(Gdiplus::Color(255, bg_val, bg_val, bg_val));
+    Gdiplus::SolidBrush bg_brush(Gdiplus::Color(255, circle_r, circle_g, circle_b));
     graphics.FillEllipse(&bg_brush, x - radius, y - radius, size, size);
     
-    // Black bars
+    // Bars
     int icon_height = size * 4 / 10;
     int half_icon = icon_height / 2;
     int bar_width = icon_height / 3;
     int gap = icon_height / 3;
     int offset = gap / 2;
     
-    Gdiplus::SolidBrush icon_brush(Gdiplus::Color(255, 0, 0, 0));
+    Gdiplus::SolidBrush icon_brush(Gdiplus::Color(255, icon_r, icon_g, icon_b));
     graphics.FillRectangle(&icon_brush, x - offset - bar_width, y - half_icon, bar_width, icon_height);
     graphics.FillRectangle(&icon_brush, x + offset, y - half_icon, bar_width, icon_height);
 }
@@ -1775,12 +1862,63 @@ void control_panel::on_settings_changed() {
     // Reload fonts when settings change
     load_fonts();
     
+    // Update theme colors based on settings
+    update_theme_colors();
+    
     // Apply window corner preference
     apply_window_corner_preference();
     
     // Trigger repaint if visible
     if (m_visible && m_control_window) {
         InvalidateRect(m_control_window, nullptr, TRUE);
+    }
+}
+
+bool control_panel::detect_foobar_dark_mode() {
+    // Use fb2k::CCoreDarkModeHooks to detect main window theme
+    try {
+        fb2k::CCoreDarkModeHooks darkModeHooks;
+        return (bool)darkModeHooks; // Returns true if dark mode is active
+    } catch (...) {
+        // Default to dark mode if detection fails
+        return true;
+    }
+}
+
+void control_panel::update_theme_colors() {
+    int theme_mode = get_theme_mode();
+    
+    // Determine if we should use dark mode
+    if (theme_mode == 0) {
+        // Auto mode - detect from foobar2000
+        m_is_dark_mode = detect_foobar_dark_mode();
+    } else if (theme_mode == 1) {
+        // Force dark mode
+        m_is_dark_mode = true;
+    } else {
+        // Force light mode
+        m_is_dark_mode = false;
+    }
+    
+    // Set colors based on dark/light mode
+    if (m_is_dark_mode) {
+        // Dark mode colors
+        m_bg_color = RGB(32, 32, 32);
+        m_text_color = RGB(255, 255, 255);
+        m_text_dim_color = RGB(180, 180, 180);
+        m_placeholder_color = RGB(60, 60, 60);
+        m_progress_bg_color = RGB(80, 80, 80);
+        m_progress_fill_color = RGB(100, 149, 237); // Cornflower blue
+        m_icon_color = RGB(255, 255, 255);
+    } else {
+        // Light mode colors
+        m_bg_color = RGB(245, 245, 245);
+        m_text_color = RGB(32, 32, 32);
+        m_text_dim_color = RGB(100, 100, 100);
+        m_placeholder_color = RGB(200, 200, 200);
+        m_progress_bg_color = RGB(200, 200, 200);
+        m_progress_fill_color = RGB(70, 130, 220); // Slightly darker blue
+        m_icon_color = RGB(50, 50, 50);
     }
 }
 
@@ -3971,7 +4109,7 @@ void control_panel::paint_control_panel(HDC hdc) {
     }
     
     // Fill background (no border)
-    HBRUSH bg_brush = CreateSolidBrush(RGB(32, 32, 32));
+    HBRUSH bg_brush = CreateSolidBrush(m_bg_color);
     FillRect(hdc, &client_rect, bg_brush);
     DeleteObject(bg_brush);
     
@@ -3993,7 +4131,7 @@ void control_panel::paint_control_panel(HDC hdc) {
         DeleteDC(cover_dc);
     } else {
         // Draw placeholder
-        HBRUSH cover_brush = CreateSolidBrush(RGB(60, 60, 60));
+        HBRUSH cover_brush = CreateSolidBrush(m_placeholder_color);
         FillRect(hdc, &cover_rect, cover_brush);
         DeleteObject(cover_brush);
         
@@ -4026,7 +4164,7 @@ void control_panel::paint_control_panel(HDC hdc) {
                         DestroyIcon(radio_icon); // Clean up the icon handle
                     } else {
                         // Fallback to text if icon can't be loaded
-                        SetTextColor(hdc, RGB(200, 200, 200));
+                        SetTextColor(hdc, m_text_dim_color);
                         SetBkMode(hdc, TRANSPARENT);
                         int font_size = art_size / 3; // Scale font with artwork size
                         HFONT symbol_font = CreateFont(font_size, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
@@ -4041,7 +4179,7 @@ void control_panel::paint_control_panel(HDC hdc) {
                     }
                 } else {
                     // Draw musical note symbol for local files
-                    SetTextColor(hdc, RGB(200, 200, 200));
+                    SetTextColor(hdc, m_text_dim_color);
                     SetBkMode(hdc, TRANSPARENT);
                     int font_size = art_size / 3; // Scale font with artwork size
                     HFONT symbol_font = CreateFont(font_size, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
@@ -4296,7 +4434,7 @@ void control_panel::paint_artwork_expanded(HDC hdc, const RECT& client_rect) {
 }
 
 void control_panel::draw_track_info(HDC hdc, const RECT& client_rect, int art_size) {
-    SetTextColor(hdc, RGB(255, 255, 255));
+    SetTextColor(hdc, m_text_color);
     SetBkMode(hdc, TRANSPARENT);
     
     // Calculate text area based on artwork size and window dimensions
@@ -4309,7 +4447,7 @@ void control_panel::draw_track_info(HDC hdc, const RECT& client_rect, int art_si
     if (is_docked) {
         // DOCKED MODE: Track title large and bold, Artist small and normal
         // Draw track title using larger, bold font
-        HFONT title_font_to_use = m_track_font ? m_track_font : CreateFont(-14, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+        HFONT title_font_to_use = m_track_font ? m_track_font : CreateFont(get_dpi_scaled_font_height(14), 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
                                                                            DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                                                                            DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
         HFONT old_font = (HFONT)SelectObject(hdc, title_font_to_use);
@@ -4319,7 +4457,7 @@ void control_panel::draw_track_info(HDC hdc, const RECT& client_rect, int art_si
         DrawText(hdc, wide_title.get_ptr(), -1, &title_rect, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
         
         // Draw artist using smaller, normal font
-        HFONT artist_font_to_use = m_artist_font ? m_artist_font : CreateFont(-11, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+        HFONT artist_font_to_use = m_artist_font ? m_artist_font : CreateFont(get_dpi_scaled_font_height(11), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
                                                                               DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                                                                               DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
         
@@ -4341,7 +4479,7 @@ void control_panel::draw_track_info(HDC hdc, const RECT& client_rect, int art_si
     } else {
         // UNDOCKED MODE: Keep original behavior (title bold 18, artist normal 14)
         // Draw track title using custom or default font
-        HFONT font_to_use = m_track_font ? m_track_font : CreateFont(-14, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+        HFONT font_to_use = m_track_font ? m_track_font : CreateFont(get_dpi_scaled_font_height(14), 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
                                                                      DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                                                                      DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
         HFONT old_font = (HFONT)SelectObject(hdc, font_to_use);
@@ -4351,7 +4489,7 @@ void control_panel::draw_track_info(HDC hdc, const RECT& client_rect, int art_si
         DrawText(hdc, wide_title.get_ptr(), -1, &title_rect, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
         
         // Draw artist using custom or default font
-        HFONT artist_font_to_use = m_artist_font ? m_artist_font : CreateFont(-11, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+        HFONT artist_font_to_use = m_artist_font ? m_artist_font : CreateFont(get_dpi_scaled_font_height(11), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
                                                                               DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                                                                               DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
         
@@ -4377,7 +4515,7 @@ void control_panel::paint_compact_mode(HDC hdc, const RECT& rect) {
     if (!hdc) return;
     
     // Fill background with dark color
-    HBRUSH bg_brush = CreateSolidBrush(RGB(32, 32, 32));
+    HBRUSH bg_brush = CreateSolidBrush(m_bg_color);
     FillRect(hdc, &rect, bg_brush);
     DeleteObject(bg_brush);
     
@@ -4409,7 +4547,7 @@ void control_panel::paint_compact_mode(HDC hdc, const RECT& rect) {
         DeleteDC(mem_dc);
     } else {
         // Draw placeholder
-        HBRUSH cover_brush = CreateSolidBrush(RGB(60, 60, 60));
+        HBRUSH cover_brush = CreateSolidBrush(m_placeholder_color);
         FillRect(hdc, &art_rect, cover_brush);
         DeleteObject(cover_brush);
         
@@ -4439,7 +4577,7 @@ void control_panel::paint_compact_mode(HDC hdc, const RECT& rect) {
                         DestroyIcon(radio_icon);
                     } else {
                         // Fallback to text if icon can't be loaded
-                        SetTextColor(hdc, RGB(200, 200, 200));
+                        SetTextColor(hdc, m_text_dim_color);
                         SetBkMode(hdc, TRANSPARENT);
                         int font_size = art_size / 3;
                         HFONT symbol_font = CreateFont(font_size, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
@@ -4454,7 +4592,7 @@ void control_panel::paint_compact_mode(HDC hdc, const RECT& rect) {
                     }
                 } else {
                     // Draw musical note symbol for local files
-                    SetTextColor(hdc, RGB(200, 200, 200));
+                    SetTextColor(hdc, m_text_dim_color);
                     SetBkMode(hdc, TRANSPARENT);
                     int font_size = art_size / 3;
                     HFONT symbol_font = CreateFont(font_size, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
@@ -4479,7 +4617,7 @@ void control_panel::paint_compact_mode(HDC hdc, const RECT& rect) {
     }
     
     // Set text properties
-    SetTextColor(hdc, RGB(255, 255, 255));
+    SetTextColor(hdc, m_text_color);
     SetBkMode(hdc, TRANSPARENT);
     
     // Calculate text area (shifted right slightly per user request)
@@ -4490,7 +4628,7 @@ void control_panel::paint_compact_mode(HDC hdc, const RECT& rect) {
     HFONT title_font = m_track_font;
     bool need_delete_title = false;
     if (!title_font) {
-        title_font = CreateFont(-15, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+        title_font = CreateFont(get_dpi_scaled_font_height(15), 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
                                   DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                                   DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Microsoft YaHei");
         need_delete_title = true;
@@ -4505,7 +4643,7 @@ void control_panel::paint_compact_mode(HDC hdc, const RECT& rect) {
     HFONT artist_font = m_artist_font;
     bool need_delete_artist = false;
     if (!artist_font) {
-        artist_font = CreateFont(-12, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+        artist_font = CreateFont(get_dpi_scaled_font_height(12), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
                                    DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                                    DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Microsoft YaHei");
         need_delete_artist = true;
@@ -4514,7 +4652,7 @@ void control_panel::paint_compact_mode(HDC hdc, const RECT& rect) {
     
     RECT artist_rect = {text_left, window_height / 2 + margin - (int)(window_height * 0.15), text_right, window_height - margin - (int)(window_height * 0.15)};
     pfc::stringcvt::string_wide_from_utf8 wide_artist(m_current_artist.c_str());
-    SetTextColor(hdc, RGB(180, 180, 180)); // Slightly dimmer for artist
+    SetTextColor(hdc, m_text_dim_color); // Slightly dimmer for artist
     DrawText(hdc, wide_artist.get_ptr(), -1, &artist_rect, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
     
     
@@ -4531,7 +4669,7 @@ void control_panel::paint_compact_mode(HDC hdc, const RECT& rect) {
     
     // Draw progress bar background
     RECT progress_bg_rect = {progress_bar_left, progress_bar_y, progress_bar_left + progress_bar_width, progress_bar_y + progress_bar_height};
-    HBRUSH progress_bg_brush = CreateSolidBrush(RGB(80, 80, 80));
+    HBRUSH progress_bg_brush = CreateSolidBrush(m_progress_bg_color);
     FillRect(hdc, &progress_bg_rect, progress_bg_brush);
     DeleteObject(progress_bg_brush);
     
@@ -4539,7 +4677,7 @@ void control_panel::paint_compact_mode(HDC hdc, const RECT& rect) {
     int progress_fill_width = (int)(progress_bar_width * progress_ratio);
     if (progress_fill_width > 0) {
         RECT progress_fill_rect = {progress_bar_left, progress_bar_y, progress_bar_left + progress_fill_width, progress_bar_y + progress_bar_height};
-        HBRUSH progress_fill_brush = CreateSolidBrush(RGB(100, 149, 237)); // Cornflower blue
+        HBRUSH progress_fill_brush = CreateSolidBrush(m_progress_fill_color);
         FillRect(hdc, &progress_fill_rect, progress_fill_brush);
         DeleteObject(progress_fill_brush);
     }
@@ -4547,19 +4685,23 @@ void control_panel::paint_compact_mode(HDC hdc, const RECT& rect) {
     // Draw elapsed time (count up, like Docked and Undocked modes)
     if (m_is_playing) {
         int elapsed_min = (int)(m_current_time / 60);
-    int elapsed_sec = (int)m_current_time % 60;
-    
-    wchar_t time_str[16];
-    swprintf_s(time_str, 16, L"%d:%02d", elapsed_min, elapsed_sec);
-    
-    // Use a slightly smaller font for the timer in compact mode
-    HFONT time_font = CreateFont(-14, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
-                                 DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                                 DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
-    bool need_delete_time_font = true;
-    SelectObject(hdc, time_font);
-    SetTextColor(hdc, RGB(255, 255, 255)); // White to match track title
-    
+        int elapsed_sec = (int)m_current_time % 60;
+        
+        wchar_t time_str[16];
+        swprintf_s(time_str, 16, L"%d:%02d", elapsed_min, elapsed_sec);
+        
+        // Use the same font as track title for consistency
+        HFONT time_font = m_track_font;
+        bool need_delete_time_font = false;
+        if (!time_font) {
+            time_font = CreateFont(get_dpi_scaled_font_height(15), 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+                                   DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                                   DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Microsoft YaHei");
+            need_delete_time_font = true;
+        }
+        SelectObject(hdc, time_font);
+        SetTextColor(hdc, m_text_color); // Match track title color
+        
         RECT time_rect = {progress_bar_left + progress_bar_width + 5, progress_bar_y - 10, window_width - margin, progress_bar_y + progress_bar_height + 6};
         DrawText(hdc, time_str, -1, &time_rect, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
         
@@ -4584,7 +4726,7 @@ void control_panel::paint_compact_mode(HDC hdc, const RECT& rect) {
 void control_panel::draw_time_info(HDC hdc, const RECT& client_rect) {
     if (!m_is_playing) return;
 
-    SetTextColor(hdc, RGB(255, 255, 255)); // Same color as track title
+    SetTextColor(hdc, m_text_color); // Same color as track title
     SetBkMode(hdc, TRANSPARENT);
     
     // Format current position time in 24hr format (MM:SS with leading zeros)
@@ -4594,10 +4736,15 @@ void control_panel::draw_time_info(HDC hdc, const RECT& client_rect) {
     pfc::string8 time_str;
     time_str << pfc::format_int(current_min, 2) << ":" << pfc::format_int(current_sec, 2);
     
-    // Draw time with same font as track title (18pt, bold)
-    HFONT time_font = CreateFont(18, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
-                                 DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                                 DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+    // Use the same font as track title for consistency
+    HFONT time_font = m_track_font;
+    bool need_delete_time_font = false;
+    if (!time_font) {
+        time_font = CreateFont(get_dpi_scaled_font_height(14), 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+                               DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                               DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+        need_delete_time_font = true;
+    }
     HFONT old_font = (HFONT)SelectObject(hdc, time_font);
     
     RECT time_rect = {client_rect.right - 60, 20, client_rect.right - 10, 45};
@@ -4605,7 +4752,9 @@ void control_panel::draw_time_info(HDC hdc, const RECT& client_rect) {
     DrawText(hdc, wide_time.get_ptr(), -1, &time_rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
     
     SelectObject(hdc, old_font);
-    DeleteObject(time_font);
+    if (need_delete_time_font) {
+        DeleteObject(time_font);
+    }
 }
 
 void control_panel::draw_track_info_overlay(HDC hdc, int window_width, int window_height) {
@@ -4623,7 +4772,9 @@ void control_panel::draw_track_info_overlay(HDC hdc, int window_width, int windo
         // Use around 60% max opacity for glass effect
         int alpha = (180 * m_overlay_opacity) / 100;
         
-        Gdiplus::SolidBrush overlayBrush(Gdiplus::Color(alpha, 20, 20, 20));
+        // Use theme-aware overlay color: dark overlay for dark mode, light overlay for light mode
+        int overlay_color = m_is_dark_mode ? 20 : 240;
+        Gdiplus::SolidBrush overlayBrush(Gdiplus::Color(alpha, overlay_color, overlay_color, overlay_color));
         // Start at -1 to eliminate sub-pixel gap at top edge from anti-aliasing
         Gdiplus::RectF overlayRect(-1.0f, -1.0f, (float)window_width + 2.0f, (float)overlay_height + 1.0f);
         graphics.FillRectangle(&overlayBrush, overlayRect);
@@ -4631,14 +4782,15 @@ void control_panel::draw_track_info_overlay(HDC hdc, int window_width, int windo
     
     // Draw track info text on top of the overlay (only when overlay has opacity)
     if (m_overlay_opacity > 0) {
-        SetTextColor(hdc, RGB(255, 255, 255));
+        // Use theme-aware text color: white for dark mode, black for light mode
+        SetTextColor(hdc, m_is_dark_mode ? RGB(255, 255, 255) : RGB(32, 32, 32));
         SetBkMode(hdc, TRANSPARENT);
     
     // Track title (use configured track font, fallback to default if not set)
     HFONT title_font = m_track_font;
     bool need_delete_title = false;
     if (!title_font) {
-        title_font = CreateFont(20, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+        title_font = CreateFont(get_dpi_scaled_font_height(20), 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
                                  DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                                  DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
         need_delete_title = true;
@@ -4664,7 +4816,7 @@ void control_panel::draw_track_info_overlay(HDC hdc, int window_width, int windo
     HFONT artist_font = m_artist_font;
     bool need_delete_artist = false;
     if (!artist_font) {
-        artist_font = CreateFont(14, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+        artist_font = CreateFont(get_dpi_scaled_font_height(14), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
                                   DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                                   DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
         need_delete_artist = true;
@@ -4700,7 +4852,9 @@ void control_panel::draw_control_overlay(HDC hdc, int window_width, int window_h
         // Calculate alpha based on overlay opacity (around 60% max opacity for glass effect)
         int alpha = (180 * m_overlay_opacity) / 100;
         
-        Gdiplus::SolidBrush overlayBrush(Gdiplus::Color(alpha, 20, 20, 20));
+        // Use theme-aware overlay color: dark overlay for dark mode, light overlay for light mode
+        int overlay_color = m_is_dark_mode ? 20 : 240;
+        Gdiplus::SolidBrush overlayBrush(Gdiplus::Color(alpha, overlay_color, overlay_color, overlay_color));
         // Start at -1 and extend extra pixels to eliminate sub-pixel gap at edges from anti-aliasing
         Gdiplus::RectF overlayRect(-1.0f, (float)(window_height - overlay_height), (float)window_width + 2.0f, (float)overlay_height + 1.0f);
         graphics.FillRectangle(&overlayBrush, overlayRect);
@@ -4880,7 +5034,7 @@ void control_panel::draw_compact_control_overlay(HDC hdc, int window_width, int 
 
     // Create background overlay to completely hide the text (don't cover progress bar)
     RECT overlay_rect = {text_left, 0, text_right, overlay_bottom};
-    HBRUSH overlay_brush = CreateSolidBrush(RGB(28, 28, 28)); // Solid background to completely hide text
+    HBRUSH overlay_brush = CreateSolidBrush(m_bg_color); // Use theme-aware background color
     FillRect(hdc, &overlay_rect, overlay_brush);
     DeleteObject(overlay_brush);
 
