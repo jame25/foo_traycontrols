@@ -24,26 +24,26 @@ static cfg_int cfg_theme_mode(GUID{0x12345691, 0x9abc, 0xdef0, {0x12, 0x34, 0x56
 // Font configuration - store LOGFONT structure as binary data
 static cfg_struct_t<LOGFONT> cfg_artist_font(GUID{0x12345692, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, []() {
     LOGFONT lf = {};
-    lf.lfHeight = -11;
+    lf.lfHeight = -12; // 9pt at 96 DPI
     lf.lfWeight = FW_NORMAL;
     lf.lfCharSet = DEFAULT_CHARSET;
     lf.lfOutPrecision = OUT_DEFAULT_PRECIS;
     lf.lfClipPrecision = CLIP_DEFAULT_PRECIS;
     lf.lfQuality = DEFAULT_QUALITY;
     lf.lfPitchAndFamily = DEFAULT_PITCH | FF_DONTCARE;
-    wcscpy_s(lf.lfFaceName, L"Segoe UI");
+    wcscpy_s(lf.lfFaceName, L"Microsoft YaHei");
     return lf;
 }());
 static cfg_struct_t<LOGFONT> cfg_track_font(GUID{0x12345693, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, []() {
     LOGFONT lf = {};
-    lf.lfHeight = -14;
+    lf.lfHeight = -15; // 11pt at 96 DPI
     lf.lfWeight = FW_BOLD;
     lf.lfCharSet = DEFAULT_CHARSET;
     lf.lfOutPrecision = OUT_DEFAULT_PRECIS;
     lf.lfClipPrecision = CLIP_DEFAULT_PRECIS;
     lf.lfQuality = DEFAULT_QUALITY;
     lf.lfPitchAndFamily = DEFAULT_PITCH | FF_DONTCARE;
-    wcscpy_s(lf.lfFaceName, L"Segoe UI");
+    wcscpy_s(lf.lfFaceName, L"Microsoft YaHei");
     return lf;
 }());
 static cfg_int cfg_use_custom_fonts(GUID{0x12345694, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0);
@@ -51,26 +51,26 @@ static cfg_int cfg_use_custom_fonts(GUID{0x12345694, 0x9abc, 0xdef0, {0x12, 0x34
 // Control Panel specific font configuration
 static cfg_struct_t<LOGFONT> cfg_cp_artist_font(GUID{0x1234569A, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, []() {
     LOGFONT lf = {};
-    lf.lfHeight = -11;
+    lf.lfHeight = -12; // 9pt at 96 DPI
     lf.lfWeight = FW_NORMAL;
     lf.lfCharSet = DEFAULT_CHARSET;
     lf.lfOutPrecision = OUT_DEFAULT_PRECIS;
     lf.lfClipPrecision = CLIP_DEFAULT_PRECIS;
     lf.lfQuality = DEFAULT_QUALITY;
     lf.lfPitchAndFamily = DEFAULT_PITCH | FF_DONTCARE;
-    wcscpy_s(lf.lfFaceName, L"Segoe UI");
+    wcscpy_s(lf.lfFaceName, L"Microsoft YaHei");
     return lf;
 }());
 static cfg_struct_t<LOGFONT> cfg_cp_track_font(GUID{0x1234569B, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, []() {
     LOGFONT lf = {};
-    lf.lfHeight = -14;
+    lf.lfHeight = -15; // 11pt at 96 DPI
     lf.lfWeight = FW_BOLD;
     lf.lfCharSet = DEFAULT_CHARSET;
     lf.lfOutPrecision = OUT_DEFAULT_PRECIS;
     lf.lfClipPrecision = CLIP_DEFAULT_PRECIS;
     lf.lfQuality = DEFAULT_QUALITY;
     lf.lfPitchAndFamily = DEFAULT_PITCH | FF_DONTCARE;
-    wcscpy_s(lf.lfFaceName, L"Segoe UI");
+    wcscpy_s(lf.lfFaceName, L"Microsoft YaHei");
     return lf;
 }());
 static cfg_int cfg_cp_use_custom_fonts(GUID{0x1234569D, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0);
@@ -78,26 +78,26 @@ static cfg_int cfg_cp_use_custom_fonts(GUID{0x1234569D, 0x9abc, 0xdef0, {0x12, 0
 // Undocked mode font configuration
 static cfg_struct_t<LOGFONT> cfg_undocked_artist_font(GUID{0x123456A0, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, []() {
     LOGFONT lf = {};
-    lf.lfHeight = -11;
+    lf.lfHeight = -12; // 9pt at 96 DPI
     lf.lfWeight = FW_NORMAL;
     lf.lfCharSet = DEFAULT_CHARSET;
     lf.lfOutPrecision = OUT_DEFAULT_PRECIS;
     lf.lfClipPrecision = CLIP_DEFAULT_PRECIS;
     lf.lfQuality = DEFAULT_QUALITY;
     lf.lfPitchAndFamily = DEFAULT_PITCH | FF_DONTCARE;
-    wcscpy_s(lf.lfFaceName, L"Segoe UI");
+    wcscpy_s(lf.lfFaceName, L"Microsoft YaHei");
     return lf;
 }());
 static cfg_struct_t<LOGFONT> cfg_undocked_track_font(GUID{0x123456A1, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, []() {
     LOGFONT lf = {};
-    lf.lfHeight = -14;
+    lf.lfHeight = -15; // 11pt at 96 DPI
     lf.lfWeight = FW_BOLD;
     lf.lfCharSet = DEFAULT_CHARSET;
     lf.lfOutPrecision = OUT_DEFAULT_PRECIS;
     lf.lfClipPrecision = CLIP_DEFAULT_PRECIS;
     lf.lfQuality = DEFAULT_QUALITY;
     lf.lfPitchAndFamily = DEFAULT_PITCH | FF_DONTCARE;
-    wcscpy_s(lf.lfFaceName, L"Segoe UI");
+    wcscpy_s(lf.lfFaceName, L"Microsoft YaHei");
     return lf;
 }());
 static cfg_int cfg_undocked_use_custom_fonts(GUID{0x123456A2, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0);
@@ -105,26 +105,26 @@ static cfg_int cfg_undocked_use_custom_fonts(GUID{0x123456A2, 0x9abc, 0xdef0, {0
 // Expanded mode font configuration
 static cfg_struct_t<LOGFONT> cfg_expanded_artist_font(GUID{0x123456B0, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, []() {
     LOGFONT lf = {};
-    lf.lfHeight = -11;
+    lf.lfHeight = -12; // 9pt at 96 DPI
     lf.lfWeight = FW_NORMAL;
     lf.lfCharSet = DEFAULT_CHARSET;
     lf.lfOutPrecision = OUT_DEFAULT_PRECIS;
     lf.lfClipPrecision = CLIP_DEFAULT_PRECIS;
     lf.lfQuality = DEFAULT_QUALITY;
     lf.lfPitchAndFamily = DEFAULT_PITCH | FF_DONTCARE;
-    wcscpy_s(lf.lfFaceName, L"Segoe UI");
+    wcscpy_s(lf.lfFaceName, L"Microsoft YaHei");
     return lf;
 }());
 static cfg_struct_t<LOGFONT> cfg_expanded_track_font(GUID{0x123456B1, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, []() {
     LOGFONT lf = {};
-    lf.lfHeight = -14;
+    lf.lfHeight = -15; // 11pt at 96 DPI
     lf.lfWeight = FW_BOLD;
     lf.lfCharSet = DEFAULT_CHARSET;
     lf.lfOutPrecision = OUT_DEFAULT_PRECIS;
     lf.lfClipPrecision = CLIP_DEFAULT_PRECIS;
     lf.lfQuality = DEFAULT_QUALITY;
     lf.lfPitchAndFamily = DEFAULT_PITCH | FF_DONTCARE;
-    wcscpy_s(lf.lfFaceName, L"Segoe UI");
+    wcscpy_s(lf.lfFaceName, L"Microsoft YaHei");
     return lf;
 }());
 static cfg_int cfg_expanded_use_custom_fonts(GUID{0x123456B2, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0);
@@ -132,26 +132,26 @@ static cfg_int cfg_expanded_use_custom_fonts(GUID{0x123456B2, 0x9abc, 0xdef0, {0
 // Compact mode font configuration
 static cfg_struct_t<LOGFONT> cfg_compact_artist_font(GUID{0x123456C0, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, []() {
     LOGFONT lf = {};
-    lf.lfHeight = -11;
+    lf.lfHeight = -12; // 9pt at 96 DPI
     lf.lfWeight = FW_NORMAL;
     lf.lfCharSet = DEFAULT_CHARSET;
     lf.lfOutPrecision = OUT_DEFAULT_PRECIS;
     lf.lfClipPrecision = CLIP_DEFAULT_PRECIS;
     lf.lfQuality = DEFAULT_QUALITY;
     lf.lfPitchAndFamily = DEFAULT_PITCH | FF_DONTCARE;
-    wcscpy_s(lf.lfFaceName, L"Segoe UI");
+    wcscpy_s(lf.lfFaceName, L"Microsoft YaHei");
     return lf;
 }());
 static cfg_struct_t<LOGFONT> cfg_compact_track_font(GUID{0x123456C1, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, []() {
     LOGFONT lf = {};
-    lf.lfHeight = -14;
+    lf.lfHeight = -15; // 11pt at 96 DPI
     lf.lfWeight = FW_BOLD;
     lf.lfCharSet = DEFAULT_CHARSET;
     lf.lfOutPrecision = OUT_DEFAULT_PRECIS;
     lf.lfClipPrecision = CLIP_DEFAULT_PRECIS;
     lf.lfQuality = DEFAULT_QUALITY;
     lf.lfPitchAndFamily = DEFAULT_PITCH | FF_DONTCARE;
-    wcscpy_s(lf.lfFaceName, L"Segoe UI");
+    wcscpy_s(lf.lfFaceName, L"Microsoft YaHei");
     return lf;
 }());
 static cfg_int cfg_compact_use_custom_fonts(GUID{0x123456C2, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0);
@@ -233,8 +233,8 @@ void set_track_font(const LOGFONT& font) {
 void reset_fonts() {
     cfg_use_custom_fonts = 0;
     // Set font configurations to new default values
-    cfg_artist_font = get_default_font(true, 11);   // Artist: 11pt, regular
-    cfg_track_font = get_default_font(false, 14);   // Track: 14pt, bold
+    cfg_artist_font = get_default_font(true, 9);   // Artist: 9pt, regular
+    cfg_track_font = get_default_font(false, 11);   // Track: 11pt, bold
 }
 
 // Control Panel font configuration access functions
@@ -261,9 +261,9 @@ void set_cp_track_font(const LOGFONT& font) {
 }
 
 void reset_cp_fonts() {
-    // Set font configurations to new default values with larger sizes
-    LOGFONT default_artist = get_default_font(true, 13);   // Artist: 13pt instead of 11pt
-    LOGFONT default_track = get_default_font(false, 16);   // Track: 16pt instead of 14pt
+    // Set font configurations to new default values
+    LOGFONT default_artist = get_default_font(true, 9);   // Artist: 9pt
+    LOGFONT default_track = get_default_font(false, 11);   // Track: 11pt, bold
     
     cfg_cp_artist_font = default_artist;
     cfg_cp_track_font = default_track;
@@ -328,7 +328,7 @@ LOGFONT get_default_font(bool is_artist, int size) {
     lf.lfClipPrecision = CLIP_DEFAULT_PRECIS;
     lf.lfQuality = CLEARTYPE_QUALITY; // Use ClearType for better rendering
     lf.lfPitchAndFamily = DEFAULT_PITCH | FF_DONTCARE;
-    wcscpy_s(lf.lfFaceName, L"Segoe UI");
+    wcscpy_s(lf.lfFaceName, L"Microsoft YaHei");
     
     // Force no scaling constraints
     lf.lfWidth = 0; // Let Windows calculate width
@@ -696,8 +696,8 @@ void tray_preferences::update_font_displays() {
         pfc::string8 track_desc = format_font_name(track_lf);
         uSetDlgItemText(m_hwnd, IDC_DOCKED_TRACK_DISPLAY, track_desc);
     } else {
-        uSetDlgItemText(m_hwnd, IDC_DOCKED_ARTIST_DISPLAY, "Segoe UI, 13pt, Regular (Default)");
-        uSetDlgItemText(m_hwnd, IDC_DOCKED_TRACK_DISPLAY, "Segoe UI, 16pt, Bold (Default)");
+        uSetDlgItemText(m_hwnd, IDC_DOCKED_ARTIST_DISPLAY, "Microsoft YaHei, 9pt (Default)");
+        uSetDlgItemText(m_hwnd, IDC_DOCKED_TRACK_DISPLAY, "Microsoft YaHei, 11pt, Bold (Default)");
     }
     
     // Update Undocked mode font displays
@@ -710,8 +710,8 @@ void tray_preferences::update_font_displays() {
         pfc::string8 track_desc = format_font_name(track_lf);
         uSetDlgItemText(m_hwnd, IDC_UNDOCKED_TRACK_DISPLAY, track_desc);
     } else {
-        uSetDlgItemText(m_hwnd, IDC_UNDOCKED_ARTIST_DISPLAY, "Segoe UI, 11pt, Regular (Default)");
-        uSetDlgItemText(m_hwnd, IDC_UNDOCKED_TRACK_DISPLAY, "Segoe UI, 14pt, Bold (Default)");
+        uSetDlgItemText(m_hwnd, IDC_UNDOCKED_ARTIST_DISPLAY, "Microsoft YaHei, 9pt (Default)");
+        uSetDlgItemText(m_hwnd, IDC_UNDOCKED_TRACK_DISPLAY, "Microsoft YaHei, 11pt, Bold (Default)");
     }
     
     // Update Expanded mode font displays
@@ -724,8 +724,8 @@ void tray_preferences::update_font_displays() {
         pfc::string8 track_desc = format_font_name(track_lf);
         uSetDlgItemText(m_hwnd, IDC_EXPANDED_TRACK_DISPLAY, track_desc);
     } else {
-        uSetDlgItemText(m_hwnd, IDC_EXPANDED_ARTIST_DISPLAY, "Segoe UI, 11pt, Regular (Default)");
-        uSetDlgItemText(m_hwnd, IDC_EXPANDED_TRACK_DISPLAY, "Segoe UI, 14pt, Bold (Default)");
+        uSetDlgItemText(m_hwnd, IDC_EXPANDED_ARTIST_DISPLAY, "Microsoft YaHei, 9pt (Default)");
+        uSetDlgItemText(m_hwnd, IDC_EXPANDED_TRACK_DISPLAY, "Microsoft YaHei, 11pt, Bold (Default)");
     }
     
     // Update Compact mode font displays
@@ -738,8 +738,8 @@ void tray_preferences::update_font_displays() {
         pfc::string8 track_desc = format_font_name(track_lf);
         uSetDlgItemText(m_hwnd, IDC_COMPACT_TRACK_DISPLAY, track_desc);
     } else {
-        uSetDlgItemText(m_hwnd, IDC_COMPACT_ARTIST_DISPLAY, "Segoe UI, 11pt, Regular (Default)");
-        uSetDlgItemText(m_hwnd, IDC_COMPACT_TRACK_DISPLAY, "Segoe UI, 14pt, Bold (Default)");
+        uSetDlgItemText(m_hwnd, IDC_COMPACT_ARTIST_DISPLAY, "Microsoft YaHei, 9pt (Default)");
+        uSetDlgItemText(m_hwnd, IDC_COMPACT_TRACK_DISPLAY, "Microsoft YaHei, 11pt, Bold (Default)");
     }
 }
 
