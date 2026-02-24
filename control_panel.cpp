@@ -719,9 +719,9 @@ void control_panel::position_control_panel() {
 }
 
 void control_panel::load_cover_art() {
-    // If we requested online artwork and it has arrived, pick it up.
-    // Only check when we have an outstanding request (m_online_artwork_pending).
-    if (m_online_artwork_pending && has_pending_online_artwork()) {
+    // Check if artwork has arrived via callback (from our request or foo_nowbar's).
+    // Pick it up immediately regardless of who triggered the search.
+    if (has_pending_online_artwork()) {
         HBITMAP bitmap = get_pending_online_artwork();
         if (bitmap) {
             cleanup_cover_art();
@@ -736,8 +736,7 @@ void control_panel::load_cover_art() {
     }
 
     // If we previously had bridge artwork for the current stream, check if metadata
-    // is still the same - if so, re-acquire it. update_track_info() calls cleanup_cover_art()
-    // before us, so we need to re-acquire the bridge bitmap from foo_artwork.
+    // is still the same - if so, re-acquire it from the bridge cache.
     if (!m_last_stream_artist.is_empty()) {
         try {
             auto playback = playback_control::get();
@@ -810,6 +809,22 @@ void control_panel::load_cover_art() {
                 titleformat_compiler::get()->compile_safe(script_title, "%title%");
                 playback->playback_format_title(nullptr, artist, script_artist, nullptr, playback_control::display_level_all);
                 playback->playback_format_title(nullptr, title, script_title, nullptr, playback_control::display_level_all);
+
+                // Check if artwork already arrived before we even requested
+                // (e.g. foo_nowbar triggered foo_artwork first)
+                if (has_pending_online_artwork()) {
+                    HBITMAP bitmap = get_pending_online_artwork();
+                    if (bitmap) {
+                        cleanup_cover_art();
+                        m_cover_art_bitmap = bitmap;
+                        m_artwork_from_bridge = false;
+                        m_last_stream_artist = artist;
+                        m_last_stream_title = title;
+                        m_online_artwork_pending = false;
+                        if (m_control_window) KillTimer(m_control_window, ARTWORK_POLL_TIMER_ID);
+                        return;
+                    }
+                }
 
                 // Avoid re-requesting the same artist/title
                 if (artist != m_last_stream_artist || title != m_last_stream_title) {
@@ -4068,12 +4083,11 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
             } else if (wparam == UPDATE_TIMER_ID + 2) {
                 // Delayed update after showing panel (asynchronous)
                 KillTimer(hwnd, UPDATE_TIMER_ID + 2);
-                panel->cleanup_cover_art(); // Clear cached artwork
                 panel->update_track_info(); // Full update
                 return 0;
             } else if (wparam == ARTWORK_POLL_TIMER_ID) {
                 // Poll foo_artwork for completed artwork search
-                if (panel && panel->m_online_artwork_pending && has_pending_online_artwork()) {
+                if (panel && has_pending_online_artwork()) {
                     HBITMAP bitmap = get_pending_online_artwork();
                     if (bitmap) {
                         panel->cleanup_cover_art();
@@ -4085,8 +4099,6 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                         KillTimer(hwnd, ARTWORK_POLL_TIMER_ID);
                         InvalidateRect(hwnd, nullptr, FALSE);
                     }
-                } else if (panel && !panel->m_online_artwork_pending) {
-                    KillTimer(hwnd, ARTWORK_POLL_TIMER_ID);
                 }
                 return 0;
             } else if (wparam == TIMEOUT_TIMER_ID) {
