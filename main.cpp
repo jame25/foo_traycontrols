@@ -5,6 +5,7 @@
 #include "preferences.h"
 #include "popup_window.h"
 #include "control_panel.h"
+#include "artwork_bridge.h"
 
 // Component's DLL instance handle
 HINSTANCE g_hIns = NULL;
@@ -25,7 +26,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 // Component version declaration using the proper SDK macro
 DECLARE_COMPONENT_VERSION(
     "Tray Controls",
-    "1.2.8",
+    "1.2.9",
     "System tray controls for foobar2000.\n"
     "Features:\n"
     "- Minimize to system tray\n"
@@ -45,9 +46,13 @@ public:
     void on_init() override {
         // Initialize the tray manager
         tray_manager::get_instance().initialize();
+        // Initialize foo_artwork bridge for online artwork support
+        init_artwork_bridge();
     }
-    
+
     void on_quit() override {
+        // Unregister foo_artwork callback before other cleanup
+        shutdown_artwork_bridge();
         // Clean up the tray manager, popup window, and control panel
         tray_manager::get_instance().cleanup();
         popup_window::get_instance().cleanup();
@@ -163,4 +168,3 @@ public:
 static initquit_factory_t<tray_init> g_tray_init_factory;
 static initquit_factory_t<theme_callback_init> g_theme_callback_init_factory;
 static play_callback_static_factory_t<tray_play_callback> g_tray_play_callback_factory;
-
