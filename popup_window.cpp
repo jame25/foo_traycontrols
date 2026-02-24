@@ -304,6 +304,19 @@ void popup_window::update_track_info(metadb_handle_ptr p_track) {
 void popup_window::load_cover_art(metadb_handle_ptr p_track) {
     if (!p_track.is_valid()) return;
 
+    // Check if artwork has arrived via callback (from any source).
+    // Pick it up immediately regardless of who triggered the search.
+    if (has_pending_online_artwork()) {
+        HBITMAP bitmap = get_pending_online_artwork();
+        if (bitmap) {
+            cleanup_cover_art();
+            m_cover_art_bitmap = bitmap;
+            m_artwork_from_bridge = false; // We own the copy
+            if (m_popup_window) KillTimer(m_popup_window, ARTWORK_POLL_TIMER_ID);
+            return;
+        }
+    }
+
     try {
         // Try local/embedded artwork first (in its own try-catch so exceptions
         // don't prevent the online artwork fallback from running)
@@ -501,7 +514,7 @@ LRESULT CALLBACK popup_window::popup_window_proc(HWND hwnd, UINT msg, WPARAM wpa
                     if (bitmap) {
                         popup->cleanup_cover_art();
                         popup->m_cover_art_bitmap = bitmap;
-                        popup->m_artwork_from_bridge = true;
+                        popup->m_artwork_from_bridge = false; // We own the copy
                         KillTimer(hwnd, ARTWORK_POLL_TIMER_ID);
                         InvalidateRect(hwnd, nullptr, FALSE);
                     }
