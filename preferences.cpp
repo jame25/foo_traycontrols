@@ -20,6 +20,10 @@ static cfg_int cfg_always_slide_to_side(GUID{0x1234568A, 0x9abc, 0xdef0, {0x12, 
 static cfg_int cfg_use_rounded_corners(GUID{0x12345690, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 1); // Default ON (Win11 style)
 static cfg_int cfg_theme_mode(GUID{0x12345691, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0); // 0=Auto, 1=Force Dark, 2=Force Light
 
+// Display format configuration
+static cfg_string cfg_line1_format(GUID{0x123456E0, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, "%title%");
+static cfg_string cfg_line2_format(GUID{0x123456E1, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, "%artist%");
+
 
 // Font configuration - store LOGFONT structure as binary data
 static cfg_struct_t<LOGFONT> cfg_artist_font(GUID{0x12345692, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, []() {
@@ -220,6 +224,34 @@ int get_theme_mode() {
     if (mode < 0) mode = 0;
     if (mode > 2) mode = 2;
     return mode;
+}
+
+pfc::string8 get_line1_format() {
+    return cfg_line1_format.get();
+}
+
+pfc::string8 get_line2_format() {
+    return cfg_line2_format.get();
+}
+
+void format_display_lines(pfc::string8& line1_out, pfc::string8& line2_out) {
+    try {
+        auto playback = playback_control::get();
+        static_api_ptr_t<titleformat_compiler> compiler;
+
+        pfc::string8 line1_fmt = get_line1_format();
+        pfc::string8 line2_fmt = get_line2_format();
+
+        service_ptr_t<titleformat_object> script;
+        if (compiler->compile(script, line1_fmt)) {
+            playback->playback_format_title(nullptr, line1_out, script, nullptr, playback_control::display_level_all);
+        }
+        if (compiler->compile(script, line2_fmt)) {
+            playback->playback_format_title(nullptr, line2_out, script, nullptr, playback_control::display_level_all);
+        }
+    } catch (...) {
+        // Leave outputs unchanged on error
+    }
 }
 
 // Font configuration access functions
@@ -499,7 +531,10 @@ INT_PTR CALLBACK tray_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, LP
         SendMessage(hThemeModeCombo, CB_ADDSTRING, 0, (LPARAM)L"Light");
         SendMessage(hThemeModeCombo, CB_SETCURSEL, cfg_theme_mode, 0);
 
-        
+        // Initialize display format edit fields
+        uSetDlgItemText(hwnd, IDC_LINE1_FORMAT_EDIT, cfg_line1_format);
+        uSetDlgItemText(hwnd, IDC_LINE2_FORMAT_EDIT, cfg_line2_format);
+
         // Initialize font displays
         p_this->update_font_displays();
         
@@ -527,6 +562,13 @@ INT_PTR CALLBACK tray_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, LP
             }
             break;
             
+        case IDC_LINE1_FORMAT_EDIT:
+        case IDC_LINE2_FORMAT_EDIT:
+            if (HIWORD(wp) == EN_CHANGE) {
+                p_this->on_changed();
+            }
+            break;
+
         case IDC_POPUP_POSITION_COMBO:
         case IDC_POPUP_DURATION_COMBO:
         case IDC_SLIDE_DURATION_COMBO:
@@ -683,6 +725,15 @@ void tray_preferences::apply_settings() {
         // Save theme mode
         cfg_theme_mode = (int)SendMessage(GetDlgItem(m_hwnd, IDC_THEME_MODE_COMBO), CB_GETCURSEL, 0, 0);
 
+        // Save display format strings
+        {
+            pfc::string8 format_str;
+            uGetDlgItemText(m_hwnd, IDC_LINE1_FORMAT_EDIT, format_str);
+            cfg_line1_format = format_str;
+            uGetDlgItemText(m_hwnd, IDC_LINE2_FORMAT_EDIT, format_str);
+            cfg_line2_format = format_str;
+        }
+
         // Notify tray manager and control panel of settings change
         tray_manager::get_instance().on_settings_changed();
         control_panel::get_instance().on_settings_changed();
@@ -702,7 +753,9 @@ void tray_preferences::reset_settings() {
         cfg_always_slide_to_side = 1;     // Default: ON
         cfg_use_rounded_corners = 1;      // Default: ON
         cfg_theme_mode = 0;               // Default: Auto
-        
+        cfg_line1_format = "%title%";     // Default: title
+        cfg_line2_format = "%artist%";    // Default: artist
+
         // Update UI controls to reflect defaults
         CheckDlgButton(m_hwnd, IDC_ALWAYS_MINIMIZE_TO_TRAY, BST_UNCHECKED);
         CheckDlgButton(m_hwnd, IDC_SHOW_POPUP_NOTIFICATION, BST_CHECKED);
@@ -714,7 +767,9 @@ void tray_preferences::reset_settings() {
         SendMessage(GetDlgItem(m_hwnd, IDC_POPUP_DURATION_COMBO), CB_SETCURSEL, 2, 0);        // 3 seconds (index 2)
         SendMessage(GetDlgItem(m_hwnd, IDC_SLIDE_DURATION_COMBO), CB_SETCURSEL, 1, 0);        // Fast 200ms (index 1)
         SendMessage(GetDlgItem(m_hwnd, IDC_THEME_MODE_COMBO), CB_SETCURSEL, 0, 0);            // Auto
-        
+        uSetDlgItemText(m_hwnd, IDC_LINE1_FORMAT_EDIT, "%title%");
+        uSetDlgItemText(m_hwnd, IDC_LINE2_FORMAT_EDIT, "%artist%");
+
         // Notify components of settings change
         tray_manager::get_instance().on_settings_changed();
         control_panel::get_instance().on_settings_changed();
@@ -1095,6 +1150,12 @@ void tray_preferences::switch_tab(int tab) {
     
     // General tab controls (including static text labels)
     int general_controls[] = {
+        // Display Format
+        IDC_DISPLAY_FORMAT_GROUP,
+        IDC_LINE1_FORMAT_LABEL,
+        IDC_LINE1_FORMAT_EDIT,
+        IDC_LINE2_FORMAT_LABEL,
+        IDC_LINE2_FORMAT_EDIT,
         IDC_ALWAYS_MINIMIZE_TO_TRAY,
         IDC_STATIC_MINIMIZE_HELP,
         IDC_STATIC_WHEEL_HELP,
