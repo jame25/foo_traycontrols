@@ -42,9 +42,12 @@ private:
     // POPUP_DISPLAY_TIME is now configurable via get_popup_duration() in preferences
     static const UINT ANIMATION_DURATION = 300; // 300ms slide animation
     static const UINT ANIMATION_STEPS = 20; // Number of animation frames
+    static const UINT ARTWORK_POLL_TIMER_ID = 3003;
+    static const UINT ARTWORK_POLL_INTERVAL = 200; // ms
     
     // Cover art and track info
     HBITMAP m_cover_art_bitmap;
+    bool m_artwork_from_bridge; // true if m_cover_art_bitmap is owned by foo_artwork (do NOT DeleteObject)
     pfc::string8 m_last_track_path;
     metadb_handle_ptr m_current_track;
     
