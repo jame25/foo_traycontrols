@@ -3,6 +3,7 @@
 #include "preferences.h"
 #include "preferences.h"
 #include "volume_popup.h"
+#include "artwork_bridge.h"
 #include <dwmapi.h>
 #pragma comment(lib, "dwmapi.lib")
 
@@ -83,6 +84,8 @@ control_panel::control_panel()
     , m_cover_art_bitmap_original(nullptr)
     , m_original_art_width(0)
     , m_original_art_height(0)
+    , m_online_artwork_pending(false)
+    , m_artwork_from_bridge(false)
     , m_artist_font(nullptr)
     , m_track_font(nullptr)
     , m_animating(false)
@@ -156,8 +159,9 @@ void control_panel::cleanup() {
         KillTimer(m_control_window, ANIMATION_TIMER_ID);
         KillTimer(m_control_window, BUTTON_FADE_TIMER_ID);
         KillTimer(m_control_window, BUTTON_FADE_TIMER_ID + 1);
+        KillTimer(m_control_window, ARTWORK_POLL_TIMER_ID);
     }
-    
+
     cleanup_cover_art();
     cleanup_fonts();
     
@@ -526,9 +530,6 @@ void control_panel::show_undocked_miniplayer() {
 }
 
 void control_panel::update_track_info() {
-    // Force cleanup of old artwork before loading new
-    cleanup_cover_art();
-    
     try {
         auto playback = playback_control::get();
         
@@ -539,56 +540,26 @@ void control_panel::update_track_info() {
             pfc::string8 path = track->get_path();
             bool is_stream = strstr(path.get_ptr(), "://") != nullptr;
             
-            m_current_artist = "Unknown Artist";
-            m_current_title = "Unknown Title";
-            
-            if (is_stream) {
-                // For streaming sources, use titleformat to get what foobar2000 displays
-                try {
-                    static_api_ptr_t<titleformat_compiler> compiler;
-                    service_ptr_t<titleformat_object> script;
-                    
-                    if (compiler->compile(script, "[%artist%]|[%title%]")) {
-                        pfc::string8 formatted_title;
-                        if (playback->playback_format_title(nullptr, formatted_title, script, nullptr, playback_control::display_level_all)) {
-                            const char* separator = strstr(formatted_title.get_ptr(), "|");
-                            if (separator && strlen(formatted_title.get_ptr()) > 1) {
-                                pfc::string8 tf_artist(formatted_title.get_ptr(), separator - formatted_title.get_ptr());
-                                pfc::string8 tf_title(separator + 1);
-                                
-                                if (!tf_artist.is_empty() && !tf_title.is_empty()) {
-                                    m_current_artist = tf_artist.c_str();
-                                    m_current_title = tf_title.c_str();
-                                }
-                            }
-                        }
-                    }
-                } catch (...) {
-                    // Fall through to basic metadata extraction
-                }
-            }
-            
-            // If titleformat didn't work or not a stream, try basic metadata
-            if (m_current_artist == "Unknown Artist" || m_current_title == "Unknown Title") {
+            m_current_title = "";
+            m_current_artist = "";
+
+            // Use configurable display format strings
+            format_display_lines(m_current_title, m_current_artist);
+
+            // Fallback for streams if format returned empty
+            if (is_stream && m_current_title.is_empty() && m_current_artist.is_empty()) {
                 file_info_impl info;
                 if (track->get_info(info)) {
-                    const char* artist_str = info.meta_get("ARTIST", 0);
-                    const char* title_str = info.meta_get("TITLE", 0);
-                    
-                    if (artist_str && *artist_str) m_current_artist = artist_str;
-                    if (title_str && *title_str) m_current_title = title_str;
-                    
-                    // For streams, try additional fallbacks
-                    if (is_stream) {
-                        if (m_current_title == "Unknown Title" && info.meta_exists("server")) {
-                            m_current_title = info.meta_get("server", 0);
-                        }
-                        if (m_current_title == "Unknown Title" && info.meta_exists("SERVER")) {
-                            m_current_title = info.meta_get("SERVER", 0);
-                        }
+                    if (info.meta_exists("server")) {
+                        m_current_title = info.meta_get("server", 0);
+                    } else if (info.meta_exists("SERVER")) {
+                        m_current_title = info.meta_get("SERVER", 0);
                     }
                 }
             }
+
+            if (m_current_title.is_empty()) m_current_title = "Unknown Title";
+            if (m_current_artist.is_empty()) m_current_artist = "Unknown Artist";
             
             // Get track length
             m_track_length = track->get_length();
@@ -748,38 +719,131 @@ void control_panel::position_control_panel() {
 }
 
 void control_panel::load_cover_art() {
-    cleanup_cover_art();
-    
+    // If we requested online artwork and it has arrived, pick it up.
+    // Only check when we have an outstanding request (m_online_artwork_pending).
+    if (m_online_artwork_pending && has_pending_online_artwork()) {
+        HBITMAP bitmap = get_pending_online_artwork();
+        if (bitmap) {
+            cleanup_cover_art();
+            m_cover_art_bitmap = bitmap;
+            m_cover_art_bitmap_large = nullptr;
+            m_cover_art_bitmap_original = nullptr;
+            m_artwork_from_bridge = false; // We own the copy, cleanup_cover_art will DeleteObject
+            m_online_artwork_pending = false;
+            if (m_control_window) KillTimer(m_control_window, ARTWORK_POLL_TIMER_ID);
+            return;
+        }
+    }
+
+    // If we previously had bridge artwork for the current stream, check if metadata
+    // is still the same - if so, re-acquire it. update_track_info() calls cleanup_cover_art()
+    // before us, so we need to re-acquire the bridge bitmap from foo_artwork.
+    if (!m_last_stream_artist.is_empty()) {
+        try {
+            auto playback = playback_control::get();
+            metadb_handle_ptr track;
+            if (playback->get_now_playing(track) && track.is_valid()) {
+                pfc::string8 path = track->get_path();
+                bool is_stream = strstr(path.get_ptr(), "://") != nullptr;
+                if (is_stream && is_artwork_bridge_available()) {
+                    pfc::string8 artist, title;
+                    service_ptr_t<titleformat_object> script_artist, script_title;
+                    titleformat_compiler::get()->compile_safe(script_artist, "%artist%");
+                    titleformat_compiler::get()->compile_safe(script_title, "%title%");
+                    playback->playback_format_title(nullptr, artist, script_artist, nullptr, playback_control::display_level_all);
+                    playback->playback_format_title(nullptr, title, script_title, nullptr, playback_control::display_level_all);
+
+                    // Same metadata as last request - re-acquire the bitmap from our bridge cache
+                    if (artist == m_last_stream_artist && title == m_last_stream_title) {
+                        HBITMAP existing = get_last_online_artwork();
+                        if (existing) {
+                            cleanup_cover_art();
+                            m_cover_art_bitmap = existing;
+                            m_artwork_from_bridge = false; // We own the copy
+                            return;
+                        }
+                    }
+                }
+            }
+        } catch (...) {}
+    }
+
     try {
         auto playback = playback_control::get();
         metadb_handle_ptr track;
-        
+
         if (playback->get_now_playing(track) && track.is_valid()) {
-            auto api = album_art_manager_v2::get();
-            if (!api.is_valid()) return;
-            
-            auto extractor = api->open(pfc::list_single_ref_t<metadb_handle_ptr>(track), 
-                                       pfc::list_single_ref_t<GUID>(album_art_ids::cover_front), 
-                                       fb2k::noAbort);
-            
-            if (extractor.is_valid()) {
-                auto data = extractor->query(album_art_ids::cover_front, fb2k::noAbort);
-                if (data.is_valid() && data->get_size() > 0) {
-                    // Convert album art data to HBITMAP (all sizes)
-                    m_cover_art_bitmap = convert_album_art_to_bitmap(data);
-                    m_cover_art_bitmap_large = convert_album_art_to_bitmap_large(data);
-                    m_cover_art_bitmap_original = convert_album_art_to_bitmap_original(data);
+            // Try local/embedded artwork first (in its own try-catch so exceptions
+            // don't prevent the online artwork fallback from running)
+            try {
+                auto api = album_art_manager_v2::get();
+                if (api.is_valid()) {
+                    auto extractor = api->open(pfc::list_single_ref_t<metadb_handle_ptr>(track),
+                                               pfc::list_single_ref_t<GUID>(album_art_ids::cover_front),
+                                               fb2k::noAbort);
+
+                    if (extractor.is_valid()) {
+                        auto data = extractor->query(album_art_ids::cover_front, fb2k::noAbort);
+                        if (data.is_valid() && data->get_size() > 0) {
+                            // Found local/embedded artwork - replace old artwork
+                            cleanup_cover_art();
+                            m_cover_art_bitmap = convert_album_art_to_bitmap(data);
+                            m_cover_art_bitmap_large = convert_album_art_to_bitmap_large(data);
+                            m_cover_art_bitmap_original = convert_album_art_to_bitmap_original(data);
+                            m_last_stream_artist.reset();
+                            m_last_stream_title.reset();
+                            return;
+                        }
+                    }
                 }
+            } catch (...) {}
+
+            // No embedded/local artwork found - try online via foo_artwork for streams
+            pfc::string8 path = track->get_path();
+            bool is_stream = strstr(path.get_ptr(), "://") != nullptr;
+
+            if (is_stream && is_artwork_bridge_available()) {
+                // Extract artist/title using playback_format_title for stream metadata
+                pfc::string8 artist, title;
+                service_ptr_t<titleformat_object> script_artist, script_title;
+                titleformat_compiler::get()->compile_safe(script_artist, "%artist%");
+                titleformat_compiler::get()->compile_safe(script_title, "%title%");
+                playback->playback_format_title(nullptr, artist, script_artist, nullptr, playback_control::display_level_all);
+                playback->playback_format_title(nullptr, title, script_title, nullptr, playback_control::display_level_all);
+
+                // Avoid re-requesting the same artist/title
+                if (artist != m_last_stream_artist || title != m_last_stream_title) {
+                    m_last_stream_artist = artist;
+                    m_last_stream_title = title;
+                    m_online_artwork_pending = true;
+                    request_online_artwork(artist.c_str(), title.c_str());
+                    // Start polling for artwork results (async search)
+                    // Keep old artwork visible until new artwork arrives via callback
+                    if (m_control_window) {
+                        SetTimer(m_control_window, ARTWORK_POLL_TIMER_ID, ARTWORK_POLL_INTERVAL, nullptr);
+                    }
+                }
+                // Don't cleanup - keep existing artwork visible during async fetch
+                return;
             }
+
+            // Not a stream and no local artwork found - clear artwork
+            cleanup_cover_art();
+        } else {
+            // No valid track - clear artwork
+            cleanup_cover_art();
         }
     } catch (...) {
-        // Ignore album art errors
+        // Ignore errors
     }
 }
 
 void control_panel::cleanup_cover_art() {
     if (m_cover_art_bitmap) {
-        DeleteObject(m_cover_art_bitmap);
+        // Do NOT delete bitmaps owned by foo_artwork bridge
+        if (!m_artwork_from_bridge) {
+            DeleteObject(m_cover_art_bitmap);
+        }
         m_cover_art_bitmap = nullptr;
     }
     if (m_cover_art_bitmap_large) {
@@ -792,6 +856,7 @@ void control_panel::cleanup_cover_art() {
     }
     m_original_art_width = 0;
     m_original_art_height = 0;
+    m_artwork_from_bridge = false;
 }
 
 HBITMAP control_panel::convert_album_art_to_bitmap(album_art_data_ptr art_data) {
@@ -4006,6 +4071,24 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                 panel->cleanup_cover_art(); // Clear cached artwork
                 panel->update_track_info(); // Full update
                 return 0;
+            } else if (wparam == ARTWORK_POLL_TIMER_ID) {
+                // Poll foo_artwork for completed artwork search
+                if (panel && panel->m_online_artwork_pending && has_pending_online_artwork()) {
+                    HBITMAP bitmap = get_pending_online_artwork();
+                    if (bitmap) {
+                        panel->cleanup_cover_art();
+                        panel->m_cover_art_bitmap = bitmap;
+                        panel->m_cover_art_bitmap_large = nullptr;
+                        panel->m_cover_art_bitmap_original = nullptr;
+                        panel->m_artwork_from_bridge = false; // We own the copy
+                        panel->m_online_artwork_pending = false;
+                        KillTimer(hwnd, ARTWORK_POLL_TIMER_ID);
+                        InvalidateRect(hwnd, nullptr, FALSE);
+                    }
+                } else if (panel && !panel->m_online_artwork_pending) {
+                    KillTimer(hwnd, ARTWORK_POLL_TIMER_ID);
+                }
+                return 0;
             } else if (wparam == TIMEOUT_TIMER_ID) {
                 // Timeout reached - hide the control panel
                 // But NOT in artwork expanded mode - user wants it to stay open
@@ -4168,10 +4251,16 @@ void control_panel::paint_control_panel(HDC hdc) {
         // Draw actual cover art
         HDC cover_dc = CreateCompatibleDC(hdc);
         HBITMAP old_bitmap = (HBITMAP)SelectObject(cover_dc, m_cover_art_bitmap);
-        
+
+        // Get actual bitmap dimensions (bridge artwork may differ from 80x80 thumbnail)
+        BITMAP bmp_info;
+        GetObject(m_cover_art_bitmap, sizeof(BITMAP), &bmp_info);
+
         // Draw the cover art bitmap scaled to fit the adaptive cover area
-        StretchBlt(hdc, cover_rect.left, cover_rect.top, art_size, art_size, cover_dc, 0, 0, 80, 80, SRCCOPY);
-        
+        SetStretchBltMode(hdc, HALFTONE);
+        StretchBlt(hdc, cover_rect.left, cover_rect.top, art_size, art_size,
+                   cover_dc, 0, 0, bmp_info.bmWidth, bmp_info.bmHeight, SRCCOPY);
+
         SelectObject(cover_dc, old_bitmap);
         DeleteDC(cover_dc);
     } else {
@@ -4365,23 +4454,37 @@ void control_panel::paint_artwork_expanded(HDC hdc, const RECT& client_rect) {
     HBITMAP buffer_bitmap = CreateCompatibleBitmap(hdc, window_width, window_height);
     HBITMAP old_buffer_bitmap = (HBITMAP)SelectObject(buffer_dc, buffer_bitmap);
     
-    if (m_cover_art_bitmap_original && m_original_art_width > 0 && m_original_art_height > 0) {
-        // Use original resolution bitmap for expanded view
+    // Use original resolution bitmap if available, otherwise fall back to standard bitmap
+    // (bridge artwork from foo_artwork only provides m_cover_art_bitmap, not the _original variant)
+    HBITMAP art_bitmap = m_cover_art_bitmap_original ? m_cover_art_bitmap_original : m_cover_art_bitmap;
+    int art_width = m_original_art_width;
+    int art_height = m_original_art_height;
+
+    // For bridge artwork (no original bitmap), get dimensions from the standard bitmap
+    if (!m_cover_art_bitmap_original && m_cover_art_bitmap) {
+        BITMAP bm;
+        if (GetObject(m_cover_art_bitmap, sizeof(bm), &bm)) {
+            art_width = bm.bmWidth;
+            art_height = bm.bmHeight;
+        }
+    }
+
+    if (art_bitmap && art_width > 0 && art_height > 0) {
         HDC cover_dc = CreateCompatibleDC(buffer_dc);
-        HBITMAP old_bitmap = (HBITMAP)SelectObject(cover_dc, m_cover_art_bitmap_original);
-        
+        HBITMAP old_bitmap = (HBITMAP)SelectObject(cover_dc, art_bitmap);
+
         // Set high-quality stretching mode
         SetStretchBltMode(buffer_dc, HALFTONE);
         SetBrushOrgEx(buffer_dc, 0, 0, nullptr);
-        
+
         // Since window maintains aspect ratio, artwork should fill entire window
         // Draw the artwork to fill the entire client area (no black bars)
         StretchBlt(buffer_dc, 0, 0, window_width, window_height,
-                   cover_dc, 0, 0, m_original_art_width, m_original_art_height, SRCCOPY);
-        
+                   cover_dc, 0, 0, art_width, art_height, SRCCOPY);
+
         SelectObject(cover_dc, old_bitmap);
         DeleteDC(cover_dc);
-        
+
         // Draw track info overlay if hovering
         if (m_overlay_visible) {
             draw_track_info_overlay(buffer_dc, window_width, window_height);
