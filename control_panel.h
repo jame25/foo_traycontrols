@@ -153,6 +153,12 @@ private:
     HBITMAP m_cover_art_bitmap_original; // Full resolution original for expanded view
     int m_original_art_width;
     int m_original_art_height;
+
+    // Online artwork dedup cache (avoid re-requesting same artist/title)
+    pfc::string8 m_last_stream_artist;
+    pfc::string8 m_last_stream_title;
+    bool m_online_artwork_pending;
+    bool m_artwork_from_bridge; // true if m_cover_art_bitmap is owned by foo_artwork (do NOT DeleteObject)
     
     // Custom fonts
     HFONT m_artist_font;
@@ -214,6 +220,8 @@ private:
     int m_slide_target_x;             // Animation target X position
     int m_slide_animation_step;       // Current animation step
     static const UINT SLIDE_TIMER_ID = 4010;
+    static const UINT ARTWORK_POLL_TIMER_ID = 4020;
+    static const UINT ARTWORK_POLL_INTERVAL = 200; // ms - poll foo_artwork for results
     static const int SLIDE_ANIMATION_STEPS = 15;
     static const int SLIDE_ANIMATION_DURATION = 200; // ms
     void update_slide_animation();
