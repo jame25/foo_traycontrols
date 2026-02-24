@@ -205,132 +205,20 @@ void tray_manager::update_tooltip(metadb_handle_ptr p_track) {
     }
     
     try {
-        // Get track info
-        file_info_impl info;
-        p_track->get_info(info);
-        
-        pfc::string8 path = p_track->get_path();
-        bool is_stream = strstr(path.get_ptr(), "://") != nullptr;
-        
-        // Build tooltip string with artist and title
-        pfc::string8 artist, title, tooltip;
-        
-        // Check for standard metadata first
-        if (info.meta_exists("ARTIST")) {
-            artist = info.meta_get("ARTIST", 0);
-        }
-        if (info.meta_exists("TITLE")) {
-            title = info.meta_get("TITLE", 0);
-        }
-        
-        // For streaming sources, try multiple approaches
-        if (is_stream) { // This is a stream
-            // First, try to get current track metadata using titleformat (this should get what foobar2000 displays)
-            try {
-                static_api_ptr_t<playback_control> pc;
-                static_api_ptr_t<titleformat_compiler> compiler;
-                service_ptr_t<titleformat_object> script;
-                
-                // Try to get the formatted title that foobar2000 is currently displaying
-                if (compiler->compile(script, "[%artist%]|[%title%]")) {
-                    pfc::string8 formatted_title;
-                    if (pc->playback_format_title(nullptr, formatted_title, script, nullptr, playback_control::display_level_all)) {
-                        const char* separator = strstr(formatted_title.get_ptr(), "|");
-                        if (separator && strlen(formatted_title.get_ptr()) > 1) { // Make sure we have actual content
-                            pfc::string8 tf_artist(formatted_title.get_ptr(), separator - formatted_title.get_ptr());
-                            pfc::string8 tf_title(separator + 1);
-                            
-                            // Only use titleformat result if it has meaningful content
-                            if (!tf_artist.is_empty() && !tf_title.is_empty()) {
-                                artist = tf_artist;
-                                title = tf_title;
-                            }
-                        }
-                    }
-                }
-            } catch (...) {
-                // Ignore titleformat errors
-            }
-            
-            // If titleformat didn't work, try alternative metadata fields
-            if (artist.is_empty() && info.meta_exists("ALBUMARTIST")) {
-                artist = info.meta_get("ALBUMARTIST", 0);
-            }
-            if (artist.is_empty() && info.meta_exists("PERFORMER")) {
-                artist = info.meta_get("PERFORMER", 0);
-            }
-            
-            // Check for ICY metadata (common in internet radio)
-            if (title.is_empty() && info.meta_exists("STREAMTITLE")) {
-                title = info.meta_get("STREAMTITLE", 0);
-            }
-            if (title.is_empty() && info.meta_exists("ICY_TITLE")) {
-                title = info.meta_get("ICY_TITLE", 0);
-            }
-            
-            // Try some other common streaming metadata fields
-            if (title.is_empty() && info.meta_exists("DESCRIPTION")) {
-                title = info.meta_get("DESCRIPTION", 0);
-            }
-            if (title.is_empty() && info.meta_exists("COMMENT")) {
-                title = info.meta_get("COMMENT", 0);
-            }
-            
-            // For radio streams, use server name as last resort
-            if (artist.is_empty() && title.is_empty()) {
-                if (info.meta_exists("SERVER")) {
-                    title = info.meta_get("SERVER", 0);
-                }
-                if (title.is_empty() && info.meta_exists("server")) {
-                    title = info.meta_get("server", 0);
-                }
-            }
-            
-            // If still no metadata, try to get it from the filename/URL
-            if (artist.is_empty() && title.is_empty()) {
-                // Extract station name from URL if possible
-                const char* url_title = path.get_ptr();
-                const char* last_slash = strrchr(url_title, '/');
-                if (last_slash && last_slash[1]) {
-                    pfc::string8 url_part = last_slash + 1;
-                    // Don't show just the codec name, show something more meaningful
-                    if (strcmp(url_part.get_ptr(), "aac") == 0 || 
-                        strcmp(url_part.get_ptr(), "mp3") == 0 || 
-                        strcmp(url_part.get_ptr(), "ogg") == 0) {
-                        title = "Internet Radio Stream";
-                    } else {
-                        title = url_part;
-                    }
-                } else {
-                    title = "Internet Radio Stream";
-                }
-            }
-        }
-        
-        if (!artist.is_empty() && !title.is_empty()) {
-            tooltip = artist;
+        // Use configurable display format strings
+        pfc::string8 line1, line2, tooltip;
+        format_display_lines(line1, line2);
+
+        // Build tooltip from formatted lines
+        if (!line1.is_empty() && !line2.is_empty()) {
+            tooltip = line1;
             tooltip += " - ";
-            tooltip += title;
-        } else if (!title.is_empty()) {
-            tooltip = title;
+            tooltip += line2;
+        } else if (!line1.is_empty()) {
+            tooltip = line1;
+        } else if (!line2.is_empty()) {
+            tooltip = line2;
         } else {
-            // Use filename/URL if no metadata
-            tooltip = p_track->get_path();
-            const char* filename = strrchr(tooltip.get_ptr(), '\\');
-            if (filename) {
-                tooltip = filename + 1;
-            } else {
-                const char* url_filename = strrchr(tooltip.get_ptr(), '/');
-                if (url_filename) {
-                    tooltip = url_filename + 1;
-                } else {
-                    tooltip = "Unknown Track";
-                }
-            }
-        }
-        
-        // Ensure we have some text
-        if (tooltip.is_empty()) {
             tooltip = "foobar2000 - Playing";
         }
         
@@ -868,3 +756,4 @@ void tray_manager::check_window_visibility() {
         m_was_minimized = is_minimized;
     }
 }
+
