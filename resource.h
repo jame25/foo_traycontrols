@@ -88,6 +88,13 @@
 #define IDC_TIMER_FONT_DISPLAY       282
 #define IDC_TIMER_FONT_SELECT        283
 
+// Display Format controls (General tab)
+#define IDC_DISPLAY_FORMAT_GROUP     290
+#define IDC_LINE1_FORMAT_LABEL       291
+#define IDC_LINE1_FORMAT_EDIT        292
+#define IDC_LINE2_FORMAT_LABEL       293
+#define IDC_LINE2_FORMAT_EDIT        294
+
 
 // Keep old IDs for backward compatibility (mapped to docked)
 #define IDC_CP_ARTIST_FONT_LABEL         IDC_DOCKED_ARTIST_LABEL
