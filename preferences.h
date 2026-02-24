@@ -15,6 +15,11 @@ bool get_use_rounded_corners(); // Windows 11 style rounded corners
 bool get_always_slide_to_side(); // Always slide instead of close
 int get_theme_mode(); // 0=Auto, 1=Force Dark, 2=Force Light
 
+// Display format functions
+pfc::string8 get_line1_format();
+pfc::string8 get_line2_format();
+void format_display_lines(pfc::string8& line1_out, pfc::string8& line2_out);
+
 
 
 // Font configuration functions
