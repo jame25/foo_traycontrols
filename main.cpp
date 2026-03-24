@@ -26,7 +26,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 // Component version declaration using the proper SDK macro
 DECLARE_COMPONENT_VERSION(
     "Tray Controls",
-    "1.2.9",
+    "1.3.0",
     "System tray controls for foobar2000.\n"
     "Features:\n"
     "- Minimize to system tray\n"
