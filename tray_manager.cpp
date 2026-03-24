@@ -598,24 +598,23 @@ LRESULT CALLBACK tray_manager::tray_window_proc(HWND hwnd, UINT msg, WPARAM wpar
 
 bool tray_manager::is_cursor_over_tray_icon() {
     if (!m_initialized || !m_tray_added) return false;
-    
+
     // Get cursor position
     POINT cursor_pos;
     if (!GetCursorPos(&cursor_pos)) return false;
-    
-    // Get tray area bounds
-    RECT tray_rect;
-    HWND tray_wnd = FindWindow(L"Shell_TrayWnd", nullptr);
-    if (!tray_wnd) return false;
-    
-    HWND notification_area = FindWindowEx(tray_wnd, nullptr, L"TrayNotifyWnd", nullptr);
-    if (!notification_area) return false;
-    
-    if (!GetWindowRect(notification_area, &tray_rect)) return false;
-    
-    // Check if cursor is within tray area (with some tolerance)
-    return (cursor_pos.x >= tray_rect.left && cursor_pos.x <= tray_rect.right &&
-            cursor_pos.y >= tray_rect.top && cursor_pos.y <= tray_rect.bottom);
+
+    // Get the exact bounding rectangle of THIS app's tray icon
+    NOTIFYICONIDENTIFIER nii = {};
+    nii.cbSize = sizeof(nii);
+    nii.hWnd = m_nid.hWnd;
+    nii.uID = m_nid.uID;
+
+    RECT icon_rect;
+    if (FAILED(Shell_NotifyIconGetRect(&nii, &icon_rect))) return false;
+
+    // Check if cursor is within this icon's bounds
+    return (cursor_pos.x >= icon_rect.left && cursor_pos.x <= icon_rect.right &&
+            cursor_pos.y >= icon_rect.top && cursor_pos.y <= icon_rect.bottom);
 }
 
 // Low-level mouse hook for wheel volume control over tray icon
