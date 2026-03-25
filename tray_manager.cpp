@@ -628,16 +628,13 @@ LRESULT CALLBACK tray_manager::low_level_mouse_proc(int nCode, WPARAM wParam, LP
             short wheelDelta = HIWORD(hookData->mouseData);
 
             try {
+                // Use foobar2000's native volume stepping, which respects
+                // the user's configured step size and perceptual curve.
                 static_api_ptr_t<playback_control> pc;
-                float current_volume = pc->get_volume();
-                // Volume is in dB, typically -100 to 0
-                // Adjust by 2 dB per wheel notch (120 units = 1 notch)
-                float volume_change = (wheelDelta > 0) ? 2.0f : -2.0f;
-                float new_volume = current_volume + volume_change;
-                // Clamp to valid range
-                if (new_volume > 0.0f) new_volume = 0.0f;
-                if (new_volume < -100.0f) new_volume = -100.0f;
-                pc->set_volume(new_volume);
+                if (wheelDelta > 0)
+                    pc->volume_up();
+                else
+                    pc->volume_down();
             } catch (...) {
                 // Ignore volume control errors
             }
