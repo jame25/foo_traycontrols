@@ -13,7 +13,8 @@ static HMODULE g_foo_artwork_module = nullptr;
 
 // Pending artwork from callback
 static HBITMAP g_pending_artwork_bitmap = nullptr;
-static bool g_has_pending_artwork = false;
+static bool g_has_pending_artwork_popup = false;
+static bool g_has_pending_artwork_panel = false;
 
 // Create an independent copy of an HBITMAP (caller owns the copy and must DeleteObject it)
 static HBITMAP copy_hbitmap(HBITMAP source) {
@@ -47,8 +48,8 @@ static HBITMAP copy_hbitmap(HBITMAP source) {
 static void artwork_result_callback(bool success, HBITMAP bitmap) {
     if (success && bitmap) {
         g_pending_artwork_bitmap = bitmap;
-        g_has_pending_artwork = true;
-        // The ARTWORK_POLL_TIMER in control_panel/popup_window will pick this up
+        g_has_pending_artwork_popup = true;
+        g_has_pending_artwork_panel = true;
     }
 }
 
@@ -93,12 +94,14 @@ void shutdown_artwork_bridge() {
         g_artwork_set_callback(nullptr); // Fallback for older foo_artwork
     }
     g_pending_artwork_bitmap = nullptr;
-    g_has_pending_artwork = false;
+    g_has_pending_artwork_popup = false;
+    g_has_pending_artwork_panel = false;
 }
 
 void clear_pending_online_artwork() {
     g_pending_artwork_bitmap = nullptr;
-    g_has_pending_artwork = false;
+    g_has_pending_artwork_popup = false;
+    g_has_pending_artwork_panel = false;
 }
 
 void request_online_artwork(const char* artist, const char* title) {
@@ -113,7 +116,15 @@ void request_online_artwork(const char* artist, const char* title) {
 }
 
 bool has_pending_online_artwork() {
-    return g_has_pending_artwork;
+    return g_has_pending_artwork_popup || g_has_pending_artwork_panel;
+}
+
+bool has_pending_online_artwork_popup() {
+    return g_has_pending_artwork_popup;
+}
+
+bool has_pending_online_artwork_panel() {
+    return g_has_pending_artwork_panel;
 }
 
 HBITMAP get_pending_online_artwork() {
@@ -121,7 +132,20 @@ HBITMAP get_pending_online_artwork() {
     // DeleteObject it. This is necessary because foo_artwork owns the original and
     // can DeleteObject it at any time (e.g. when foo_nowbar re-requests artwork).
     HBITMAP copy = copy_hbitmap(g_pending_artwork_bitmap);
-    g_has_pending_artwork = false;
+    g_has_pending_artwork_popup = false;
+    g_has_pending_artwork_panel = false;
+    return copy;
+}
+
+HBITMAP get_pending_online_artwork_popup() {
+    HBITMAP copy = copy_hbitmap(g_pending_artwork_bitmap);
+    g_has_pending_artwork_popup = false;
+    return copy;
+}
+
+HBITMAP get_pending_online_artwork_panel() {
+    HBITMAP copy = copy_hbitmap(g_pending_artwork_bitmap);
+    g_has_pending_artwork_panel = false;
     return copy;
 }
 
