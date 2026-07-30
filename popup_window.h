@@ -44,20 +44,26 @@ private:
     static const UINT ANIMATION_STEPS = 20; // Number of animation frames
     static const UINT ARTWORK_POLL_TIMER_ID = 3003;
     static const UINT ARTWORK_POLL_INTERVAL = 200; // ms
+    static const UINT ARTWORK_WAIT_TIMER_ID = 3005;
+    static const UINT ARTWORK_WAIT_INTERVAL = 50; // 50ms polling interval
+    static const int MAX_ARTWORK_WAIT_STEPS = 70; // 70 * 50ms = 3500ms (3.5s) max wait for network artwork download
     
     // Cover art and track info
     HBITMAP m_cover_art_bitmap;
     bool m_artwork_from_bridge; // true if m_cover_art_bitmap is owned by foo_artwork (do NOT DeleteObject)
     pfc::string8 m_last_track_path;
     metadb_handle_ptr m_current_track;
+    metadb_handle_ptr m_pending_track;
+    int m_artwork_wait_count;
     
     // Window management
     void create_popup_window();
     void position_popup();
     void update_track_info(metadb_handle_ptr p_track);
-    void load_cover_art(metadb_handle_ptr p_track);
+    void load_cover_art(metadb_handle_ptr p_track, bool is_track_change = false);
     void cleanup_cover_art();
     HBITMAP convert_album_art_to_bitmap(album_art_data_ptr art_data);
+    void on_artwork_wait_timer();
     
     // Animation
     void start_slide_in_animation();
