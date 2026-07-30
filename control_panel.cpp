@@ -720,8 +720,8 @@ void control_panel::position_control_panel() {
 
 void control_panel::load_cover_art() {
     // Check if artwork has arrived via callback (from foo_artwork).
-    if (has_pending_online_artwork()) {
-        HBITMAP bitmap = get_pending_online_artwork();
+    if (has_pending_online_artwork_panel()) {
+        HBITMAP bitmap = get_pending_online_artwork_panel();
         if (bitmap) {
             cleanup_cover_art();
             m_cover_art_bitmap = bitmap;
