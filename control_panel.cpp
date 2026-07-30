@@ -74,6 +74,7 @@ control_panel::control_panel()
     , m_saved_normal_width(338)
     , m_saved_normal_height(120)
     , m_saved_compact_width(320)
+    , m_saved_compact_height(75)
     , m_was_compact_before_expanded(false)
     , m_is_rolling_animation(false)
     , m_rolling_to_compact(false)
@@ -658,6 +659,14 @@ void control_panel::create_control_window() {
         }
     }
     
+    // Load configured MiniPlayer mode sizes
+    m_saved_normal_width = get_miniplayer_undocked_width();
+    m_saved_normal_height = get_miniplayer_undocked_height();
+    m_saved_compact_width = get_miniplayer_compact_width();
+    m_saved_compact_height = get_miniplayer_compact_height();
+    m_saved_expanded_width = get_miniplayer_expanded_size();
+    m_saved_expanded_height = get_miniplayer_expanded_size();
+
     // Create control window (initially hidden) - temporarily remove WS_EX_NOACTIVATE for testing
     m_control_window = CreateWindowEx(
         WS_EX_TOOLWINDOW | WS_EX_TOPMOST, // Removed WS_EX_NOACTIVATE for testing
@@ -1675,25 +1684,12 @@ void control_panel::draw_collapse_triangle(HDC hdc, int x, int y, int size, int 
     // Let's stick to a simple small triangle pointing inwards (bottom-left).
     
     int half = size / 2;
-    // Center x,y passed? Or top-right corner coordinates?
-    // Let's assume (x,y) is the CENTER of the triangle area.
     
+    // Right triangle in bottom-right corner
     Gdiplus::Point triangle[3];
-    // Inward pointing (West-South)
     triangle[0] = Gdiplus::Point(x + half, y - half); // Top-Right
-    triangle[1] = Gdiplus::Point(x - half, y - half); // Top-Left
-    triangle[2] = Gdiplus::Point(x + half, y + half); // Bottom-Right
-    // Wait, that's half a square.
-    
-    // Let's do an equilateral triangle pointing down-left?
-    // Or just a standard "Restore" glyph?
-    // User asked for "small white triangle".
-    // I will draw a triangle pointing South-West.
-    
-    triangle[0] = Gdiplus::Point(x + half, y - half); // Top-Right
-    triangle[1] = Gdiplus::Point(x - half, y - half); // Top-Left
-    triangle[2] = Gdiplus::Point(x + half, y + half); // Bottom-Right
-    // This forms a right triangle in the top-right corner.
+    triangle[1] = Gdiplus::Point(x + half, y + half); // Bottom-Right
+    triangle[2] = Gdiplus::Point(x - half, y + half); // Bottom-Left
     
     graphics.FillPolygon(&brush, triangle, 3);
 }
@@ -1706,10 +1702,10 @@ void control_panel::draw_close_icon_with_opacity(HDC hdc, int x, int y, int size
     
     // Simulate opacity
     int alpha = (255 * opacity) / 100;
-    // Ensure minimum visibility
     if (alpha < 50) alpha = 50; 
     
-    Gdiplus::Pen pen(Gdiplus::Color(alpha, 255, 255, 255), 2.0f);
+    int color_value = m_is_dark_mode ? 255 : 0;
+    Gdiplus::Pen pen(Gdiplus::Color(alpha, color_value, color_value, color_value), 2.0f);
     
     int half_size = size / 2;
     // Draw X
@@ -1958,6 +1954,35 @@ void control_panel::on_settings_changed() {
     // Apply window corner preference
     apply_window_corner_preference();
     
+    // Reload MiniPlayer mode size configuration
+    int undocked_w = get_miniplayer_undocked_width();
+    int undocked_h = get_miniplayer_undocked_height();
+    int compact_w = get_miniplayer_compact_width();
+    int compact_h = get_miniplayer_compact_height();
+    int expanded_s = get_miniplayer_expanded_size();
+
+    m_saved_normal_width = undocked_w;
+    m_saved_normal_height = undocked_h;
+    m_saved_compact_width = compact_w;
+    m_saved_compact_height = compact_h;
+    m_saved_expanded_width = expanded_s;
+    m_saved_expanded_height = expanded_s;
+
+    if (m_visible && m_control_window && m_is_undocked) {
+        int target_w = undocked_w;
+        int target_h = undocked_h;
+
+        if (m_is_compact_mode) {
+            target_w = compact_w;
+            target_h = compact_h;
+        } else if (m_is_artwork_expanded) {
+            target_w = expanded_s;
+            target_h = expanded_s;
+        }
+
+        SetWindowPos(m_control_window, NULL, 0, 0, target_w, target_h, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+    }
+
     // Trigger repaint if visible
     if (m_visible && m_control_window) {
         InvalidateRect(m_control_window, nullptr, TRUE);
@@ -2085,8 +2110,8 @@ void control_panel::toggle_artwork_expanded() {
         
         if (m_is_compact_mode) {
             // Return to compact mode
-            int compact_height = 75;
-            int compact_width = 320;
+            int compact_height = m_saved_compact_height > 0 ? m_saved_compact_height : 75;
+            int compact_width = m_saved_compact_width > 0 ? m_saved_compact_width : 320;
             SetWindowPos(m_control_window, HWND_TOPMOST, 0, 0, compact_width, compact_height, 
                 SWP_NOMOVE | SWP_NOACTIVATE);
         } else {
@@ -2196,8 +2221,8 @@ void control_panel::toggle_compact_mode() {
         m_is_compact_mode = true;
         
         // Set compact dimensions (2cm height ≈ 75 pixels at 96 DPI, width reduced by 20%)
-        int compact_height = 75;
-        int compact_width = 320; // Reduced by 20% from 400px
+        int compact_height = m_saved_compact_height > 0 ? m_saved_compact_height : 75;
+        int compact_width = m_saved_compact_width > 0 ? m_saved_compact_width : 320;
         
         SetWindowPos(m_control_window, HWND_TOPMOST, 0, 0, 
             compact_width, compact_height, 
@@ -2209,6 +2234,22 @@ void control_panel::toggle_compact_mode() {
     
     // Trigger repaint
     InvalidateRect(m_control_window, nullptr, TRUE);
+}
+
+void control_panel::close_panel_and_focus_foobar() {
+    if (m_visible) {
+        hide_control_panel();
+    }
+    
+    HWND main_wnd = core_api::get_main_window();
+    if (main_wnd && IsWindow(main_wnd)) {
+        if (IsIconic(main_wnd)) {
+            ShowWindow(main_wnd, SW_RESTORE);
+        } else {
+            ShowWindow(main_wnd, SW_SHOW);
+        }
+        SetForegroundWindow(main_wnd);
+    }
 }
 
 void control_panel::handle_button_click(int button_id) {
@@ -2801,14 +2842,20 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                 int window_width = client_rect.right - client_rect.left;
                 int window_height = client_rect.bottom - client_rect.top;
                 
-                // Slide-to-side: Check for click on right edge (last 40px) or slide back if already slid
+                // Check for Upper-Right Close button click FIRST
+                if (pt.x >= window_width - 40 && pt.y <= 40) {
+                    panel->close_panel_and_focus_foobar();
+                    return 0;
+                }
+
+                // Slide-to-side: Check for click on right edge below Close button (last 40px, y > 40)
                 const int SLIDE_CLICK_ZONE = 40;
                 if (panel->m_is_slid_to_side) {
                     // If slid, any click brings it back
                     panel->slide_back_from_side();
                     return 0;
-                } else if (pt.x >= window_width - SLIDE_CLICK_ZONE) {
-                    // Right edge clicked - slide to side
+                } else if (pt.x >= window_width - SLIDE_CLICK_ZONE && pt.y > 40) {
+                    // Right edge clicked (below close button) - slide to side
                     panel->slide_to_side();
                     return 0;
                 }
@@ -2927,34 +2974,34 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
             }
             
             // Handle normal undocked mode clicks (non-compact, non-expanded)
-            // Collapse triangle in top-right corner and artwork clicks reach here via HTCLIENT
             if (panel && panel->m_is_undocked && !panel->m_is_compact_mode && !panel->m_is_artwork_expanded) {
                 POINT pt = {LOWORD(lparam), HIWORD(lparam)};
                 RECT client_rect;
                 GetClientRect(hwnd, &client_rect);
                 int window_width = client_rect.right - client_rect.left;
+                int window_height = client_rect.bottom - client_rect.top;
 
-                // Slide-to-side: Check for click on right edge (last 40px) or slide back if already slid
-                // Exclude top-right corner (collapse triangle area)
-                const int SLIDE_CLICK_ZONE = 40;
-                if (panel->m_is_slid_to_side) {
-                    // If slid, any click brings it back
-                    panel->slide_back_from_side();
-                    return 0;
-                } else if (pt.x >= window_width - SLIDE_CLICK_ZONE && pt.y > 40) {
-                    // Right edge clicked (below collapse triangle) - slide to side
-                    panel->slide_to_side();
+                // Check for close button click in upper-right corner
+                if (pt.x >= window_width - 40 && pt.y <= 40) {
+                    panel->close_panel_and_focus_foobar();
                     return 0;
                 }
 
-                // Check for collapse triangle click in top-right corner
-                if (pt.x >= window_width - 40 && pt.y <= 40) {
-                    // Switch from undocked to compact mode
+                // Check for collapse triangle click in bottom-right corner
+                if (pt.x >= window_width - 40 && pt.y >= window_height - 40) {
                     panel->toggle_compact_mode();
                     return 0;
                 }
 
-                // Fall through to default handling for other clicks (artwork, etc.)
+                // Slide-to-side: Check for click on right edge (between upper and lower corner zones)
+                const int SLIDE_CLICK_ZONE = 40;
+                if (panel->m_is_slid_to_side) {
+                    panel->slide_back_from_side();
+                    return 0;
+                } else if (pt.x >= window_width - SLIDE_CLICK_ZONE && pt.y > 40 && pt.y < window_height - 40) {
+                    panel->slide_to_side();
+                    return 0;
+                }
             }
 
             if (panel && panel->m_is_artwork_expanded) {
@@ -2970,58 +3017,59 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                                pt.y < resize_border || pt.y > client_rect.bottom - resize_border;
                 
                 if (!at_border) {
-                    // Top-left corner click removed per user request - only collapse triangle works now
-                    
-                    // Check for COLLAPSE triangle in top-right (new logic)
-                    RECT client_rect;
-                    GetClientRect(hwnd, &client_rect);
                     int window_width = client_rect.right - client_rect.left;
                     int window_height = client_rect.bottom - client_rect.top;
+
+                    // Check for CLOSE button in upper-right corner
                     if (panel->m_overlay_visible && pt.x >= window_width - 40 && pt.y <= 40) {
+                        panel->close_panel_and_focus_foobar();
+                        return 0;
+                    }
+
+                    // Check for COLLAPSE triangle in bottom-right corner
+                    if (panel->m_overlay_visible && pt.x >= window_width - 40 && pt.y >= window_height - 40) {
                         panel->m_is_artwork_expanded = false;
-                        
-                        // Restore undocked size
                         SetWindowPos(hwnd, NULL, 0, 0, panel->m_saved_undocked_width, panel->m_saved_undocked_height, SWP_NOMOVE | SWP_NOZORDER);
                         InvalidateRect(hwnd, NULL, TRUE);
                         return 0;
                     }
                     
                     // Slide-to-side: Check for click on right edge or slide back if already slid
-                    // Right edge zone is between resize_border and SLIDE_CLICK_ZONE from right edge
-                    // Exclude top-right corner (collapse triangle) and bottom overlay
                     const int SLIDE_CLICK_ZONE = 40;
                     const int overlay_height = 70;
                     if (panel->m_is_slid_to_side) {
-                        // If slid, any click brings it back
                         panel->slide_back_from_side();
                         return 0;
                     } else if (pt.x >= window_width - SLIDE_CLICK_ZONE - resize_border && 
                                pt.x < window_width - resize_border &&
                                pt.y > 40 && pt.y < window_height - overlay_height) {
-                        // Right edge clicked (below collapse triangle, above control overlay) - slide to side
                         panel->slide_to_side();
                         return 0;
                     }
 
-                    // Then check for control button clicks in bottom overlay area (overlay_height already defined above)
-                    
+                    // Then check for control button clicks in bottom overlay area
                     if (panel->m_overlay_visible && pt.y >= window_height - overlay_height) {
 
-                        // Calculate button positions (same as in draw_control_overlay)
                         int button_size = 24;
                         int button_spacing = 60;
-                        int center_x = window_width / 2;
-                        // Calculate center of the bottom overlay area, then lower for better visual balance
-                        int overlay_top = window_height - overlay_height;
-                        int center_y = overlay_top + (overlay_height / 2) + (overlay_height * 28 / 100); // Lower by 28%
 
-                        // Check Previous button - use larger click area covering more of the overlay
+                        if (window_width < 360) {
+                            button_spacing = (window_width * 16) / 100;
+                            if (button_spacing < 32) button_spacing = 32;
+
+                            button_size = (window_width * 8) / 100;
+                            if (button_size < 16) button_size = 16;
+                            if (button_size > 24) button_size = 24;
+                        }
+
+                        int center_x = window_width / 2;
+                        int overlay_top = window_height - overlay_height;
+                        int center_y = overlay_top + (overlay_height / 2) + (overlay_height * 28 / 100);
+
                         int prev_x = center_x - button_spacing;
-                        int click_area_size = button_size + 8; // Expand click area
-                        // Use the same center_y for click detection as visual positioning
+                        int click_area_size = button_size + 8;
                         int click_center_y = center_y;
                         
-                        // Check Shuffle button (left of Previous)
                         int shuffle_x = center_x - button_spacing * 2;
                         if (abs(pt.x - shuffle_x) <= click_area_size/2 && abs(pt.y - click_center_y) <= overlay_height/2) {
                             panel->handle_button_click(BTN_SHUFFLE);
@@ -3033,21 +3081,18 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                             return 0;
                         }
 
-                        // Check Play/Pause button
                         int play_x = center_x;
                         if (abs(pt.x - play_x) <= click_area_size/2 && abs(pt.y - click_center_y) <= overlay_height/2) {
                             panel->handle_button_click(BTN_PLAYPAUSE);
                             return 0;
                         }
 
-                        // Check Next button
                         int next_x = center_x + button_spacing;
                         if (abs(pt.x - next_x) <= click_area_size/2 && abs(pt.y - click_center_y) <= overlay_height/2) {
                             panel->handle_button_click(BTN_NEXT);
                             return 0;
                         }
                         
-                        // Check Repeat button (right of Next)
                         int repeat_x = center_x + button_spacing * 2;
                         if (abs(pt.x - repeat_x) <= click_area_size/2 && abs(pt.y - click_center_y) <= overlay_height/2) {
                             panel->handle_button_click(BTN_REPEAT);
@@ -3055,48 +3100,29 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                         }
                     }
                     
-                    // Double-click to toggle mode is disabled
-                    // Previous behavior: double-click would toggle artwork expanded mode
-                    
-                    // Store this click for potential dragging, but don't start dragging yet
-                    // Dragging will only start when mouse actually moves in WM_MOUSEMOVE
                     GetCursorPos(&panel->m_drag_start_pos);
                 }
-                return 0; // Don't fall through - handle only in expanded artwork mode
+                return 0;
             }
             // Handle clicks in non-expanded modes
             {
                 POINT pt = {LOWORD(lparam), HIWORD(lparam)};
-
-
-                // Temporarily disabled timeout reset to test if continuous mouse events are interfering
-                /*
-                if (panel && panel->m_visible && panel->m_control_window && !panel->m_animating) {
-                    KillTimer(panel->m_control_window, TIMEOUT_TIMER_ID);
-                    SetTimer(panel->m_control_window, TIMEOUT_TIMER_ID, 5000, nullptr);
-                }
-                */
-
-                // Close button removed per user request - no longer handling mouse hover for it
-                
-                if (panel->m_is_undocked && !panel->m_is_artwork_expanded && !panel->m_is_compact_mode) {
-                    // Check for COLLAPSE triangle (Top-Right)
-                    // Action: Switch to Compact Mode
-                    RECT client_rect;
-                    GetClientRect(hwnd, &client_rect);
-                    int local_window_width = client_rect.right - client_rect.left;
-                    
-                    if (pt.x >= local_window_width - 30 && pt.y <= 30) {
-                        panel->toggle_compact_mode();
-                        return 0;
-                    }
-                }
-
-                // Check which button was clicked - adaptive to window size
                 RECT client_rect;
                 GetClientRect(hwnd, &client_rect);
                 int window_width = client_rect.right - client_rect.left;
                 int window_height = client_rect.bottom - client_rect.top;
+
+                // Check for CLOSE button in upper-right corner
+                if (pt.x >= window_width - 40 && pt.y <= 40) {
+                    panel->close_panel_and_focus_foobar();
+                    return 0;
+                }
+
+                // Check for COLLAPSE triangle in bottom-right corner
+                if (pt.x >= window_width - 40 && pt.y >= window_height - 40) {
+                    panel->toggle_compact_mode();
+                    return 0;
+                }
 
                 int button_y = window_height - 30;
                 
@@ -3710,9 +3736,14 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                     // Return resize handles for left edge only - right edge is for slide-to-side
                     if (at_left) return HTLEFT;
                     
-                    // Slide-to-side: Allow clicks on right edge for slide feature
+                    // Check for Close button in upper-right corner FIRST
+                    if (pt.x >= window_width - 40 && pt.y <= 40) {
+                        return HTCLIENT; // Allow WM_LBUTTONDOWN for close button
+                    }
+
+                    // Slide-to-side: Allow clicks on right edge below Close button for slide feature (y > 40)
                     const int SLIDE_CLICK_ZONE = 40;
-                    if (pt.x >= window_width - SLIDE_CLICK_ZONE) {
+                    if (pt.x >= window_width - SLIDE_CLICK_ZONE && pt.y > 40) {
                         return HTCLIENT; // Allow WM_LBUTTONDOWN for slide-to-side
                     }
                     
@@ -3787,14 +3818,19 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                         return HTCLIENT; // Normal click behavior for artwork
                     }
 
-                    // Check if click is on collapse triangle in top-right corner
+                    // Check if click is on close button in upper-right corner
                     if (pt.x >= window_width - 40 && pt.y <= 40) {
+                        return HTCLIENT; // Allow click handling for close button
+                    }
+
+                    // Check if click is on collapse triangle in bottom-right corner
+                    if (pt.x >= window_width - 40 && pt.y >= window_height - 40) {
                         return HTCLIENT; // Allow click handling for collapse triangle
                     }
 
-                    // Slide-to-side: Allow clicks on right edge for slide feature (below collapse triangle)
+                    // Slide-to-side: Allow clicks on right edge for slide feature (between top and bottom corner zones)
                     const int SLIDE_CLICK_ZONE = 40;
-                    if (pt.x >= window_width - SLIDE_CLICK_ZONE && pt.y > 40) {
+                    if (pt.x >= window_width - SLIDE_CLICK_ZONE && pt.y > 40 && pt.y < window_height - 40) {
                         return HTCLIENT; // Allow WM_LBUTTONDOWN for slide-to-side
                     }
 
@@ -3924,50 +3960,15 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                     // Repaint to adjust artwork display - use optimized invalidation to prevent flicker
                     InvalidateRect(hwnd, nullptr, FALSE);
                 } else if (panel->m_is_undocked) {
-                    // Handle resize-based mode switching between normal undocked and compact modes
+                    // Enforce mode-specific size constraints without automatic mode switching
                     int new_width = LOWORD(lparam);
                     int new_height = HIWORD(lparam);
                     
-                    const int compact_height = 75;
-                    const int normal_min_width = 338; // Default undocked panel width
-                    const int normal_height = 120; // Fixed undocked panel height
-                    const int normal_max_width = 676; // Twice the default width (338 * 2)
-                    const int compact_min_width = 320;
-                    const int compact_max_width = 640; // Twice the default width (320 * 2)
-                    
-                    // Determine target mode based on height
-                    bool should_be_compact = (new_height <= 90); // Allow some tolerance around compact height
-                    
-                    if (should_be_compact && !panel->m_is_compact_mode) {
-                        // Switching to compact mode
-                        panel->m_saved_normal_width = new_width >= normal_min_width ? new_width : normal_min_width;
-                        panel->m_saved_normal_height = normal_height;
-                        panel->m_is_compact_mode = true;
+                    if (panel->m_is_compact_mode) {
+                        int compact_height = panel->m_saved_compact_height > 0 ? panel->m_saved_compact_height : 75;
+                        const int compact_min_width = 200;
+                        const int compact_max_width = 800;
                         
-                        // Use saved compact width or minimum width
-                        new_width = panel->m_saved_compact_width >= compact_min_width ? panel->m_saved_compact_width : compact_min_width;
-                        new_height = compact_height;
-                        
-                        SetWindowPos(hwnd, nullptr, 0, 0, new_width, new_height, 
-                            SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
-                        InvalidateRect(hwnd, nullptr, TRUE);
-                        return 0;
-                    } 
-                    else if (!should_be_compact && panel->m_is_compact_mode) {
-                        // Switching to normal undocked mode
-                        panel->m_is_compact_mode = false;
-                        
-                        // Use saved normal width and fixed height
-                        new_width = panel->m_saved_normal_width >= normal_min_width ? panel->m_saved_normal_width : panel->m_saved_undocked_width;
-                        new_height = normal_height; // Always use fixed height
-                        
-                        SetWindowPos(hwnd, nullptr, 0, 0, new_width, new_height, 
-                            SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
-                        InvalidateRect(hwnd, nullptr, TRUE);
-                        return 0;
-                    }
-                    else if (panel->m_is_compact_mode) {
-                        // Already in compact mode - enforce constraints
                         bool needs_adjustment = false;
                         if (new_width < compact_min_width) {
                             new_width = compact_min_width;
@@ -3982,19 +3983,21 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                             needs_adjustment = true;
                         }
                         
-                        // Save compact mode width when it's valid
-                        if (!needs_adjustment || (needs_adjustment && new_width >= compact_min_width && new_width <= compact_max_width)) {
+                        if (!needs_adjustment) {
                             panel->m_saved_compact_width = new_width;
-                        }
-                        
-                        if (needs_adjustment) {
+                        } else {
                             SetWindowPos(hwnd, nullptr, 0, 0, new_width, new_height, 
                                 SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
                             return 0;
                         }
                     }
                     else {
-                        // Already in normal mode - enforce width constraints and fixed height
+                        // Undocked normal mode constraints
+                        const int normal_min_width = 200;
+                        const int normal_max_width = 1200;
+                        const int normal_min_height = 50;
+                        const int normal_max_height = 400;
+
                         bool needs_adjustment = false;
                         if (new_width < normal_min_width) {
                             new_width = normal_min_width;
@@ -4004,18 +4007,19 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                             new_width = normal_max_width;
                             needs_adjustment = true;
                         }
-                        if (new_height != normal_height) {
-                            new_height = normal_height; // Force fixed height
+                        if (new_height < normal_min_height) {
+                            new_height = normal_min_height;
+                            needs_adjustment = true;
+                        }
+                        if (new_height > normal_max_height) {
+                            new_height = normal_max_height;
                             needs_adjustment = true;
                         }
                         
-                        // Save current normal width (height is fixed)
                         if (!needs_adjustment) {
                             panel->m_saved_normal_width = new_width;
-                            panel->m_saved_normal_height = normal_height; // Always use fixed height
-                        }
-                        
-                        if (needs_adjustment) {
+                            panel->m_saved_normal_height = new_height;
+                        } else {
                             SetWindowPos(hwnd, nullptr, 0, 0, new_width, new_height, 
                                 SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
                             return 0;
@@ -4317,19 +4321,28 @@ void control_panel::paint_control_panel(HDC hdc) {
     // Spacing depends on mode: 
     // Undocked: 5 buttons -> Tighter spacing (40)
     // Docked: 3 buttons -> Wider spacing (60)
-    int button_spacing = (m_is_undocked) ? 40 : 60;
-    
     // Center buttons in the area to the right of artwork (artwork is ~95px including margin)
     int button_area_left = 15 + art_size + 10; // x after artwork area
     int button_area_width = window_width - button_area_left - 10; // Available width for buttons
     int center_x = button_area_left + button_area_width / 2;
 
-    // Enable anti-aliasing for smoother drawing
-    SetStretchBltMode(hdc, HALFTONE);
-    SetBrushOrgEx(hdc, 0, 0, nullptr);
-
+    int button_spacing = (m_is_undocked) ? 40 : 60;
     int icon_size = 24; // Size for shuffle, repeat, prev, next
     int play_icon_size = 38; // Larger size for the central play button (white circle)
+
+    // Dynamically scale button sizes and spacing for smaller undocked window widths (e.g. Small Undocked Mode)
+    if (m_is_undocked && window_width < 360) {
+        button_spacing = (button_area_width * 16) / 100;
+        if (button_spacing < 26) button_spacing = 26;
+
+        icon_size = (button_area_width * 9) / 100;
+        if (icon_size < 16) icon_size = 16;
+        if (icon_size > 22) icon_size = 22;
+
+        play_icon_size = (button_area_width * 14) / 100;
+        if (play_icon_size < 24) play_icon_size = 24;
+        if (play_icon_size > 32) play_icon_size = 32;
+    }
 
     // Draw Previous button
     int prev_x = center_x - button_spacing;
@@ -4365,19 +4378,8 @@ void control_panel::paint_control_panel(HDC hdc) {
         draw_repeat_icon(hdc, repeat_x, button_y, icon_size);
     }
 
-    // Draw close button in top-left corner
+    // Draw Close button in upper right corner and Collapse triangle in bottom right corner
     if (m_is_undocked && !m_is_artwork_expanded) {
-        // Draw close button only on hover (cursor-triggered overlay)
-        if (m_mouse_over_close_button) {
-            int close_x = 15;
-            int close_y = 15;
-            // Draw without opacity (full visibility) if hovered
-            draw_close_icon_with_opacity(hdc, close_x, close_y, 12, 100); 
-        }
-        
-        // Draw "Collapse" triangle in top-right (Undocked -> Compact mode toggle)
-        // Only visible when mouse is over the undocked panel (excluding artwork area)
-        // Check actual cursor position rather than relying on event-based flag
         POINT cursor_pos;
         GetCursorPos(&cursor_pos);
         RECT window_rect;
@@ -4396,14 +4398,21 @@ void control_panel::paint_control_panel(HDC hdc) {
             art_size = (art_size < (window_height - 30) ? art_size : (window_height - 30));
             if (client_pt.x >= 15 && client_pt.x < 15 + art_size && 
                 client_pt.y >= 15 && client_pt.y < 15 + art_size) {
-                cursor_in_window = false; // Don't show collapse triangle when over artwork
+                cursor_in_window = false; // Don't show corner controls when over artwork
             }
         }
         
         if (cursor_in_window) {
+            // Draw close button in upper right corner
+            int close_size = 12;
+            int close_x = window_width - 15;
+            int close_y = 15;
+            draw_close_icon_with_opacity(hdc, close_x, close_y, close_size, 100);
+
+            // Draw collapse triangle in bottom right corner
             int collapse_size = 12;
             int collapse_x = window_width - 15;
-            int collapse_y = 15;
+            int collapse_y = window_height - 15;
             draw_collapse_triangle(hdc, collapse_x, collapse_y, collapse_size, 100);
         }
     }
@@ -4561,7 +4570,7 @@ void control_panel::draw_track_info(HDC hdc, const RECT& client_rect, int art_si
         
         RECT title_rect = {text_left, 20, text_right, 45};
         pfc::stringcvt::string_wide_from_utf8 wide_title(m_current_title.c_str());
-        DrawText(hdc, wide_title.get_ptr(), -1, &title_rect, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+        DrawText(hdc, wide_title.get_ptr(), -1, &title_rect, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
         
         // Draw artist using smaller, normal font
         HFONT artist_font_to_use = m_artist_font ? m_artist_font : CreateFont(get_dpi_scaled_font_height(11), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
@@ -4573,7 +4582,7 @@ void control_panel::draw_track_info(HDC hdc, const RECT& client_rect, int art_si
         
         RECT artist_rect = {text_left, 50, text_right, 70};
         pfc::stringcvt::string_wide_from_utf8 wide_artist(m_current_artist.c_str());
-        DrawText(hdc, wide_artist.get_ptr(), -1, &artist_rect, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+        DrawText(hdc, wide_artist.get_ptr(), -1, &artist_rect, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
         
         // Cleanup fonts (only delete fallback fonts, not our member fonts)
         SelectObject(hdc, old_font);
@@ -4593,7 +4602,7 @@ void control_panel::draw_track_info(HDC hdc, const RECT& client_rect, int art_si
         
         RECT title_rect = {text_left, 20, text_right, 45};
         pfc::stringcvt::string_wide_from_utf8 wide_title(m_current_title.c_str());
-        DrawText(hdc, wide_title.get_ptr(), -1, &title_rect, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+        DrawText(hdc, wide_title.get_ptr(), -1, &title_rect, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
         
         // Draw artist using custom or default font
         HFONT artist_font_to_use = m_artist_font ? m_artist_font : CreateFont(get_dpi_scaled_font_height(11), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
@@ -4605,7 +4614,7 @@ void control_panel::draw_track_info(HDC hdc, const RECT& client_rect, int art_si
         
         RECT artist_rect = {text_left, 50, text_right, 70};
         pfc::stringcvt::string_wide_from_utf8 wide_artist(m_current_artist.c_str());
-        DrawText(hdc, wide_artist.get_ptr(), -1, &artist_rect, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+        DrawText(hdc, wide_artist.get_ptr(), -1, &artist_rect, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
         
         // Cleanup fonts (only delete fallback fonts, not our member fonts)
         SelectObject(hdc, old_font);
@@ -4810,6 +4819,22 @@ void control_panel::paint_compact_mode(HDC hdc, const RECT& rect) {
     // Draw compact control overlay if hovering over text area
     draw_compact_control_overlay(hdc, window_width, window_height);
     
+    // Draw Close button in upper right corner and Collapse triangle in bottom right corner when mouse is over compact window
+    POINT cursor_pos;
+    GetCursorPos(&cursor_pos);
+    RECT window_rect;
+    GetWindowRect(m_control_window, &window_rect);
+    
+    bool cursor_in_window = (cursor_pos.x >= window_rect.left && cursor_pos.x < window_rect.right &&
+                             cursor_pos.y >= window_rect.top && cursor_pos.y < window_rect.bottom);
+    
+    if (cursor_in_window) {
+        int close_size = 12;
+        int close_x = window_width - 15;
+        int close_y = 15;
+        draw_close_icon_with_opacity(hdc, close_x, close_y, close_size, 100);
+    }
+    
     // Cleanup fonts
     SelectObject(hdc, old_font);
     if (need_delete_title) {
@@ -4945,10 +4970,25 @@ void control_panel::draw_control_overlay(HDC hdc, int window_width, int window_h
         Gdiplus::RectF overlayRect(-1.0f, (float)(window_height - overlay_height), (float)window_width + 2.0f, (float)overlay_height + 1.0f);
         graphics.FillRectangle(&overlayBrush, overlayRect);
         
-        // Draw control buttons (Previous, Play/Pause, Next)
+        // Draw control buttons (Previous, Play/Pause, Next, Shuffle, Repeat)
         int button_size = 24; // Size of each button except play
         int play_button_size = 38; // Larger play button
         int button_spacing = 60; // Space between button centers
+        
+        // Dynamically scale button sizes and spacing for smaller window widths (e.g., Small Expanded Mode)
+        if (window_width < 360) {
+            button_spacing = (window_width * 16) / 100;
+            if (button_spacing < 32) button_spacing = 32;
+
+            button_size = (window_width * 8) / 100;
+            if (button_size < 16) button_size = 16;
+            if (button_size > 24) button_size = 24;
+
+            play_button_size = (window_width * 13) / 100;
+            if (play_button_size < 26) play_button_size = 26;
+            if (play_button_size > 38) play_button_size = 38;
+        }
+
         int center_x = window_width / 2;
         // Calculate center of the bottom overlay area
         int overlay_top = window_height - overlay_height;
@@ -4998,23 +5038,16 @@ void control_panel::draw_control_overlay(HDC hdc, int window_width, int window_h
         draw_repeat_icon(hdc, repeat_x, center_y, button_size);
 
 
-        // Close button in top-left corner for expanded artwork mode
-        // AND Collapse triangle in top-right corner
-        int close_size = 16;
-        int close_x = 10;
-        int close_y = 10;
+        // Close button in upper right corner
+        int close_size = 12;
+        int close_x = window_width - 15;
+        int close_y = 15;
+        draw_close_icon_with_opacity(hdc, close_x, close_y, close_size, m_button_opacity);
         
-        // Draw collapse triangle (top-right)
-        // Position it similarly to close button but on the right
+        // Draw collapse triangle in bottom right corner
         int collapse_size = 12;
         int collapse_x = window_width - 15;
-        int collapse_y = 15;
-        
-        // Calculate dynamic opacity for these corner controls
-        // Reuse m_button_opacity or m_overlay_opacity? 
-        // Corner controls should probably show when mouse is over the window.
-        // Let's use m_button_opacity to fade them in/out with standard controls.
-        
+        int collapse_y = window_height - 15;
         draw_collapse_triangle(hdc, collapse_x, collapse_y, collapse_size, m_button_opacity);
         
     }
@@ -5177,8 +5210,9 @@ void control_panel::update_roll_animation() {
             m_is_compact_mode = true;
             
             // Resize to compact dimensions
-            int compact_width = m_saved_compact_width >= 320 ? m_saved_compact_width : 320;
-            SetWindowPos(m_control_window, nullptr, 0, 0, compact_width, 75, 
+            int compact_width = m_saved_compact_width > 0 ? m_saved_compact_width : 320;
+            int compact_height = m_saved_compact_height > 0 ? m_saved_compact_height : 75;
+            SetWindowPos(m_control_window, nullptr, 0, 0, compact_width, compact_height, 
                 SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
         } else {
             // Switch to normal undocked mode
@@ -5213,11 +5247,11 @@ void control_panel::update_roll_animation() {
     if (m_rolling_to_compact) {
         start_width = m_saved_normal_width >= 300 ? m_saved_normal_width : 338;
         start_height = m_saved_normal_height >= 110 ? m_saved_normal_height : 120;
-        target_width = m_saved_compact_width >= 320 ? m_saved_compact_width : 320;
-        target_height = 75;
+        target_width = m_saved_compact_width > 0 ? m_saved_compact_width : 320;
+        target_height = m_saved_compact_height > 0 ? m_saved_compact_height : 75;
     } else {
-        start_width = m_saved_compact_width >= 320 ? m_saved_compact_width : 320;
-        start_height = 75;
+        start_width = m_saved_compact_width > 0 ? m_saved_compact_width : 320;
+        start_height = m_saved_compact_height > 0 ? m_saved_compact_height : 75;
         target_width = m_saved_normal_width >= 300 ? m_saved_normal_width : 338;
         target_height = m_saved_normal_height >= 110 ? m_saved_normal_height : 120;
     }
