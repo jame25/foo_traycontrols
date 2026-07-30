@@ -38,7 +38,9 @@ popup_window::popup_window()
     , m_final_x(0), m_final_y(0)
     , m_start_x(0), m_start_y(0)
     , m_cover_art_bitmap(nullptr)
-    , m_artwork_from_bridge(false) {
+    , m_artwork_from_bridge(false)
+    , m_pending_track(nullptr)
+    , m_artwork_wait_count(0) {
 }
 
 popup_window::~popup_window() {
@@ -69,8 +71,11 @@ void popup_window::cleanup() {
         KillTimer(m_popup_window, POPUP_TIMER_ID);
         KillTimer(m_popup_window, ANIMATION_TIMER_ID);
         KillTimer(m_popup_window, ARTWORK_POLL_TIMER_ID);
+        KillTimer(m_popup_window, ARTWORK_WAIT_TIMER_ID);
     }
     
+    m_pending_track = nullptr;
+    m_artwork_wait_count = 0;
     cleanup_cover_art();
     
     if (m_popup_window) {
@@ -120,16 +125,80 @@ void popup_window::show_track_info(metadb_handle_ptr p_track) {
     }
     
     m_last_track_path = track_identifier;
+    m_pending_track = p_track;
+    m_artwork_wait_count = 0;
     
-    // Update track info and cover art
-    update_track_info(p_track);
-    load_cover_art(p_track);
+    if (m_popup_window) {
+        KillTimer(m_popup_window, ARTWORK_WAIT_TIMER_ID);
+    }
     
-    // Calculate final position
-    position_popup();
+    // Purge previous track's artwork and pending online searches to ensure old cover art is never displayed
+    cleanup_cover_art();
+    clear_pending_online_artwork();
     
-    // Start slide-in animation
-    start_slide_in_animation();
+    // Attempt initial cover art load for the new track (embedded art only at track change T=0)
+    load_cover_art(p_track, true /* is_track_change */);
+    
+    if (m_cover_art_bitmap != nullptr) {
+        // Embedded artwork is ready immediately! Show popup right now.
+        update_track_info(p_track);
+        position_popup();
+        if (m_visible && !m_animating) {
+            SetWindowPos(m_popup_window, HWND_TOPMOST, m_final_x, m_final_y, 320, 80, SWP_NOACTIVATE);
+            InvalidateRect(m_popup_window, nullptr, TRUE);
+            UpdateWindow(m_popup_window);
+            SetTimer(m_popup_window, POPUP_TIMER_ID, get_popup_duration(), hide_timer_proc);
+        } else if (!m_visible) {
+            start_slide_in_animation();
+        }
+    } else {
+        // Embedded artwork not ready.
+        // Keep popup hidden and poll every 50ms (up to 3.5s) for foo_artwork to update main window for this track.
+        if (m_popup_window) {
+            SetTimer(m_popup_window, ARTWORK_WAIT_TIMER_ID, ARTWORK_WAIT_INTERVAL, nullptr);
+        }
+    }
+}
+
+void popup_window::on_artwork_wait_timer() {
+    if (!m_initialized || !get_show_popup_notification() || !m_pending_track.is_valid()) {
+        if (m_popup_window) KillTimer(m_popup_window, ARTWORK_WAIT_TIMER_ID);
+        return;
+    }
+    
+    m_artwork_wait_count++;
+    
+    // Poll for cover art loading (is_track_change = false)
+    load_cover_art(m_pending_track, false /* is_track_change */);
+    
+    // Check if foo_artwork is actively downloading artwork over the network
+    bool is_downloading = is_online_artwork_loading();
+    
+    // 1. Artwork loaded successfully
+    // 2. Online search finished (not downloading) AND waited at least 15 steps (750ms for local tag I/O)
+    // 3. Network timeout reached (3.5s)
+    bool artwork_ready = (m_cover_art_bitmap != nullptr);
+    bool search_finished = (!is_downloading && m_artwork_wait_count >= 15);
+    bool network_timeout = (m_artwork_wait_count >= MAX_ARTWORK_WAIT_STEPS);
+    
+    if (artwork_ready || search_finished || network_timeout) {
+        if (m_popup_window) {
+            KillTimer(m_popup_window, ARTWORK_WAIT_TIMER_ID);
+        }
+        
+        // Update track info and display popup
+        update_track_info(m_pending_track);
+        position_popup();
+        
+        if (m_visible && !m_animating) {
+            SetWindowPos(m_popup_window, HWND_TOPMOST, m_final_x, m_final_y, 320, 80, SWP_NOACTIVATE);
+            InvalidateRect(m_popup_window, nullptr, TRUE);
+            UpdateWindow(m_popup_window);
+            SetTimer(m_popup_window, POPUP_TIMER_ID, get_popup_duration(), hide_timer_proc);
+        } else if (!m_visible) {
+            start_slide_in_animation();
+        }
+    }
 }
 
 void popup_window::hide_popup() {
@@ -148,8 +217,13 @@ void popup_window::refresh_track_info() {
 }
 
 void popup_window::on_settings_changed() {
-    if (!get_show_popup_notification() && m_visible) {
-        hide_popup();
+    if (!get_show_popup_notification()) {
+        if (m_popup_window) {
+            KillTimer(m_popup_window, ARTWORK_WAIT_TIMER_ID);
+        }
+        if (m_visible) {
+            hide_popup();
+        }
     }
     
     // Update window corner preference
@@ -301,25 +375,23 @@ void popup_window::update_track_info(metadb_handle_ptr p_track) {
     }
 }
 
-void popup_window::load_cover_art(metadb_handle_ptr p_track) {
+void popup_window::load_cover_art(metadb_handle_ptr p_track, bool is_track_change) {
     if (!p_track.is_valid()) return;
 
-    // Check if artwork has arrived via callback (from any source).
-    // Pick it up immediately regardless of who triggered the search.
+    // Check if artwork has arrived via callback from foo_artwork for this search
     if (has_pending_online_artwork()) {
         HBITMAP bitmap = get_pending_online_artwork();
         if (bitmap) {
             cleanup_cover_art();
             m_cover_art_bitmap = bitmap;
-            m_artwork_from_bridge = false; // We own the copy
+            m_artwork_from_bridge = false;
             if (m_popup_window) KillTimer(m_popup_window, ARTWORK_POLL_TIMER_ID);
             return;
         }
     }
 
     try {
-        // Try local/embedded artwork first (in its own try-catch so exceptions
-        // don't prevent the online artwork fallback from running)
+        // Try local/embedded artwork first for p_track
         try {
             auto api = album_art_manager_v2::get();
             if (api.is_valid()) {
@@ -339,39 +411,26 @@ void popup_window::load_cover_art(metadb_handle_ptr p_track) {
             }
         } catch (...) {}
 
-        // No embedded/local artwork - try foo_artwork's bitmap for streams
-        pfc::string8 path = p_track->get_path();
-        bool is_stream = strstr(path.get_ptr(), "://") != nullptr;
-
-        if (is_stream && is_artwork_bridge_available()) {
-            // Check if foo_artwork already has a bitmap (from control panel's request)
-            HBITMAP existing = get_last_online_artwork();
-            if (existing) {
+        // Mirror active artwork displayed by foo_artwork in main window
+        // (Do NOT query get_current_online_artwork at track change T=0ms, as main window still holds previous track's image)
+        if (!is_track_change && is_artwork_bridge_available()) {
+            HBITMAP current_online = get_current_online_artwork();
+            if (current_online) {
                 cleanup_cover_art();
-                m_cover_art_bitmap = existing;
-                m_artwork_from_bridge = false; // We own the copy
+                m_cover_art_bitmap = current_online;
+                m_artwork_from_bridge = false;
+                if (m_popup_window) KillTimer(m_popup_window, ARTWORK_POLL_TIMER_ID);
                 return;
             }
 
-            // Otherwise request artwork (control panel may not have requested yet)
-            pfc::string8 artist, title;
-            service_ptr_t<titleformat_object> script_artist, script_title;
-            titleformat_compiler::get()->compile_safe(script_artist, "%artist%");
-            titleformat_compiler::get()->compile_safe(script_title, "%title%");
-            auto playback = playback_control::get();
-            playback->playback_format_title(nullptr, artist, script_artist, nullptr, playback_control::display_level_all);
-            playback->playback_format_title(nullptr, title, script_title, nullptr, playback_control::display_level_all);
-            request_online_artwork(artist.c_str(), title.c_str());
-            // Start polling for artwork results (async search)
-            // Keep old artwork visible until new artwork arrives via callback
+            // If foo_artwork has not updated its bitmap yet, start poll timer to catch it when main window updates
             if (m_popup_window) {
                 SetTimer(m_popup_window, ARTWORK_POLL_TIMER_ID, ARTWORK_POLL_INTERVAL, nullptr);
             }
-            // Don't cleanup - keep existing artwork visible during async fetch
             return;
         }
 
-        // Not a stream and no local artwork - clear artwork
+        // No artwork available
         cleanup_cover_art();
     } catch (...) {
         // Ignore errors
@@ -518,6 +577,11 @@ LRESULT CALLBACK popup_window::popup_window_proc(HWND hwnd, UINT msg, WPARAM wpa
                         KillTimer(hwnd, ARTWORK_POLL_TIMER_ID);
                         InvalidateRect(hwnd, nullptr, FALSE);
                     }
+                }
+                return 0;
+            } else if (wparam == ARTWORK_WAIT_TIMER_ID) {
+                if (popup) {
+                    popup->on_artwork_wait_timer();
                 }
                 return 0;
             }
