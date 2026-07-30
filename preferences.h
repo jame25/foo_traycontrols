@@ -15,6 +15,13 @@ bool get_use_rounded_corners(); // Windows 11 style rounded corners
 bool get_always_slide_to_side(); // Always slide instead of close
 int get_theme_mode(); // 0=Auto, 1=Force Dark, 2=Force Light
 
+// MiniPlayer mode size functions
+int get_miniplayer_undocked_width();
+int get_miniplayer_undocked_height();
+int get_miniplayer_compact_width();
+int get_miniplayer_compact_height();
+int get_miniplayer_expanded_size();
+
 // Display format functions
 pfc::string8 get_line1_format();
 pfc::string8 get_line2_format();
@@ -65,7 +72,7 @@ private:
     preferences_page_callback::ptr m_callback;
     bool m_has_changes;
     fb2k::CCoreDarkModeHooks m_darkMode;
-    int m_current_tab; // 0 = General, 1 = Fonts
+    int m_current_tab; // 0 = General, 1 = MiniPlayer, 2 = Fonts
     
 public:
     tray_preferences(preferences_page_callback::ptr callback);
