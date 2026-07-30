@@ -41,10 +41,14 @@ void clear_pending_online_artwork();
 
 // Check if artwork was received from foo_artwork via callback
 bool has_pending_online_artwork();
+bool has_pending_online_artwork_popup();
+bool has_pending_online_artwork_panel();
 
 // Get a copy of the pending artwork bitmap and clear the pending flag.
 // Caller OWNS the returned HBITMAP and must DeleteObject it.
 HBITMAP get_pending_online_artwork();
+HBITMAP get_pending_online_artwork_popup();
+HBITMAP get_pending_online_artwork_panel();
 
 // Get a copy of the last received artwork bitmap without changing state.
 // Used to re-acquire artwork after mode switches. Caller OWNS the returned HBITMAP.
