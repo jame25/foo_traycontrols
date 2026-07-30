@@ -96,14 +96,18 @@ void shutdown_artwork_bridge() {
     g_has_pending_artwork = false;
 }
 
+void clear_pending_online_artwork() {
+    g_pending_artwork_bitmap = nullptr;
+    g_has_pending_artwork = false;
+}
+
 void request_online_artwork(const char* artist, const char* title) {
     if (!g_artwork_search) {
         return;
     }
 
     // Clear any pending artwork from previous search
-    g_pending_artwork_bitmap = nullptr;
-    g_has_pending_artwork = false;
+    clear_pending_online_artwork();
 
     g_artwork_search(artist, title);
 }
@@ -125,4 +129,22 @@ HBITMAP get_last_online_artwork() {
     // Return an independent COPY of the last received bitmap.
     // Used to re-acquire artwork after mode switches that call cleanup_cover_art().
     return copy_hbitmap(g_pending_artwork_bitmap);
+}
+
+HBITMAP get_current_online_artwork() {
+    // Check if foo_artwork already has an active artwork bitmap available (e.g. displayed in main window)
+    if (g_artwork_get_bitmap) {
+        HBITMAP bmp = g_artwork_get_bitmap();
+        if (bmp) {
+            return copy_hbitmap(bmp);
+        }
+    }
+    return nullptr;
+}
+
+bool is_online_artwork_loading() {
+    if (g_artwork_is_loading) {
+        return g_artwork_is_loading();
+    }
+    return false;
 }
