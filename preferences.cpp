@@ -20,6 +20,13 @@ static cfg_int cfg_always_slide_to_side(GUID{0x1234568A, 0x9abc, 0xdef0, {0x12, 
 static cfg_int cfg_use_rounded_corners(GUID{0x12345690, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 1); // Default ON (Win11 style)
 static cfg_int cfg_theme_mode(GUID{0x12345691, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0); // 0=Auto, 1=Force Dark, 2=Force Light
 
+// MiniPlayer mode size configuration
+static cfg_int cfg_miniplayer_undocked_width(GUID{0x123456D1, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 400);
+static cfg_int cfg_miniplayer_undocked_height(GUID{0x123456D2, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 120);
+static cfg_int cfg_miniplayer_compact_width(GUID{0x123456D3, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 320);
+static cfg_int cfg_miniplayer_compact_height(GUID{0x123456D4, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 75);
+static cfg_int cfg_miniplayer_expanded_size(GUID{0x123456D5, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 350);
+
 // Display format configuration
 static cfg_string cfg_line1_format(GUID{0x123456E0, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, "%title%");
 static cfg_string cfg_line2_format(GUID{0x123456E1, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, "%artist%");
@@ -253,6 +260,13 @@ void format_display_lines(pfc::string8& line1_out, pfc::string8& line2_out) {
         // Leave outputs unchanged on error
     }
 }
+
+// MiniPlayer mode size configuration access functions
+int get_miniplayer_undocked_width() { return cfg_miniplayer_undocked_width; }
+int get_miniplayer_undocked_height() { return cfg_miniplayer_undocked_height; }
+int get_miniplayer_compact_width() { return cfg_miniplayer_compact_width; }
+int get_miniplayer_compact_height() { return cfg_miniplayer_compact_height; }
+int get_miniplayer_expanded_size() { return cfg_miniplayer_expanded_size; }
 
 // Font configuration access functions
 bool get_use_custom_fonts() {
@@ -535,6 +549,59 @@ INT_PTR CALLBACK tray_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, LP
         uSetDlgItemText(hwnd, IDC_LINE1_FORMAT_EDIT, cfg_line1_format);
         uSetDlgItemText(hwnd, IDC_LINE2_FORMAT_EDIT, cfg_line2_format);
 
+        // Initialize MiniPlayer Undocked size combobox and edit fields
+        HWND hUndockedPresetCombo = GetDlgItem(hwnd, IDC_MINIPLAYER_UNDOCKED_PRESET_COMBO);
+        SendMessage(hUndockedPresetCombo, CB_ADDSTRING, 0, (LPARAM)L"Normal / Default (400 x 120 px)");
+        SendMessage(hUndockedPresetCombo, CB_ADDSTRING, 0, (LPARAM)L"Large (480 x 140 px)");
+        SendMessage(hUndockedPresetCombo, CB_ADDSTRING, 0, (LPARAM)L"Wide (540 x 120 px)");
+        SendMessage(hUndockedPresetCombo, CB_ADDSTRING, 0, (LPARAM)L"Custom");
+
+        int u_w = cfg_miniplayer_undocked_width;
+        int u_h = cfg_miniplayer_undocked_height;
+        int u_preset = 3; // Custom
+        if (u_w == 400 && u_h == 120) u_preset = 0;
+        else if (u_w == 480 && u_h == 140) u_preset = 1;
+        else if (u_w == 540 && u_h == 120) u_preset = 2;
+        SendMessage(hUndockedPresetCombo, CB_SETCURSEL, u_preset, 0);
+        SetDlgItemInt(hwnd, IDC_MINIPLAYER_UNDOCKED_WIDTH_EDIT, u_w, FALSE);
+        SetDlgItemInt(hwnd, IDC_MINIPLAYER_UNDOCKED_HEIGHT_EDIT, u_h, FALSE);
+
+        // Initialize MiniPlayer Compact size combobox and edit fields
+        HWND hCompactPresetCombo = GetDlgItem(hwnd, IDC_MINIPLAYER_COMPACT_PRESET_COMBO);
+        SendMessage(hCompactPresetCombo, CB_ADDSTRING, 0, (LPARAM)L"Small (280 x 60 px)");
+        SendMessage(hCompactPresetCombo, CB_ADDSTRING, 0, (LPARAM)L"Normal / Default (320 x 75 px)");
+        SendMessage(hCompactPresetCombo, CB_ADDSTRING, 0, (LPARAM)L"Large (380 x 90 px)");
+        SendMessage(hCompactPresetCombo, CB_ADDSTRING, 0, (LPARAM)L"Wide (440 x 75 px)");
+        SendMessage(hCompactPresetCombo, CB_ADDSTRING, 0, (LPARAM)L"Custom");
+
+        int c_w = cfg_miniplayer_compact_width;
+        int c_h = cfg_miniplayer_compact_height;
+        int c_preset = 4; // Custom
+        if (c_w == 280 && c_h == 60) c_preset = 0;
+        else if (c_w == 320 && c_h == 75) c_preset = 1;
+        else if (c_w == 380 && c_h == 90) c_preset = 2;
+        else if (c_w == 440 && c_h == 75) c_preset = 3;
+        SendMessage(hCompactPresetCombo, CB_SETCURSEL, c_preset, 0);
+        SetDlgItemInt(hwnd, IDC_MINIPLAYER_COMPACT_WIDTH_EDIT, c_w, FALSE);
+        SetDlgItemInt(hwnd, IDC_MINIPLAYER_COMPACT_HEIGHT_EDIT, c_h, FALSE);
+
+        // Initialize MiniPlayer Expanded size combobox and edit fields
+        HWND hExpandedPresetCombo = GetDlgItem(hwnd, IDC_MINIPLAYER_EXPANDED_PRESET_COMBO);
+        SendMessage(hExpandedPresetCombo, CB_ADDSTRING, 0, (LPARAM)L"Small (250 x 250 px)");
+        SendMessage(hExpandedPresetCombo, CB_ADDSTRING, 0, (LPARAM)L"Normal / Default (350 x 350 px)");
+        SendMessage(hExpandedPresetCombo, CB_ADDSTRING, 0, (LPARAM)L"Large (450 x 450 px)");
+        SendMessage(hExpandedPresetCombo, CB_ADDSTRING, 0, (LPARAM)L"Extra Large (550 x 550 px)");
+        SendMessage(hExpandedPresetCombo, CB_ADDSTRING, 0, (LPARAM)L"Custom");
+
+        int e_s = cfg_miniplayer_expanded_size;
+        int e_preset = 4; // Custom
+        if (e_s == 250) e_preset = 0;
+        else if (e_s == 350) e_preset = 1;
+        else if (e_s == 450) e_preset = 2;
+        else if (e_s == 550) e_preset = 3;
+        SendMessage(hExpandedPresetCombo, CB_SETCURSEL, e_preset, 0);
+        SetDlgItemInt(hwnd, IDC_MINIPLAYER_EXPANDED_SIZE_EDIT, e_s, FALSE);
+
         // Initialize font displays
         p_this->update_font_displays();
         
@@ -564,7 +631,44 @@ INT_PTR CALLBACK tray_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, LP
             
         case IDC_LINE1_FORMAT_EDIT:
         case IDC_LINE2_FORMAT_EDIT:
+        case IDC_MINIPLAYER_UNDOCKED_WIDTH_EDIT:
+        case IDC_MINIPLAYER_UNDOCKED_HEIGHT_EDIT:
+        case IDC_MINIPLAYER_COMPACT_WIDTH_EDIT:
+        case IDC_MINIPLAYER_COMPACT_HEIGHT_EDIT:
+        case IDC_MINIPLAYER_EXPANDED_SIZE_EDIT:
             if (HIWORD(wp) == EN_CHANGE) {
+                p_this->on_changed();
+            }
+            break;
+
+        case IDC_MINIPLAYER_UNDOCKED_PRESET_COMBO:
+            if (HIWORD(wp) == CBN_SELCHANGE) {
+                int sel = (int)SendMessage(GetDlgItem(hwnd, IDC_MINIPLAYER_UNDOCKED_PRESET_COMBO), CB_GETCURSEL, 0, 0);
+                if (sel == 0) { SetDlgItemInt(hwnd, IDC_MINIPLAYER_UNDOCKED_WIDTH_EDIT, 400, FALSE); SetDlgItemInt(hwnd, IDC_MINIPLAYER_UNDOCKED_HEIGHT_EDIT, 120, FALSE); }
+                else if (sel == 1) { SetDlgItemInt(hwnd, IDC_MINIPLAYER_UNDOCKED_WIDTH_EDIT, 480, FALSE); SetDlgItemInt(hwnd, IDC_MINIPLAYER_UNDOCKED_HEIGHT_EDIT, 140, FALSE); }
+                else if (sel == 2) { SetDlgItemInt(hwnd, IDC_MINIPLAYER_UNDOCKED_WIDTH_EDIT, 540, FALSE); SetDlgItemInt(hwnd, IDC_MINIPLAYER_UNDOCKED_HEIGHT_EDIT, 120, FALSE); }
+                p_this->on_changed();
+            }
+            break;
+
+        case IDC_MINIPLAYER_COMPACT_PRESET_COMBO:
+            if (HIWORD(wp) == CBN_SELCHANGE) {
+                int sel = (int)SendMessage(GetDlgItem(hwnd, IDC_MINIPLAYER_COMPACT_PRESET_COMBO), CB_GETCURSEL, 0, 0);
+                if (sel == 0) { SetDlgItemInt(hwnd, IDC_MINIPLAYER_COMPACT_WIDTH_EDIT, 280, FALSE); SetDlgItemInt(hwnd, IDC_MINIPLAYER_COMPACT_HEIGHT_EDIT, 60, FALSE); }
+                else if (sel == 1) { SetDlgItemInt(hwnd, IDC_MINIPLAYER_COMPACT_WIDTH_EDIT, 320, FALSE); SetDlgItemInt(hwnd, IDC_MINIPLAYER_COMPACT_HEIGHT_EDIT, 75, FALSE); }
+                else if (sel == 2) { SetDlgItemInt(hwnd, IDC_MINIPLAYER_COMPACT_WIDTH_EDIT, 380, FALSE); SetDlgItemInt(hwnd, IDC_MINIPLAYER_COMPACT_HEIGHT_EDIT, 90, FALSE); }
+                else if (sel == 3) { SetDlgItemInt(hwnd, IDC_MINIPLAYER_COMPACT_WIDTH_EDIT, 440, FALSE); SetDlgItemInt(hwnd, IDC_MINIPLAYER_COMPACT_HEIGHT_EDIT, 75, FALSE); }
+                p_this->on_changed();
+            }
+            break;
+
+        case IDC_MINIPLAYER_EXPANDED_PRESET_COMBO:
+            if (HIWORD(wp) == CBN_SELCHANGE) {
+                int sel = (int)SendMessage(GetDlgItem(hwnd, IDC_MINIPLAYER_EXPANDED_PRESET_COMBO), CB_GETCURSEL, 0, 0);
+                if (sel == 0) { SetDlgItemInt(hwnd, IDC_MINIPLAYER_EXPANDED_SIZE_EDIT, 250, FALSE); }
+                else if (sel == 1) { SetDlgItemInt(hwnd, IDC_MINIPLAYER_EXPANDED_SIZE_EDIT, 350, FALSE); }
+                else if (sel == 2) { SetDlgItemInt(hwnd, IDC_MINIPLAYER_EXPANDED_SIZE_EDIT, 450, FALSE); }
+                else if (sel == 3) { SetDlgItemInt(hwnd, IDC_MINIPLAYER_EXPANDED_SIZE_EDIT, 550, FALSE); }
                 p_this->on_changed();
             }
             break;
@@ -734,6 +838,21 @@ void tray_preferences::apply_settings() {
             cfg_line2_format = format_str;
         }
 
+        // Save MiniPlayer mode sizes
+        BOOL w_translated = FALSE, h_translated = FALSE;
+        int u_w = GetDlgItemInt(m_hwnd, IDC_MINIPLAYER_UNDOCKED_WIDTH_EDIT, &w_translated, FALSE);
+        int u_h = GetDlgItemInt(m_hwnd, IDC_MINIPLAYER_UNDOCKED_HEIGHT_EDIT, &h_translated, FALSE);
+        if (w_translated && u_w >= 250 && u_w <= 1200) cfg_miniplayer_undocked_width = u_w;
+        if (h_translated && u_h >= 80 && u_h <= 600) cfg_miniplayer_undocked_height = u_h;
+
+        int c_w = GetDlgItemInt(m_hwnd, IDC_MINIPLAYER_COMPACT_WIDTH_EDIT, &w_translated, FALSE);
+        int c_h = GetDlgItemInt(m_hwnd, IDC_MINIPLAYER_COMPACT_HEIGHT_EDIT, &h_translated, FALSE);
+        if (w_translated && c_w >= 200 && c_w <= 800) cfg_miniplayer_compact_width = c_w;
+        if (h_translated && c_h >= 50 && c_h <= 300) cfg_miniplayer_compact_height = c_h;
+
+        int e_s = GetDlgItemInt(m_hwnd, IDC_MINIPLAYER_EXPANDED_SIZE_EDIT, &w_translated, FALSE);
+        if (w_translated && e_s >= 200 && e_s <= 1000) cfg_miniplayer_expanded_size = e_s;
+
         // Notify tray manager and control panel of settings change
         tray_manager::get_instance().on_settings_changed();
         control_panel::get_instance().on_settings_changed();
@@ -756,6 +875,13 @@ void tray_preferences::reset_settings() {
         cfg_line1_format = "%title%";     // Default: title
         cfg_line2_format = "%artist%";    // Default: artist
 
+        // Reset MiniPlayer mode size variables
+        cfg_miniplayer_undocked_width = 400;
+        cfg_miniplayer_undocked_height = 120;
+        cfg_miniplayer_compact_width = 320;
+        cfg_miniplayer_compact_height = 75;
+        cfg_miniplayer_expanded_size = 350;
+
         // Update UI controls to reflect defaults
         CheckDlgButton(m_hwnd, IDC_ALWAYS_MINIMIZE_TO_TRAY, BST_UNCHECKED);
         CheckDlgButton(m_hwnd, IDC_SHOW_POPUP_NOTIFICATION, BST_CHECKED);
@@ -769,6 +895,18 @@ void tray_preferences::reset_settings() {
         SendMessage(GetDlgItem(m_hwnd, IDC_THEME_MODE_COMBO), CB_SETCURSEL, 0, 0);            // Auto
         uSetDlgItemText(m_hwnd, IDC_LINE1_FORMAT_EDIT, "%title%");
         uSetDlgItemText(m_hwnd, IDC_LINE2_FORMAT_EDIT, "%artist%");
+
+        // Reset MiniPlayer mode size controls
+        SendMessage(GetDlgItem(m_hwnd, IDC_MINIPLAYER_UNDOCKED_PRESET_COMBO), CB_SETCURSEL, 0, 0); // Normal
+        SetDlgItemInt(m_hwnd, IDC_MINIPLAYER_UNDOCKED_WIDTH_EDIT, 400, FALSE);
+        SetDlgItemInt(m_hwnd, IDC_MINIPLAYER_UNDOCKED_HEIGHT_EDIT, 120, FALSE);
+
+        SendMessage(GetDlgItem(m_hwnd, IDC_MINIPLAYER_COMPACT_PRESET_COMBO), CB_SETCURSEL, 1, 0); // Normal
+        SetDlgItemInt(m_hwnd, IDC_MINIPLAYER_COMPACT_WIDTH_EDIT, 320, FALSE);
+        SetDlgItemInt(m_hwnd, IDC_MINIPLAYER_COMPACT_HEIGHT_EDIT, 75, FALSE);
+
+        SendMessage(GetDlgItem(m_hwnd, IDC_MINIPLAYER_EXPANDED_PRESET_COMBO), CB_SETCURSEL, 1, 0); // Normal
+        SetDlgItemInt(m_hwnd, IDC_MINIPLAYER_EXPANDED_SIZE_EDIT, 350, FALSE);
 
         // Notify components of settings change
         tray_manager::get_instance().on_settings_changed();
@@ -1128,15 +1266,18 @@ void tray_preferences::init_tab_control() {
     HWND hTab = GetDlgItem(m_hwnd, IDC_TAB_CONTROL);
     if (!hTab) return;
     
-    // Add tabs
+    // Add tabs: General (0), MiniPlayer (1), Fonts (2)
     TCITEM tie = {};
     tie.mask = TCIF_TEXT;
     
     tie.pszText = const_cast<LPWSTR>(L"General");
     TabCtrl_InsertItem(hTab, 0, &tie);
     
-    tie.pszText = const_cast<LPWSTR>(L"Fonts");
+    tie.pszText = const_cast<LPWSTR>(L"MiniPlayer");
     TabCtrl_InsertItem(hTab, 1, &tie);
+    
+    tie.pszText = const_cast<LPWSTR>(L"Fonts");
+    TabCtrl_InsertItem(hTab, 2, &tie);
     
     // Select first tab
     TabCtrl_SetCurSel(hTab, 0);
@@ -1175,6 +1316,31 @@ void tray_preferences::switch_tab(int tab) {
         IDC_USE_ROUNDED_CORNERS,
         IDC_THEME_MODE_LABEL,
         IDC_THEME_MODE_COMBO
+    };
+    
+    // MiniPlayer tab controls
+    int miniplayer_controls[] = {
+        IDC_MINIPLAYER_UNDOCKED_GROUP,
+        IDC_MINIPLAYER_UNDOCKED_PRESET_LABEL,
+        IDC_MINIPLAYER_UNDOCKED_PRESET_COMBO,
+        IDC_MINIPLAYER_UNDOCKED_WIDTH_LABEL,
+        IDC_MINIPLAYER_UNDOCKED_WIDTH_EDIT,
+        IDC_MINIPLAYER_UNDOCKED_HEIGHT_LABEL,
+        IDC_MINIPLAYER_UNDOCKED_HEIGHT_EDIT,
+        
+        IDC_MINIPLAYER_COMPACT_GROUP,
+        IDC_MINIPLAYER_COMPACT_PRESET_LABEL,
+        IDC_MINIPLAYER_COMPACT_PRESET_COMBO,
+        IDC_MINIPLAYER_COMPACT_WIDTH_LABEL,
+        IDC_MINIPLAYER_COMPACT_WIDTH_EDIT,
+        IDC_MINIPLAYER_COMPACT_HEIGHT_LABEL,
+        IDC_MINIPLAYER_COMPACT_HEIGHT_EDIT,
+        
+        IDC_MINIPLAYER_EXPANDED_GROUP,
+        IDC_MINIPLAYER_EXPANDED_PRESET_LABEL,
+        IDC_MINIPLAYER_EXPANDED_PRESET_COMBO,
+        IDC_MINIPLAYER_EXPANDED_SIZE_LABEL,
+        IDC_MINIPLAYER_EXPANDED_SIZE_EDIT
     };
     
     // Fonts tab controls - all 4 modes
@@ -1224,9 +1390,16 @@ void tray_preferences::switch_tab(int tab) {
         HWND hCtrl = GetDlgItem(m_hwnd, id);
         if (hCtrl) ShowWindow(hCtrl, show_general);
     }
+
+    // Show/hide MiniPlayer controls
+    int show_miniplayer = (tab == 1) ? SW_SHOW : SW_HIDE;
+    for (int id : miniplayer_controls) {
+        HWND hCtrl = GetDlgItem(m_hwnd, id);
+        if (hCtrl) ShowWindow(hCtrl, show_miniplayer);
+    }
     
     // Show/hide Fonts controls
-    int show_fonts = (tab == 1) ? SW_SHOW : SW_HIDE;
+    int show_fonts = (tab == 2) ? SW_SHOW : SW_HIDE;
     for (int id : fonts_controls) {
         HWND hCtrl = GetDlgItem(m_hwnd, id);
         if (hCtrl) ShowWindow(hCtrl, show_fonts);
