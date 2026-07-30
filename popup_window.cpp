@@ -136,8 +136,8 @@ void popup_window::show_track_info(metadb_handle_ptr p_track) {
     cleanup_cover_art();
     clear_pending_online_artwork();
     
-    // Attempt initial cover art load for the new track (embedded art only at track change T=0)
-    load_cover_art(p_track, true /* is_track_change */);
+    // Attempt initial cover art load for the new track (embedded art check)
+    load_cover_art(p_track);
     
     if (m_cover_art_bitmap != nullptr) {
         // Embedded artwork is ready immediately! Show popup right now.
@@ -153,7 +153,7 @@ void popup_window::show_track_info(metadb_handle_ptr p_track) {
         }
     } else {
         // Embedded artwork not ready.
-        // Keep popup hidden and poll every 50ms (up to 3.5s) for foo_artwork to update main window for this track.
+        // Keep popup hidden and poll every 50ms (up to 3.5s) for foo_artwork callback to load artwork for this track.
         if (m_popup_window) {
             SetTimer(m_popup_window, ARTWORK_WAIT_TIMER_ID, ARTWORK_WAIT_INTERVAL, nullptr);
         }
@@ -168,8 +168,8 @@ void popup_window::on_artwork_wait_timer() {
     
     m_artwork_wait_count++;
     
-    // Poll for cover art loading (is_track_change = false)
-    load_cover_art(m_pending_track, false /* is_track_change */);
+    // Poll for cover art loading via callback or embedded art
+    load_cover_art(m_pending_track);
     
     // Check if foo_artwork is actively downloading artwork over the network
     bool is_downloading = is_online_artwork_loading();
@@ -375,12 +375,12 @@ void popup_window::update_track_info(metadb_handle_ptr p_track) {
     }
 }
 
-void popup_window::load_cover_art(metadb_handle_ptr p_track, bool is_track_change) {
+void popup_window::load_cover_art(metadb_handle_ptr p_track) {
     if (!p_track.is_valid()) return;
 
     // Check if artwork has arrived via callback from foo_artwork for this search
-    if (has_pending_online_artwork()) {
-        HBITMAP bitmap = get_pending_online_artwork();
+    if (has_pending_online_artwork_popup()) {
+        HBITMAP bitmap = get_pending_online_artwork_popup();
         if (bitmap) {
             cleanup_cover_art();
             m_cover_art_bitmap = bitmap;
@@ -410,25 +410,6 @@ void popup_window::load_cover_art(metadb_handle_ptr p_track, bool is_track_chang
                 }
             }
         } catch (...) {}
-
-        // Mirror active artwork displayed by foo_artwork in main window
-        // (Do NOT query get_current_online_artwork at track change T=0ms, as main window still holds previous track's image)
-        if (!is_track_change && is_artwork_bridge_available()) {
-            HBITMAP current_online = get_current_online_artwork();
-            if (current_online) {
-                cleanup_cover_art();
-                m_cover_art_bitmap = current_online;
-                m_artwork_from_bridge = false;
-                if (m_popup_window) KillTimer(m_popup_window, ARTWORK_POLL_TIMER_ID);
-                return;
-            }
-
-            // If foo_artwork has not updated its bitmap yet, start poll timer to catch it when main window updates
-            if (m_popup_window) {
-                SetTimer(m_popup_window, ARTWORK_POLL_TIMER_ID, ARTWORK_POLL_INTERVAL, nullptr);
-            }
-            return;
-        }
 
         // No artwork available
         cleanup_cover_art();
