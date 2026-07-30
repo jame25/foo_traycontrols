@@ -60,7 +60,7 @@ private:
     void create_popup_window();
     void position_popup();
     void update_track_info(metadb_handle_ptr p_track);
-    void load_cover_art(metadb_handle_ptr p_track, bool is_track_change = false);
+    void load_cover_art(metadb_handle_ptr p_track);
     void cleanup_cover_art();
     HBITMAP convert_album_art_to_bitmap(album_art_data_ptr art_data);
     void on_artwork_wait_timer();
