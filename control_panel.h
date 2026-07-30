@@ -33,6 +33,7 @@ public:
     void set_undocked(bool undocked);
     void toggle_artwork_expanded();
     void toggle_compact_mode();
+    void close_panel_and_focus_foobar();
     void show_miniplayer_at_saved_position(); // Show miniplayer (any mode) at remembered position
     void show_undocked_miniplayer(); // Launch MiniPlayer directly in Undocked mode (for toolbar button)
     void hide_and_remember_miniplayer(); // Hide and remember miniplayer state and position
@@ -131,6 +132,7 @@ private:
     int m_saved_normal_width;
     int m_saved_normal_height;
     int m_saved_compact_width; // Remember compact mode width when resized
+    int m_saved_compact_height; // Remember compact mode height when resized
     bool m_was_compact_before_expanded; // Remember if we were in compact mode before entering expanded mode
     
     // Compact mode hover control overlay
