@@ -36,6 +36,9 @@ inline bool is_artwork_bridge_available() {
 // No-op if bridge not available
 void request_online_artwork(const char* artist, const char* title);
 
+// Clear any pending online artwork from previous search
+void clear_pending_online_artwork();
+
 // Check if artwork was received from foo_artwork via callback
 bool has_pending_online_artwork();
 
@@ -46,3 +49,10 @@ HBITMAP get_pending_online_artwork();
 // Get a copy of the last received artwork bitmap without changing state.
 // Used to re-acquire artwork after mode switches. Caller OWNS the returned HBITMAP.
 HBITMAP get_last_online_artwork();
+
+// Get a copy of the currently active artwork bitmap directly from foo_artwork (e.g. displayed in main window).
+// Caller OWNS the returned HBITMAP and must DeleteObject it.
+HBITMAP get_current_online_artwork();
+
+// Check if foo_artwork is currently searching/downloading artwork in the background
+bool is_online_artwork_loading();
