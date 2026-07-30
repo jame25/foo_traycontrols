@@ -719,8 +719,7 @@ void control_panel::position_control_panel() {
 }
 
 void control_panel::load_cover_art() {
-    // Check if artwork has arrived via callback (from our request or foo_nowbar's).
-    // Pick it up immediately regardless of who triggered the search.
+    // Check if artwork has arrived via callback (from foo_artwork).
     if (has_pending_online_artwork()) {
         HBITMAP bitmap = get_pending_online_artwork();
         if (bitmap) {
@@ -730,41 +729,9 @@ void control_panel::load_cover_art() {
             m_cover_art_bitmap_original = nullptr;
             m_artwork_from_bridge = false; // We own the copy, cleanup_cover_art will DeleteObject
             m_online_artwork_pending = false;
-            if (m_control_window) KillTimer(m_control_window, ARTWORK_POLL_TIMER_ID);
+            if (m_control_window) InvalidateRect(m_control_window, nullptr, FALSE);
             return;
         }
-    }
-
-    // If we previously had bridge artwork for the current stream, check if metadata
-    // is still the same - if so, re-acquire it from the bridge cache.
-    if (!m_last_stream_artist.is_empty()) {
-        try {
-            auto playback = playback_control::get();
-            metadb_handle_ptr track;
-            if (playback->get_now_playing(track) && track.is_valid()) {
-                pfc::string8 path = track->get_path();
-                bool is_stream = strstr(path.get_ptr(), "://") != nullptr;
-                if (is_stream && is_artwork_bridge_available()) {
-                    pfc::string8 artist, title;
-                    service_ptr_t<titleformat_object> script_artist, script_title;
-                    titleformat_compiler::get()->compile_safe(script_artist, "%artist%");
-                    titleformat_compiler::get()->compile_safe(script_title, "%title%");
-                    playback->playback_format_title(nullptr, artist, script_artist, nullptr, playback_control::display_level_all);
-                    playback->playback_format_title(nullptr, title, script_title, nullptr, playback_control::display_level_all);
-
-                    // Same metadata as last request - re-acquire the bitmap from our bridge cache
-                    if (artist == m_last_stream_artist && title == m_last_stream_title) {
-                        HBITMAP existing = get_last_online_artwork();
-                        if (existing) {
-                            cleanup_cover_art();
-                            m_cover_art_bitmap = existing;
-                            m_artwork_from_bridge = false; // We own the copy
-                            return;
-                        }
-                    }
-                }
-            }
-        } catch (...) {}
     }
 
     try {
@@ -772,8 +739,24 @@ void control_panel::load_cover_art() {
         metadb_handle_ptr track;
 
         if (playback->get_now_playing(track) && track.is_valid()) {
-            // Try local/embedded artwork first (in its own try-catch so exceptions
-            // don't prevent the online artwork fallback from running)
+            pfc::string8 artist, title;
+            service_ptr_t<titleformat_object> script_artist, script_title;
+            titleformat_compiler::get()->compile_safe(script_artist, "%artist%");
+            titleformat_compiler::get()->compile_safe(script_title, "%title%");
+            track->format_title(nullptr, artist, script_artist, nullptr);
+            track->format_title(nullptr, title, script_title, nullptr);
+
+            bool metadata_changed = (artist != m_last_stream_artist || title != m_last_stream_title);
+
+            // Metadata has changed (new track playing)
+            if (metadata_changed) {
+                m_last_stream_artist = artist;
+                m_last_stream_title = title;
+                clear_pending_online_artwork();
+                cleanup_cover_art();
+            }
+
+            // 1. Try local/embedded artwork first for current track
             try {
                 auto api = album_art_manager_v2::get();
                 if (api.is_valid()) {
@@ -784,69 +767,51 @@ void control_panel::load_cover_art() {
                     if (extractor.is_valid()) {
                         auto data = extractor->query(album_art_ids::cover_front, fb2k::noAbort);
                         if (data.is_valid() && data->get_size() > 0) {
-                            // Found local/embedded artwork - replace old artwork
                             cleanup_cover_art();
                             m_cover_art_bitmap = convert_album_art_to_bitmap(data);
                             m_cover_art_bitmap_large = convert_album_art_to_bitmap_large(data);
                             m_cover_art_bitmap_original = convert_album_art_to_bitmap_original(data);
-                            m_last_stream_artist.reset();
-                            m_last_stream_title.reset();
+                            m_online_artwork_pending = false;
+                            if (m_control_window) InvalidateRect(m_control_window, nullptr, FALSE);
                             return;
                         }
                     }
                 }
             } catch (...) {}
 
-            // No embedded/local artwork found - try online via foo_artwork for streams
-            pfc::string8 path = track->get_path();
-            bool is_stream = strstr(path.get_ptr(), "://") != nullptr;
-
-            if (is_stream && is_artwork_bridge_available()) {
-                // Extract artist/title using playback_format_title for stream metadata
-                pfc::string8 artist, title;
-                service_ptr_t<titleformat_object> script_artist, script_title;
-                titleformat_compiler::get()->compile_safe(script_artist, "%artist%");
-                titleformat_compiler::get()->compile_safe(script_title, "%title%");
-                playback->playback_format_title(nullptr, artist, script_artist, nullptr, playback_control::display_level_all);
-                playback->playback_format_title(nullptr, title, script_title, nullptr, playback_control::display_level_all);
-
-                // Check if artwork already arrived before we even requested
-                // (e.g. foo_nowbar triggered foo_artwork first)
-                if (has_pending_online_artwork()) {
-                    HBITMAP bitmap = get_pending_online_artwork();
-                    if (bitmap) {
+            // 2. Mirror active artwork shown by foo_artwork in main display window
+            if (is_artwork_bridge_available()) {
+                // If we don't have artwork loaded yet for this track, check foo_artwork active bitmap
+                if (m_cover_art_bitmap == nullptr) {
+                    HBITMAP current_online = get_current_online_artwork();
+                    if (current_online) {
                         cleanup_cover_art();
-                        m_cover_art_bitmap = bitmap;
+                        m_cover_art_bitmap = current_online;
+                        m_cover_art_bitmap_large = nullptr;
+                        m_cover_art_bitmap_original = nullptr;
                         m_artwork_from_bridge = false;
-                        m_last_stream_artist = artist;
-                        m_last_stream_title = title;
                         m_online_artwork_pending = false;
-                        if (m_control_window) KillTimer(m_control_window, ARTWORK_POLL_TIMER_ID);
+                        if (m_control_window) InvalidateRect(m_control_window, nullptr, FALSE);
                         return;
                     }
                 }
 
-                // Avoid re-requesting the same artist/title
-                if (artist != m_last_stream_artist || title != m_last_stream_title) {
-                    m_last_stream_artist = artist;
-                    m_last_stream_title = title;
-                    m_online_artwork_pending = true;
-                    request_online_artwork(artist.c_str(), title.c_str());
-                    // Start polling for artwork results (async search)
-                    // Keep old artwork visible until new artwork arrives via callback
-                    if (m_control_window) {
-                        SetTimer(m_control_window, ARTWORK_POLL_TIMER_ID, ARTWORK_POLL_INTERVAL, nullptr);
-                    }
+                // If foo_artwork has not updated its display bitmap yet, ensure poll timer is active
+                if (m_control_window) {
+                    SetTimer(m_control_window, ARTWORK_POLL_TIMER_ID, ARTWORK_POLL_INTERVAL, nullptr);
                 }
-                // Don't cleanup - keep existing artwork visible during async fetch
                 return;
             }
 
-            // Not a stream and no local artwork found - clear artwork
+            // No local or online artwork found - clear artwork
             cleanup_cover_art();
+            if (m_control_window) InvalidateRect(m_control_window, nullptr, FALSE);
         } else {
             // No valid track - clear artwork
+            m_last_stream_artist.reset();
+            m_last_stream_title.reset();
             cleanup_cover_art();
+            if (m_control_window) InvalidateRect(m_control_window, nullptr, FALSE);
         }
     } catch (...) {
         // Ignore errors
@@ -4086,19 +4051,9 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                 panel->update_track_info(); // Full update
                 return 0;
             } else if (wparam == ARTWORK_POLL_TIMER_ID) {
-                // Poll foo_artwork for completed artwork search
-                if (panel && has_pending_online_artwork()) {
-                    HBITMAP bitmap = get_pending_online_artwork();
-                    if (bitmap) {
-                        panel->cleanup_cover_art();
-                        panel->m_cover_art_bitmap = bitmap;
-                        panel->m_cover_art_bitmap_large = nullptr;
-                        panel->m_cover_art_bitmap_original = nullptr;
-                        panel->m_artwork_from_bridge = false; // We own the copy
-                        panel->m_online_artwork_pending = false;
-                        KillTimer(hwnd, ARTWORK_POLL_TIMER_ID);
-                        InvalidateRect(hwnd, nullptr, FALSE);
-                    }
+                // Poll foo_artwork to mirror active artwork shown in main display window
+                if (panel) {
+                    panel->load_cover_art();
                 }
                 return 0;
             } else if (wparam == TIMEOUT_TIMER_ID) {
