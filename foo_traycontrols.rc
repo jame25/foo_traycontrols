@@ -36,7 +36,8 @@ BEGIN
     CONTROL         "Always minimize to system tray", IDC_ALWAYS_MINIMIZE_TO_TRAY, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 15, 90, 200, 10
     CONTROL         "When enabled, clicking minimize sends foobar2000 directly to the system tray.", IDC_STATIC_MINIMIZE_HELP, "Static", SS_LEFT | SS_NOPREFIX, 15, 105, 270, 8
     CONTROL         "Mouse wheel over tray icon adjusts volume.", IDC_STATIC_WHEEL_HELP, "Static", SS_LEFT | SS_NOPREFIX, 15, 117, 270, 8
-    CONTROL         "Show popup notification on track change", IDC_SHOW_POPUP_NOTIFICATION, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 15, 135, 200, 10
+    CONTROL         "Show popup notification on track change", IDC_SHOW_POPUP_NOTIFICATION, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 15, 135, 145, 10
+    PUSHBUTTON      "Preview", IDC_PREVIEW_POPUP_BTN, 163, 133, 42, 13, WS_TABSTOP
     LTEXT           "Position:", IDC_POPUP_POSITION_LABEL, 15, 153, 35, 10
     COMBOBOX        IDC_POPUP_POSITION_COMBO, 55, 151, 80, 120, CBS_DROPDOWNLIST | CBS_HASSTRINGS | WS_VSCROLL | WS_TABSTOP
     LTEXT           "Duration:", IDC_POPUP_DURATION_LABEL, 145, 153, 35, 10
@@ -52,8 +53,23 @@ BEGIN
 
     // Window Style Options
     CONTROL         "Use rounded corners (Windows 11 only)", IDC_USE_ROUNDED_CORNERS, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 15, 240, 200, 10
-    LTEXT           "Theme Mode:", IDC_THEME_MODE_LABEL, 15, 257, 65, 10
-    COMBOBOX        IDC_THEME_MODE_COMBO, 85, 255, 50, 100, CBS_DROPDOWNLIST | CBS_HASSTRINGS | WS_VSCROLL | WS_TABSTOP
+
+
+    // === Appearance Tab Controls (hidden initially) ===
+    LTEXT           "Theme Mode:", IDC_THEME_MODE_LABEL, 15, 32, 85, 12
+    COMBOBOX        IDC_THEME_MODE_COMBO, 105, 30, 110, 100, CBS_DROPDOWNLIST | CBS_HASSTRINGS | WS_VSCROLL | WS_TABSTOP
+
+    LTEXT           "Cover Artwork:", IDC_COVER_ARTWORK_LABEL, 15, 52, 85, 12
+    COMBOBOX        IDC_COVER_ARTWORK_COMBO, 105, 50, 110, 100, CBS_DROPDOWNLIST | CBS_HASSTRINGS | WS_VSCROLL | WS_TABSTOP
+
+    LTEXT           "Cover Margin:", IDC_COVER_MARGIN_LABEL, 15, 72, 85, 12
+    COMBOBOX        IDC_COVER_MARGIN_COMBO, 105, 70, 110, 100, CBS_DROPDOWNLIST | CBS_HASSTRINGS | WS_VSCROLL | WS_TABSTOP
+
+    LTEXT           "Cover Style:", IDC_COVER_STYLE_LABEL, 15, 92, 85, 12
+    COMBOBOX        IDC_COVER_STYLE_COMBO, 105, 90, 110, 100, CBS_DROPDOWNLIST | CBS_HASSTRINGS | WS_VSCROLL | WS_TABSTOP
+
+    LTEXT           "Background Style:", IDC_BACKGROUND_STYLE_LABEL, 15, 112, 85, 12
+    COMBOBOX        IDC_BACKGROUND_STYLE_COMBO, 105, 110, 110, 100, CBS_DROPDOWNLIST | CBS_HASSTRINGS | WS_VSCROLL | WS_TABSTOP
 
 
     // === MiniPlayer Tab Controls (hidden initially) ===
