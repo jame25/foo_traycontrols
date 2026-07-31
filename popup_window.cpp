@@ -988,29 +988,66 @@ void popup_window::paint_popup(HDC hdc) {
         int art_h = cover_rect.bottom - cover_rect.top;
 
         if (is_rounded) {
-            int corner_r = (art_w < art_h ? art_w : art_h) / 8;
-            if (corner_r < 4) corner_r = 4;
-            HRGN rgn = CreateRoundRectRgn(cover_rect.left, cover_rect.top, cover_rect.right + 1, cover_rect.bottom + 1, corner_r * 2, corner_r * 2);
-            SelectClipRgn(hdc, rgn);
+            float radius = (art_w < art_h ? (float)art_w : (float)art_h) * 0.10f;
+            if (radius < 4.0f) radius = 4.0f;
+            if (radius > 12.0f) radius = 12.0f;
+            float d = radius * 2.0f;
 
-            if (m_cover_art_bitmap) {
-                HDC bitmap_dc = CreateCompatibleDC(hdc);
-                HBITMAP old_bitmap = (HBITMAP)SelectObject(bitmap_dc, m_cover_art_bitmap);
-                BITMAP bmp_info;
-                GetObject(m_cover_art_bitmap, sizeof(BITMAP), &bmp_info);
-                SetStretchBltMode(hdc, HALFTONE);
-                StretchBlt(hdc, cover_rect.left, cover_rect.top, art_w, art_h,
-                           bitmap_dc, 0, 0, bmp_info.bmWidth, bmp_info.bmHeight, SRCCOPY);
-                SelectObject(bitmap_dc, old_bitmap);
-                DeleteDC(bitmap_dc);
-            } else {
-                HBRUSH cover_brush = CreateSolidBrush(placeholder_color);
-                FillRect(hdc, &cover_rect, cover_brush);
-                DeleteObject(cover_brush);
+            Gdiplus::Bitmap offscreen(art_w, art_h, PixelFormat32bppPARGB);
+            {
+                Gdiplus::Graphics og(&offscreen);
+                og.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+                og.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHighQuality);
+
+                if (m_cover_art_bitmap) {
+                    Gdiplus::Bitmap srcBitmap(m_cover_art_bitmap, nullptr);
+                    int srcW = srcBitmap.GetWidth();
+                    int srcH = srcBitmap.GetHeight();
+                    if (srcW > 0 && srcH > 0) {
+                        float srcAspect = (float)srcW / (float)srcH;
+                        float dstAspect = (float)art_w / (float)art_h;
+                        int cropX = 0, cropY = 0, cropW = srcW, cropH = srcH;
+                        if (srcAspect > dstAspect) {
+                            cropH = srcH;
+                            cropW = (int)(srcH * dstAspect);
+                            cropX = (srcW - cropW) / 2;
+                        } else {
+                            cropW = srcW;
+                            cropH = (int)(srcW / dstAspect);
+                            cropY = (srcH - cropH) / 2;
+                        }
+                        Gdiplus::Rect destRect(0, 0, art_w, art_h);
+                        og.DrawImage(&srcBitmap, destRect, cropX, cropY, cropW, cropH, Gdiplus::UnitPixel);
+                    } else {
+                        Gdiplus::SolidBrush brush(Gdiplus::Color(255, GetRValue(placeholder_color), GetGValue(placeholder_color), GetBValue(placeholder_color)));
+                        og.FillRectangle(&brush, 0, 0, art_w, art_h);
+                    }
+                } else {
+                    Gdiplus::SolidBrush brush(Gdiplus::Color(255, GetRValue(placeholder_color), GetGValue(placeholder_color), GetBValue(placeholder_color)));
+                    og.FillRectangle(&brush, 0, 0, art_w, art_h);
+                }
             }
 
-            SelectClipRgn(hdc, nullptr);
-            DeleteObject(rgn);
+            float x = (float)cover_rect.left;
+            float y = (float)cover_rect.top;
+            float fw = (float)art_w;
+            float fh = (float)art_h;
+
+            Gdiplus::GraphicsPath roundedPath;
+            roundedPath.AddArc(x, y, d, d, 180, 90);
+            roundedPath.AddArc(x + fw - d, y, d, d, 270, 90);
+            roundedPath.AddArc(x + fw - d, y + fh - d, d, d, 0, 90);
+            roundedPath.AddArc(x, y + fh - d, d, d, 90, 90);
+            roundedPath.CloseFigure();
+
+            Gdiplus::Graphics g(hdc);
+            Gdiplus::TextureBrush texBrush(&offscreen, Gdiplus::WrapModeClamp);
+            texBrush.TranslateTransform((float)cover_rect.left, (float)cover_rect.top);
+
+            Gdiplus::SmoothingMode prevSmoothing = g.GetSmoothingMode();
+            g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+            g.FillPath(&texBrush, &roundedPath);
+            g.SetSmoothingMode(prevSmoothing);
         } else {
             if (m_cover_art_bitmap) {
                 HDC bitmap_dc = CreateCompatibleDC(hdc);
