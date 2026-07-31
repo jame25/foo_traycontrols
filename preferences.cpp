@@ -19,6 +19,10 @@ static cfg_int cfg_slide_duration(GUID{0x12345689, 0x9abc, 0xdef0, {0x12, 0x34, 
 static cfg_int cfg_always_slide_to_side(GUID{0x1234568A, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 1); // Default ON
 static cfg_int cfg_use_rounded_corners(GUID{0x12345690, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 1); // Default ON (Win11 style)
 static cfg_int cfg_theme_mode(GUID{0x12345691, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0); // 0=Auto, 1=Force Dark, 2=Force Light
+static cfg_int cfg_show_cover_art(GUID{0x12345695, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 1); // 1=Yes, 0=No
+static cfg_int cfg_cover_margin(GUID{0x12345696, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 1); // 1=Yes, 0=No
+static cfg_int cfg_cover_style(GUID{0x12345697, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0); // 0=Square, 1=Rounded
+static cfg_int cfg_background_style(GUID{0x12345698, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0); // 0=Solid, 1=Artwork Colors, 2=Blurred Artwork
 
 // MiniPlayer mode size configuration
 static cfg_int cfg_miniplayer_undocked_width(GUID{0x123456D1, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 400);
@@ -231,6 +235,26 @@ int get_theme_mode() {
     if (mode < 0) mode = 0;
     if (mode > 2) mode = 2;
     return mode;
+}
+
+bool get_show_cover_art() {
+    return cfg_show_cover_art != 0;
+}
+
+bool get_cover_margin() {
+    return cfg_cover_margin != 0;
+}
+
+int get_cover_style() {
+    int style = cfg_cover_style;
+    if (style < 0 || style > 1) style = 0;
+    return style;
+}
+
+int get_background_style() {
+    int style = cfg_background_style;
+    if (style < 0 || style > 2) style = 0;
+    return style;
 }
 
 pfc::string8 get_line1_format() {
@@ -545,6 +569,31 @@ INT_PTR CALLBACK tray_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, LP
         SendMessage(hThemeModeCombo, CB_ADDSTRING, 0, (LPARAM)L"Light");
         SendMessage(hThemeModeCombo, CB_SETCURSEL, cfg_theme_mode, 0);
 
+        // Initialize Cover Artwork combobox
+        HWND hCoverArtCombo = GetDlgItem(hwnd, IDC_COVER_ARTWORK_COMBO);
+        SendMessage(hCoverArtCombo, CB_ADDSTRING, 0, (LPARAM)L"Yes");
+        SendMessage(hCoverArtCombo, CB_ADDSTRING, 0, (LPARAM)L"No");
+        SendMessage(hCoverArtCombo, CB_SETCURSEL, cfg_show_cover_art != 0 ? 0 : 1, 0);
+
+        // Initialize Cover Margin combobox
+        HWND hCoverMarginCombo = GetDlgItem(hwnd, IDC_COVER_MARGIN_COMBO);
+        SendMessage(hCoverMarginCombo, CB_ADDSTRING, 0, (LPARAM)L"Yes");
+        SendMessage(hCoverMarginCombo, CB_ADDSTRING, 0, (LPARAM)L"No");
+        SendMessage(hCoverMarginCombo, CB_SETCURSEL, cfg_cover_margin != 0 ? 0 : 1, 0);
+
+        // Initialize Cover Style combobox
+        HWND hCoverStyleCombo = GetDlgItem(hwnd, IDC_COVER_STYLE_COMBO);
+        SendMessage(hCoverStyleCombo, CB_ADDSTRING, 0, (LPARAM)L"Square");
+        SendMessage(hCoverStyleCombo, CB_ADDSTRING, 0, (LPARAM)L"Rounded");
+        SendMessage(hCoverStyleCombo, CB_SETCURSEL, cfg_cover_style, 0);
+
+        // Initialize Background Style combobox
+        HWND hBgStyleCombo = GetDlgItem(hwnd, IDC_BACKGROUND_STYLE_COMBO);
+        SendMessage(hBgStyleCombo, CB_ADDSTRING, 0, (LPARAM)L"Solid");
+        SendMessage(hBgStyleCombo, CB_ADDSTRING, 0, (LPARAM)L"Artwork Colors");
+        SendMessage(hBgStyleCombo, CB_ADDSTRING, 0, (LPARAM)L"Blurred Artwork");
+        SendMessage(hBgStyleCombo, CB_SETCURSEL, cfg_background_style, 0);
+
         // Initialize display format edit fields
         uSetDlgItemText(hwnd, IDC_LINE1_FORMAT_EDIT, cfg_line1_format);
         uSetDlgItemText(hwnd, IDC_LINE2_FORMAT_EDIT, cfg_line2_format);
@@ -674,15 +723,67 @@ INT_PTR CALLBACK tray_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, LP
             break;
 
         case IDC_POPUP_POSITION_COMBO:
+            if (HIWORD(wp) == CBN_SELCHANGE) {
+                int pos_sel = (int)SendMessage(GetDlgItem(hwnd, IDC_POPUP_POSITION_COMBO), CB_GETCURSEL, 0, 0);
+                if (pos_sel >= 0) {
+                    cfg_popup_position = pos_sel;
+                    popup_window::get_instance().on_settings_changed();
+                }
+                p_this->on_changed();
+            }
+            break;
+
         case IDC_POPUP_DURATION_COMBO:
-        case IDC_SLIDE_DURATION_COMBO:
+            if (HIWORD(wp) == CBN_SELCHANGE) {
+                int duration_index = (int)SendMessage(GetDlgItem(hwnd, IDC_POPUP_DURATION_COMBO), CB_GETCURSEL, 0, 0);
+                int duration_values[] = {1000, 2000, 3000, 4000, 5000, 7000, 10000};
+                if (duration_index >= 0 && duration_index < 7) {
+                    cfg_popup_duration = duration_values[duration_index];
+                    popup_window::get_instance().on_settings_changed();
+                }
+                p_this->on_changed();
+            }
+            break;
+
         case IDC_THEME_MODE_COMBO:
+            if (HIWORD(wp) == CBN_SELCHANGE) {
+                int sel = (int)SendMessage(GetDlgItem(hwnd, IDC_THEME_MODE_COMBO), CB_GETCURSEL, 0, 0);
+                if (sel >= 0) {
+                    cfg_theme_mode = sel;
+                    popup_window::get_instance().on_settings_changed();
+                    control_panel::get_instance().on_settings_changed();
+                }
+                p_this->on_changed();
+            }
+            break;
+
+        case IDC_BACKGROUND_STYLE_COMBO:
+            if (HIWORD(wp) == CBN_SELCHANGE) {
+                int sel = (int)SendMessage(GetDlgItem(hwnd, IDC_BACKGROUND_STYLE_COMBO), CB_GETCURSEL, 0, 0);
+                if (sel >= 0) {
+                    cfg_background_style = sel;
+                    popup_window::get_instance().on_settings_changed();
+                    control_panel::get_instance().on_settings_changed();
+                }
+                p_this->on_changed();
+            }
+            break;
+
+        case IDC_SLIDE_DURATION_COMBO:
+        case IDC_COVER_ARTWORK_COMBO:
+        case IDC_COVER_MARGIN_COMBO:
+        case IDC_COVER_STYLE_COMBO:
             if (HIWORD(wp) == CBN_SELCHANGE) {
                 p_this->on_changed();
             }
             break;
 
-            
+        case IDC_PREVIEW_POPUP_BTN:
+            if (HIWORD(wp) == BN_CLICKED) {
+                popup_window::get_instance().show_preview();
+            }
+            break;
+
         case IDC_SELECT_ARTIST_FONT:
             if (HIWORD(wp) == BN_CLICKED) {
                 p_this->select_artist_font();
@@ -828,6 +929,12 @@ void tray_preferences::apply_settings() {
 
         // Save theme mode
         cfg_theme_mode = (int)SendMessage(GetDlgItem(m_hwnd, IDC_THEME_MODE_COMBO), CB_GETCURSEL, 0, 0);
+        int cover_art_sel = (int)SendMessage(GetDlgItem(m_hwnd, IDC_COVER_ARTWORK_COMBO), CB_GETCURSEL, 0, 0);
+        cfg_show_cover_art = (cover_art_sel == 0) ? 1 : 0;
+        int cover_margin_sel = (int)SendMessage(GetDlgItem(m_hwnd, IDC_COVER_MARGIN_COMBO), CB_GETCURSEL, 0, 0);
+        cfg_cover_margin = (cover_margin_sel == 0) ? 1 : 0;
+        cfg_cover_style = (int)SendMessage(GetDlgItem(m_hwnd, IDC_COVER_STYLE_COMBO), CB_GETCURSEL, 0, 0);
+        cfg_background_style = (int)SendMessage(GetDlgItem(m_hwnd, IDC_BACKGROUND_STYLE_COMBO), CB_GETCURSEL, 0, 0);
 
         // Save display format strings
         {
@@ -872,6 +979,10 @@ void tray_preferences::reset_settings() {
         cfg_always_slide_to_side = 1;     // Default: ON
         cfg_use_rounded_corners = 1;      // Default: ON
         cfg_theme_mode = 0;               // Default: Auto
+        cfg_show_cover_art = 1;           // Default: Yes (1)
+        cfg_cover_margin = 1;             // Default: Yes (1)
+        cfg_cover_style = 0;              // Default: Square (0)
+        cfg_background_style = 0;         // Default: Solid (0)
         cfg_line1_format = "%title%";     // Default: title
         cfg_line2_format = "%artist%";    // Default: artist
 
@@ -893,6 +1004,10 @@ void tray_preferences::reset_settings() {
         SendMessage(GetDlgItem(m_hwnd, IDC_POPUP_DURATION_COMBO), CB_SETCURSEL, 2, 0);        // 3 seconds (index 2)
         SendMessage(GetDlgItem(m_hwnd, IDC_SLIDE_DURATION_COMBO), CB_SETCURSEL, 1, 0);        // Fast 200ms (index 1)
         SendMessage(GetDlgItem(m_hwnd, IDC_THEME_MODE_COMBO), CB_SETCURSEL, 0, 0);            // Auto
+        SendMessage(GetDlgItem(m_hwnd, IDC_COVER_ARTWORK_COMBO), CB_SETCURSEL, 0, 0);         // Yes
+        SendMessage(GetDlgItem(m_hwnd, IDC_COVER_MARGIN_COMBO), CB_SETCURSEL, 0, 0);          // Yes
+        SendMessage(GetDlgItem(m_hwnd, IDC_COVER_STYLE_COMBO), CB_SETCURSEL, 0, 0);           // Square
+        SendMessage(GetDlgItem(m_hwnd, IDC_BACKGROUND_STYLE_COMBO), CB_SETCURSEL, 0, 0);      // Solid
         uSetDlgItemText(m_hwnd, IDC_LINE1_FORMAT_EDIT, "%title%");
         uSetDlgItemText(m_hwnd, IDC_LINE2_FORMAT_EDIT, "%artist%");
 
@@ -1266,18 +1381,21 @@ void tray_preferences::init_tab_control() {
     HWND hTab = GetDlgItem(m_hwnd, IDC_TAB_CONTROL);
     if (!hTab) return;
     
-    // Add tabs: General (0), MiniPlayer (1), Fonts (2)
+    // Add tabs: General (0), Appearance (1), MiniPlayer (2), Fonts (3)
     TCITEM tie = {};
     tie.mask = TCIF_TEXT;
     
     tie.pszText = const_cast<LPWSTR>(L"General");
     TabCtrl_InsertItem(hTab, 0, &tie);
     
-    tie.pszText = const_cast<LPWSTR>(L"MiniPlayer");
+    tie.pszText = const_cast<LPWSTR>(L"Appearance");
     TabCtrl_InsertItem(hTab, 1, &tie);
+
+    tie.pszText = const_cast<LPWSTR>(L"MiniPlayer");
+    TabCtrl_InsertItem(hTab, 2, &tie);
     
     tie.pszText = const_cast<LPWSTR>(L"Fonts");
-    TabCtrl_InsertItem(hTab, 2, &tie);
+    TabCtrl_InsertItem(hTab, 3, &tie);
     
     // Select first tab
     TabCtrl_SetCurSel(hTab, 0);
@@ -1301,6 +1419,7 @@ void tray_preferences::switch_tab(int tab) {
         IDC_STATIC_MINIMIZE_HELP,
         IDC_STATIC_WHEEL_HELP,
         IDC_SHOW_POPUP_NOTIFICATION,
+        IDC_PREVIEW_POPUP_BTN,
         IDC_POPUP_POSITION_LABEL,
         IDC_POPUP_POSITION_COMBO,
         IDC_POPUP_DURATION_LABEL,
@@ -1313,11 +1432,23 @@ void tray_preferences::switch_tab(int tab) {
         IDC_SLIDE_DURATION_COMBO,
         IDC_ALWAYS_SLIDE_TO_SIDE,
         // Window style options
-        IDC_USE_ROUNDED_CORNERS,
-        IDC_THEME_MODE_LABEL,
-        IDC_THEME_MODE_COMBO
+        IDC_USE_ROUNDED_CORNERS
     };
     
+    // Appearance tab controls
+    int appearance_controls[] = {
+        IDC_THEME_MODE_LABEL,
+        IDC_THEME_MODE_COMBO,
+        IDC_COVER_ARTWORK_LABEL,
+        IDC_COVER_ARTWORK_COMBO,
+        IDC_COVER_MARGIN_LABEL,
+        IDC_COVER_MARGIN_COMBO,
+        IDC_COVER_STYLE_LABEL,
+        IDC_COVER_STYLE_COMBO,
+        IDC_BACKGROUND_STYLE_LABEL,
+        IDC_BACKGROUND_STYLE_COMBO
+    };
+
     // MiniPlayer tab controls
     int miniplayer_controls[] = {
         IDC_MINIPLAYER_UNDOCKED_GROUP,
@@ -1391,15 +1522,22 @@ void tray_preferences::switch_tab(int tab) {
         if (hCtrl) ShowWindow(hCtrl, show_general);
     }
 
+    // Show/hide Appearance controls
+    int show_appearance = (tab == 1) ? SW_SHOW : SW_HIDE;
+    for (int id : appearance_controls) {
+        HWND hCtrl = GetDlgItem(m_hwnd, id);
+        if (hCtrl) ShowWindow(hCtrl, show_appearance);
+    }
+
     // Show/hide MiniPlayer controls
-    int show_miniplayer = (tab == 1) ? SW_SHOW : SW_HIDE;
+    int show_miniplayer = (tab == 2) ? SW_SHOW : SW_HIDE;
     for (int id : miniplayer_controls) {
         HWND hCtrl = GetDlgItem(m_hwnd, id);
         if (hCtrl) ShowWindow(hCtrl, show_miniplayer);
     }
     
     // Show/hide Fonts controls
-    int show_fonts = (tab == 2) ? SW_SHOW : SW_HIDE;
+    int show_fonts = (tab == 3) ? SW_SHOW : SW_HIDE;
     for (int id : fonts_controls) {
         HWND hCtrl = GetDlgItem(m_hwnd, id);
         if (hCtrl) ShowWindow(hCtrl, show_fonts);
