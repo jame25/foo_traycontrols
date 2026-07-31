@@ -664,6 +664,8 @@ INT_PTR CALLBACK tray_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, LP
     
     if (p_this == nullptr) return FALSE;
     
+    static bool s_ignore_edit_change = false;
+    
     switch (msg) {
     case WM_COMMAND:
         switch (LOWORD(wp)) {
@@ -677,15 +679,64 @@ INT_PTR CALLBACK tray_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, LP
                 p_this->on_changed();
             }
             break;
-            
+
         case IDC_LINE1_FORMAT_EDIT:
         case IDC_LINE2_FORMAT_EDIT:
+            if (HIWORD(wp) == EN_CHANGE) {
+                p_this->on_changed();
+            }
+            break;
+
         case IDC_MINIPLAYER_UNDOCKED_WIDTH_EDIT:
         case IDC_MINIPLAYER_UNDOCKED_HEIGHT_EDIT:
+            if (HIWORD(wp) == EN_CHANGE) {
+                if (!s_ignore_edit_change) {
+                    int w = (int)GetDlgItemInt(hwnd, IDC_MINIPLAYER_UNDOCKED_WIDTH_EDIT, nullptr, FALSE);
+                    int h = (int)GetDlgItemInt(hwnd, IDC_MINIPLAYER_UNDOCKED_HEIGHT_EDIT, nullptr, FALSE);
+                    HWND hCombo = GetDlgItem(hwnd, IDC_MINIPLAYER_UNDOCKED_PRESET_COMBO);
+                    int sel = (int)SendMessage(hCombo, CB_GETCURSEL, 0, 0);
+                    if ((sel == 0 && (w != 400 || h != 120)) ||
+                        (sel == 1 && (w != 480 || h != 140)) ||
+                        (sel == 2 && (w != 540 || h != 120))) {
+                        SendMessage(hCombo, CB_SETCURSEL, 3, 0);
+                    }
+                }
+                p_this->on_changed();
+            }
+            break;
+
         case IDC_MINIPLAYER_COMPACT_WIDTH_EDIT:
         case IDC_MINIPLAYER_COMPACT_HEIGHT_EDIT:
+            if (HIWORD(wp) == EN_CHANGE) {
+                if (!s_ignore_edit_change) {
+                    int w = (int)GetDlgItemInt(hwnd, IDC_MINIPLAYER_COMPACT_WIDTH_EDIT, nullptr, FALSE);
+                    int h = (int)GetDlgItemInt(hwnd, IDC_MINIPLAYER_COMPACT_HEIGHT_EDIT, nullptr, FALSE);
+                    HWND hCombo = GetDlgItem(hwnd, IDC_MINIPLAYER_COMPACT_PRESET_COMBO);
+                    int sel = (int)SendMessage(hCombo, CB_GETCURSEL, 0, 0);
+                    if ((sel == 0 && (w != 280 || h != 60)) ||
+                        (sel == 1 && (w != 320 || h != 75)) ||
+                        (sel == 2 && (w != 380 || h != 90)) ||
+                        (sel == 3 && (w != 440 || h != 75))) {
+                        SendMessage(hCombo, CB_SETCURSEL, 4, 0);
+                    }
+                }
+                p_this->on_changed();
+            }
+            break;
+
         case IDC_MINIPLAYER_EXPANDED_SIZE_EDIT:
             if (HIWORD(wp) == EN_CHANGE) {
+                if (!s_ignore_edit_change) {
+                    int s = (int)GetDlgItemInt(hwnd, IDC_MINIPLAYER_EXPANDED_SIZE_EDIT, nullptr, FALSE);
+                    HWND hCombo = GetDlgItem(hwnd, IDC_MINIPLAYER_EXPANDED_PRESET_COMBO);
+                    int sel = (int)SendMessage(hCombo, CB_GETCURSEL, 0, 0);
+                    if ((sel == 0 && s != 250) ||
+                        (sel == 1 && s != 350) ||
+                        (sel == 2 && s != 450) ||
+                        (sel == 3 && s != 550)) {
+                        SendMessage(hCombo, CB_SETCURSEL, 4, 0);
+                    }
+                }
                 p_this->on_changed();
             }
             break;
@@ -693,9 +744,11 @@ INT_PTR CALLBACK tray_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, LP
         case IDC_MINIPLAYER_UNDOCKED_PRESET_COMBO:
             if (HIWORD(wp) == CBN_SELCHANGE) {
                 int sel = (int)SendMessage(GetDlgItem(hwnd, IDC_MINIPLAYER_UNDOCKED_PRESET_COMBO), CB_GETCURSEL, 0, 0);
+                s_ignore_edit_change = true;
                 if (sel == 0) { SetDlgItemInt(hwnd, IDC_MINIPLAYER_UNDOCKED_WIDTH_EDIT, 400, FALSE); SetDlgItemInt(hwnd, IDC_MINIPLAYER_UNDOCKED_HEIGHT_EDIT, 120, FALSE); }
                 else if (sel == 1) { SetDlgItemInt(hwnd, IDC_MINIPLAYER_UNDOCKED_WIDTH_EDIT, 480, FALSE); SetDlgItemInt(hwnd, IDC_MINIPLAYER_UNDOCKED_HEIGHT_EDIT, 140, FALSE); }
                 else if (sel == 2) { SetDlgItemInt(hwnd, IDC_MINIPLAYER_UNDOCKED_WIDTH_EDIT, 540, FALSE); SetDlgItemInt(hwnd, IDC_MINIPLAYER_UNDOCKED_HEIGHT_EDIT, 120, FALSE); }
+                s_ignore_edit_change = false;
                 p_this->on_changed();
             }
             break;
@@ -703,10 +756,12 @@ INT_PTR CALLBACK tray_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, LP
         case IDC_MINIPLAYER_COMPACT_PRESET_COMBO:
             if (HIWORD(wp) == CBN_SELCHANGE) {
                 int sel = (int)SendMessage(GetDlgItem(hwnd, IDC_MINIPLAYER_COMPACT_PRESET_COMBO), CB_GETCURSEL, 0, 0);
+                s_ignore_edit_change = true;
                 if (sel == 0) { SetDlgItemInt(hwnd, IDC_MINIPLAYER_COMPACT_WIDTH_EDIT, 280, FALSE); SetDlgItemInt(hwnd, IDC_MINIPLAYER_COMPACT_HEIGHT_EDIT, 60, FALSE); }
                 else if (sel == 1) { SetDlgItemInt(hwnd, IDC_MINIPLAYER_COMPACT_WIDTH_EDIT, 320, FALSE); SetDlgItemInt(hwnd, IDC_MINIPLAYER_COMPACT_HEIGHT_EDIT, 75, FALSE); }
                 else if (sel == 2) { SetDlgItemInt(hwnd, IDC_MINIPLAYER_COMPACT_WIDTH_EDIT, 380, FALSE); SetDlgItemInt(hwnd, IDC_MINIPLAYER_COMPACT_HEIGHT_EDIT, 90, FALSE); }
                 else if (sel == 3) { SetDlgItemInt(hwnd, IDC_MINIPLAYER_COMPACT_WIDTH_EDIT, 440, FALSE); SetDlgItemInt(hwnd, IDC_MINIPLAYER_COMPACT_HEIGHT_EDIT, 75, FALSE); }
+                s_ignore_edit_change = false;
                 p_this->on_changed();
             }
             break;
@@ -714,10 +769,12 @@ INT_PTR CALLBACK tray_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, LP
         case IDC_MINIPLAYER_EXPANDED_PRESET_COMBO:
             if (HIWORD(wp) == CBN_SELCHANGE) {
                 int sel = (int)SendMessage(GetDlgItem(hwnd, IDC_MINIPLAYER_EXPANDED_PRESET_COMBO), CB_GETCURSEL, 0, 0);
+                s_ignore_edit_change = true;
                 if (sel == 0) { SetDlgItemInt(hwnd, IDC_MINIPLAYER_EXPANDED_SIZE_EDIT, 250, FALSE); }
                 else if (sel == 1) { SetDlgItemInt(hwnd, IDC_MINIPLAYER_EXPANDED_SIZE_EDIT, 350, FALSE); }
                 else if (sel == 2) { SetDlgItemInt(hwnd, IDC_MINIPLAYER_EXPANDED_SIZE_EDIT, 450, FALSE); }
                 else if (sel == 3) { SetDlgItemInt(hwnd, IDC_MINIPLAYER_EXPANDED_SIZE_EDIT, 550, FALSE); }
+                s_ignore_edit_change = false;
                 p_this->on_changed();
             }
             break;
