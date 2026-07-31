@@ -1,6 +1,9 @@
 #pragma once
 
 #include "stdafx.h"
+#include <memory>
+
+class traycontrols_playlist_callback;
 
 // Control panel popup window class
 class control_panel {
@@ -23,6 +26,7 @@ public:
     
     // Settings change notification
     void on_settings_changed();
+    void update_playback_order_state();
     
     // Public accessors for tray manager
     bool is_undocked() const { return m_is_undocked; }
@@ -42,6 +46,7 @@ public:
     void slide_to_side();
     void slide_back_from_side();
     bool is_slid_to_side() const { return m_is_slid_to_side; }
+    HBITMAP get_cover_art_bitmap() const { return m_cover_art_bitmap_original ? m_cover_art_bitmap_original : m_cover_art_bitmap; }
     
 private:
     control_panel();
@@ -200,7 +205,6 @@ private:
     void draw_collapse_triangle(HDC hdc, int x, int y, int size, int opacity);
     void draw_shuffle_icon(HDC hdc, int x, int y, int size);
     void draw_repeat_icon(HDC hdc, int x, int y, int size);
-    void update_playback_order_state();
     void start_roll_animation(bool to_compact);
     void update_roll_animation();
     
@@ -257,6 +261,8 @@ private:
     void paint_control_panel(HDC hdc);
     void paint_artwork_expanded(HDC hdc, const RECT& rect);
     void paint_compact_mode(HDC hdc, const RECT& rect);
+    void paint_background_style(HDC hdc, const RECT& rect);
+    void draw_cover_art_styled(HDC hdc, HBITMAP hbmp, const RECT& rect, bool is_rounded);
     void draw_track_info(HDC hdc, const RECT& rect, int art_size = 80);
     void draw_time_info(HDC hdc, const RECT& rect);
     void draw_track_info_overlay(HDC hdc, int window_width, int window_height);
@@ -264,5 +270,6 @@ private:
     void draw_undocked_artwork_overlay(HDC hdc, int window_width, int window_height);
     void draw_compact_control_overlay(HDC hdc, int window_width, int window_height);
     
+    std::unique_ptr<traycontrols_playlist_callback> m_playlist_callback;
     static control_panel* s_instance;
 };
