@@ -35,6 +35,8 @@ static cfg_int cfg_miniplayer_expanded_size(GUID{0x123456D5, 0x9abc, 0xdef0, {0x
 static cfg_string cfg_line1_format(GUID{0x123456E0, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, "%title%");
 static cfg_string cfg_line2_format(GUID{0x123456E1, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, "%artist%");
 
+static bool s_ignore_edit_change = false;
+
 
 // Font configuration - store LOGFONT structure as binary data
 static cfg_struct_t<LOGFONT> cfg_artist_font(GUID{0x12345692, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, []() {
@@ -508,22 +510,15 @@ INT_PTR CALLBACK tray_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, LP
         // Initialize checkbox states
         CheckDlgButton(hwnd, IDC_ALWAYS_MINIMIZE_TO_TRAY, cfg_always_minimize_to_tray != 0 ? BST_CHECKED : BST_UNCHECKED);
         CheckDlgButton(hwnd, IDC_SHOW_POPUP_NOTIFICATION, cfg_show_popup_notification != 0 ? BST_CHECKED : BST_UNCHECKED);
-        CheckDlgButton(hwnd, IDC_DISABLE_MINIPLAYER, cfg_disable_miniplayer != 0 ? BST_CHECKED : BST_UNCHECKED);
-        CheckDlgButton(hwnd, IDC_DISABLE_SLIDE_TO_SIDE, cfg_disable_slide_to_side != 0 ? BST_CHECKED : BST_UNCHECKED);
-        CheckDlgButton(hwnd, IDC_ALWAYS_SLIDE_TO_SIDE, cfg_always_slide_to_side != 0 ? BST_CHECKED : BST_UNCHECKED);
-        CheckDlgButton(hwnd, IDC_USE_ROUNDED_CORNERS, cfg_use_rounded_corners != 0 ? BST_CHECKED : BST_UNCHECKED);
-        
-        // Initialize popup position combobox (6 positions: left and right sides)
-        HWND hCombo = GetDlgItem(hwnd, IDC_POPUP_POSITION_COMBO);
-        SendMessage(hCombo, CB_ADDSTRING, 0, (LPARAM)L"Top Left");
-        SendMessage(hCombo, CB_ADDSTRING, 0, (LPARAM)L"Middle Left");
-        SendMessage(hCombo, CB_ADDSTRING, 0, (LPARAM)L"Bottom Left");
-        SendMessage(hCombo, CB_ADDSTRING, 0, (LPARAM)L"Top Right");
-        SendMessage(hCombo, CB_ADDSTRING, 0, (LPARAM)L"Middle Right");
-        SendMessage(hCombo, CB_ADDSTRING, 0, (LPARAM)L"Bottom Right");
-        SendMessage(hCombo, CB_SETCURSEL, cfg_popup_position, 0);
 
-        // Initialize popup duration combobox (1-10 seconds)
+        // Initialize general tab comboboxes
+        HWND hPosCombo = GetDlgItem(hwnd, IDC_POPUP_POSITION_COMBO);
+        SendMessage(hPosCombo, CB_ADDSTRING, 0, (LPARAM)L"Top Left");
+        SendMessage(hPosCombo, CB_ADDSTRING, 0, (LPARAM)L"Top Right");
+        SendMessage(hPosCombo, CB_ADDSTRING, 0, (LPARAM)L"Bottom Left");
+        SendMessage(hPosCombo, CB_ADDSTRING, 0, (LPARAM)L"Bottom Right");
+        SendMessage(hPosCombo, CB_SETCURSEL, cfg_popup_position, 0);
+
         HWND hDurationCombo = GetDlgItem(hwnd, IDC_POPUP_DURATION_COMBO);
         SendMessage(hDurationCombo, CB_ADDSTRING, 0, (LPARAM)L"1 second");
         SendMessage(hDurationCombo, CB_ADDSTRING, 0, (LPARAM)L"2 seconds");
@@ -532,62 +527,62 @@ INT_PTR CALLBACK tray_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, LP
         SendMessage(hDurationCombo, CB_ADDSTRING, 0, (LPARAM)L"5 seconds");
         SendMessage(hDurationCombo, CB_ADDSTRING, 0, (LPARAM)L"7 seconds");
         SendMessage(hDurationCombo, CB_ADDSTRING, 0, (LPARAM)L"10 seconds");
-        // Convert stored milliseconds to combo index
-        int duration_index = 2; // Default to 3 seconds (index 2)
-        int stored_duration = cfg_popup_duration;
-        if (stored_duration <= 1000) duration_index = 0;
-        else if (stored_duration <= 2000) duration_index = 1;
-        else if (stored_duration <= 3000) duration_index = 2;
-        else if (stored_duration <= 4000) duration_index = 3;
-        else if (stored_duration <= 5000) duration_index = 4;
-        else if (stored_duration <= 7000) duration_index = 5;
-        else duration_index = 6;
+
+        int duration_index = 2; // Default 3s
+        if (cfg_popup_duration == 1000) duration_index = 0;
+        else if (cfg_popup_duration == 2000) duration_index = 1;
+        else if (cfg_popup_duration == 3000) duration_index = 2;
+        else if (cfg_popup_duration == 4000) duration_index = 3;
+        else if (cfg_popup_duration == 5000) duration_index = 4;
+        else if (cfg_popup_duration == 7000) duration_index = 5;
+        else if (cfg_popup_duration == 10000) duration_index = 6;
         SendMessage(hDurationCombo, CB_SETCURSEL, duration_index, 0);
 
-        // Initialize slide duration combobox
-        HWND hSlideDurationCombo = GetDlgItem(hwnd, IDC_SLIDE_DURATION_COMBO);
-        SendMessage(hSlideDurationCombo, CB_ADDSTRING, 0, (LPARAM)L"Very Fast (100ms)");
-        SendMessage(hSlideDurationCombo, CB_ADDSTRING, 0, (LPARAM)L"Fast (200ms)");
-        SendMessage(hSlideDurationCombo, CB_ADDSTRING, 0, (LPARAM)L"Normal (300ms)");
-        SendMessage(hSlideDurationCombo, CB_ADDSTRING, 0, (LPARAM)L"Slow (400ms)");
-        SendMessage(hSlideDurationCombo, CB_ADDSTRING, 0, (LPARAM)L"Very Slow (500ms)");
-        
-        // Convert stored slide duration to combo index
-        int slide_index = 1; // Default to 200ms (index 1)
-        int stored_slide_duration = cfg_slide_duration;
-        if (stored_slide_duration <= 100) slide_index = 0;
-        else if (stored_slide_duration <= 200) slide_index = 1;
-        else if (stored_slide_duration <= 300) slide_index = 2;
-        else if (stored_slide_duration <= 400) slide_index = 3;
-        else slide_index = 4;
-        SendMessage(hSlideDurationCombo, CB_SETCURSEL, slide_index, 0);
-        
-        // Initialize theme mode combobox
-        HWND hThemeModeCombo = GetDlgItem(hwnd, IDC_THEME_MODE_COMBO);
-        SendMessage(hThemeModeCombo, CB_ADDSTRING, 0, (LPARAM)L"Auto");
-        SendMessage(hThemeModeCombo, CB_ADDSTRING, 0, (LPARAM)L"Dark");
-        SendMessage(hThemeModeCombo, CB_ADDSTRING, 0, (LPARAM)L"Light");
-        SendMessage(hThemeModeCombo, CB_SETCURSEL, cfg_theme_mode, 0);
+        HWND hSlideCombo = GetDlgItem(hwnd, IDC_SLIDE_DURATION_COMBO);
+        SendMessage(hSlideCombo, CB_ADDSTRING, 0, (LPARAM)L"Instant (100 ms)");
+        SendMessage(hSlideCombo, CB_ADDSTRING, 0, (LPARAM)L"Fast (200 ms)");
+        SendMessage(hSlideCombo, CB_ADDSTRING, 0, (LPARAM)L"Normal (300 ms)");
+        SendMessage(hSlideCombo, CB_ADDSTRING, 0, (LPARAM)L"Smooth (400 ms)");
+        SendMessage(hSlideCombo, CB_ADDSTRING, 0, (LPARAM)L"Slow (500 ms)");
 
-        // Initialize Cover Artwork combobox
+        int slide_index = 1; // Default 200ms
+        if (cfg_slide_duration == 100) slide_index = 0;
+        else if (cfg_slide_duration == 200) slide_index = 1;
+        else if (cfg_slide_duration == 300) slide_index = 2;
+        else if (cfg_slide_duration == 400) slide_index = 3;
+        else if (cfg_slide_duration == 500) slide_index = 4;
+        SendMessage(hSlideCombo, CB_SETCURSEL, slide_index, 0);
+
+        // Initialize general checkboxes
+        CheckDlgButton(hwnd, IDC_ALWAYS_MINIMIZE_TO_TRAY, cfg_always_minimize_to_tray ? BST_CHECKED : BST_UNCHECKED);
+        CheckDlgButton(hwnd, IDC_SHOW_POPUP_NOTIFICATION, cfg_show_popup_notification ? BST_CHECKED : BST_UNCHECKED);
+        CheckDlgButton(hwnd, IDC_DISABLE_MINIPLAYER, cfg_disable_miniplayer ? BST_CHECKED : BST_UNCHECKED);
+        CheckDlgButton(hwnd, IDC_DISABLE_SLIDE_TO_SIDE, cfg_disable_slide_to_side ? BST_CHECKED : BST_UNCHECKED);
+        CheckDlgButton(hwnd, IDC_ALWAYS_SLIDE_TO_SIDE, cfg_always_slide_to_side ? BST_CHECKED : BST_UNCHECKED);
+        CheckDlgButton(hwnd, IDC_USE_ROUNDED_CORNERS, cfg_use_rounded_corners ? BST_CHECKED : BST_UNCHECKED);
+
+        // Initialize appearance tab comboboxes
+        HWND hThemeCombo = GetDlgItem(hwnd, IDC_THEME_MODE_COMBO);
+        SendMessage(hThemeCombo, CB_ADDSTRING, 0, (LPARAM)L"Auto");
+        SendMessage(hThemeCombo, CB_ADDSTRING, 0, (LPARAM)L"Dark");
+        SendMessage(hThemeCombo, CB_ADDSTRING, 0, (LPARAM)L"Light");
+        SendMessage(hThemeCombo, CB_SETCURSEL, cfg_theme_mode, 0);
+
         HWND hCoverArtCombo = GetDlgItem(hwnd, IDC_COVER_ARTWORK_COMBO);
         SendMessage(hCoverArtCombo, CB_ADDSTRING, 0, (LPARAM)L"Yes");
         SendMessage(hCoverArtCombo, CB_ADDSTRING, 0, (LPARAM)L"No");
-        SendMessage(hCoverArtCombo, CB_SETCURSEL, cfg_show_cover_art != 0 ? 0 : 1, 0);
+        SendMessage(hCoverArtCombo, CB_SETCURSEL, (cfg_show_cover_art != 0) ? 0 : 1, 0);
 
-        // Initialize Cover Margin combobox
         HWND hCoverMarginCombo = GetDlgItem(hwnd, IDC_COVER_MARGIN_COMBO);
         SendMessage(hCoverMarginCombo, CB_ADDSTRING, 0, (LPARAM)L"Yes");
         SendMessage(hCoverMarginCombo, CB_ADDSTRING, 0, (LPARAM)L"No");
-        SendMessage(hCoverMarginCombo, CB_SETCURSEL, cfg_cover_margin != 0 ? 0 : 1, 0);
+        SendMessage(hCoverMarginCombo, CB_SETCURSEL, (cfg_cover_margin != 0) ? 0 : 1, 0);
 
-        // Initialize Cover Style combobox
         HWND hCoverStyleCombo = GetDlgItem(hwnd, IDC_COVER_STYLE_COMBO);
         SendMessage(hCoverStyleCombo, CB_ADDSTRING, 0, (LPARAM)L"Square");
         SendMessage(hCoverStyleCombo, CB_ADDSTRING, 0, (LPARAM)L"Rounded");
         SendMessage(hCoverStyleCombo, CB_SETCURSEL, cfg_cover_style, 0);
 
-        // Initialize Background Style combobox
         HWND hBgStyleCombo = GetDlgItem(hwnd, IDC_BACKGROUND_STYLE_COMBO);
         SendMessage(hBgStyleCombo, CB_ADDSTRING, 0, (LPARAM)L"Solid");
         SendMessage(hBgStyleCombo, CB_ADDSTRING, 0, (LPARAM)L"Artwork Colors");
@@ -597,6 +592,8 @@ INT_PTR CALLBACK tray_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, LP
         // Initialize display format edit fields
         uSetDlgItemText(hwnd, IDC_LINE1_FORMAT_EDIT, cfg_line1_format);
         uSetDlgItemText(hwnd, IDC_LINE2_FORMAT_EDIT, cfg_line2_format);
+
+        s_ignore_edit_change = true;
 
         // Initialize MiniPlayer Undocked size combobox and edit fields
         HWND hUndockedPresetCombo = GetDlgItem(hwnd, IDC_MINIPLAYER_UNDOCKED_PRESET_COMBO);
@@ -651,6 +648,8 @@ INT_PTR CALLBACK tray_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, LP
         SendMessage(hExpandedPresetCombo, CB_SETCURSEL, e_preset, 0);
         SetDlgItemInt(hwnd, IDC_MINIPLAYER_EXPANDED_SIZE_EDIT, e_s, FALSE);
 
+        s_ignore_edit_change = false;
+
         // Initialize font displays
         p_this->update_font_displays();
         
@@ -663,8 +662,6 @@ INT_PTR CALLBACK tray_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, LP
     }
     
     if (p_this == nullptr) return FALSE;
-    
-    static bool s_ignore_edit_change = false;
     
     switch (msg) {
     case WM_COMMAND:
@@ -1069,6 +1066,7 @@ void tray_preferences::reset_settings() {
         uSetDlgItemText(m_hwnd, IDC_LINE2_FORMAT_EDIT, "%artist%");
 
         // Reset MiniPlayer mode size controls
+        s_ignore_edit_change = true;
         SendMessage(GetDlgItem(m_hwnd, IDC_MINIPLAYER_UNDOCKED_PRESET_COMBO), CB_SETCURSEL, 0, 0); // Normal
         SetDlgItemInt(m_hwnd, IDC_MINIPLAYER_UNDOCKED_WIDTH_EDIT, 400, FALSE);
         SetDlgItemInt(m_hwnd, IDC_MINIPLAYER_UNDOCKED_HEIGHT_EDIT, 120, FALSE);
@@ -1079,6 +1077,7 @@ void tray_preferences::reset_settings() {
 
         SendMessage(GetDlgItem(m_hwnd, IDC_MINIPLAYER_EXPANDED_PRESET_COMBO), CB_SETCURSEL, 1, 0); // Normal
         SetDlgItemInt(m_hwnd, IDC_MINIPLAYER_EXPANDED_SIZE_EDIT, 350, FALSE);
+        s_ignore_edit_change = false;
 
         // Notify components of settings change
         tray_manager::get_instance().on_settings_changed();
