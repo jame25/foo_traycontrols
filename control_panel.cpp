@@ -2368,31 +2368,49 @@ void control_panel::handle_button_click(int button_id) {
             
         case BTN_SHUFFLE:
             {
-                // Toggle shuffle mode using playlist_manager
+                // Toggle shuffle mode using playlist_manager (specifically targets Shuffle (tracks))
                 try {
                     auto playlist_api = playlist_manager::get();
                     t_size current_order = playlist_api->playback_order_get_active();
                     t_size order_count = playlist_api->playback_order_get_count();
                     
-                    // Find shuffle orders (usually named "Shuffle" or contain "shuffle")
-                    bool found_shuffle = false;
                     t_size shuffle_index = 0;
-                    t_size default_index = 0; // Usually "Default" or first
-                    
+                    t_size default_index = 0;
+                    bool found_shuffle = false;
+
+                    // First pass: look specifically for "Shuffle (tracks)" or "Shuffle"
                     for (t_size i = 0; i < order_count; i++) {
                         const char* name = playlist_api->playback_order_get_name(i);
-                        if (strstr(name, "Shuffle") || strstr(name, "shuffle") || strstr(name, "Random")) {
+                        if (strcmp(name, "Default") == 0) {
+                            default_index = i;
+                        }
+                        if (strcmp(name, "Shuffle (tracks)") == 0 || strcmp(name, "Shuffle") == 0) {
                             shuffle_index = i;
                             found_shuffle = true;
                             break;
                         }
-                        if (strcmp(name, "Default") == 0 || i == 0) {
-                            default_index = i;
+                    }
+
+                    // Fallback pass: look for any name starting with or containing "Shuffle"
+                    if (!found_shuffle) {
+                        for (t_size i = 0; i < order_count; i++) {
+                            const char* name = playlist_api->playback_order_get_name(i);
+                            if (strstr(name, "Shuffle") || strstr(name, "shuffle")) {
+                                shuffle_index = i;
+                                found_shuffle = true;
+                                break;
+                            }
                         }
+                    }
+
+                    // Standard foobar2000 fallback: index 4 is Shuffle (tracks)
+                    if (!found_shuffle && order_count > 4) {
+                        shuffle_index = 4;
+                        found_shuffle = true;
                     }
                     
                     if (found_shuffle) {
-                        // Toggle between shuffle and default
+                        // Toggle between shuffle (tracks) and default
                         if (current_order == shuffle_index) {
                             playlist_api->playback_order_set_active(default_index);
                             m_shuffle_active = false;
@@ -3161,16 +3179,28 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                 int button_y = window_height - 30;
                 
                 // Spacing depends on mode (must match paint logic)
-                // Undocked: 40, Docked: 60
                 int button_spacing = (panel->m_is_undocked) ? 40 : 60;
                 
                 // Mirror paint logic: center in area right of artwork
-                // Use same dynamic art_size calculation as paint function
-                int art_size = (80 < (window_width - 30) ? 80 : (window_width - 30));
-                art_size = (art_size < (window_height - 30) ? art_size : (window_height - 30));
-                int button_area_left = 15 + art_size + 10;
+                bool show_art = get_show_cover_art();
+                bool has_margin = get_cover_margin();
+                int art_size = 0;
+                if (show_art) {
+                    if (has_margin) {
+                        art_size = (80 < (window_width - 30) ? 80 : (window_width - 30));
+                        art_size = (art_size < (window_height - 30) ? art_size : (window_height - 30));
+                    } else {
+                        art_size = window_height;
+                    }
+                }
+                int button_area_left = show_art ? (has_margin ? (15 + art_size + 10) : (art_size + 10)) : 10;
                 int button_area_width = window_width - button_area_left - 10;
                 int center_x = button_area_left + button_area_width / 2;
+                
+                if (panel->m_is_undocked && window_width < 360) {
+                    button_spacing = (button_area_width * 16) / 100;
+                    if (button_spacing < 26) button_spacing = 26;
+                }
                 
                 // Check if click is in button row (±20px around button_y for 40px tall area)
                 if (pt.y >= button_y - 20 && pt.y <= button_y + 20) {
@@ -3211,24 +3241,26 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                     return 0;
                 }
                 else {
-                    // Check if click is in album art area
-                    int art_size, art_x, art_y;
+                    // Check if click is in album art area or information area (when cover art is disabled)
+                    int art_x = 15;
+                    int art_y = 15;
                     if (panel->m_is_compact_mode) {
-                        // Compact mode artwork positioning
                         int margin = 5;
                         art_size = window_height - (2 * margin);
                         art_x = margin;
                         art_y = margin;
-                    } else {
-                        // Normal undocked mode artwork positioning
-                        art_size = (80 < (window_width - 30) ? 80 : (window_width - 30));
-                        art_size = (art_size < (window_height - 30) ? art_size : (window_height - 30));
-                        art_x = 15;
-                        art_y = 15;
                     }
                     
-                    if (pt.x >= art_x && pt.x < art_x + art_size && pt.y >= art_y && pt.y < art_y + art_size) {
-                        // Click on album art
+                    bool click_on_art_or_info = false;
+                    if (show_art) {
+                        click_on_art_or_info = (pt.x >= art_x && pt.x < art_x + art_size && pt.y >= art_y && pt.y < art_y + art_size);
+                    } else if (panel->m_is_undocked && !panel->m_is_compact_mode) {
+                        // When cover artwork is disabled, clicking the information area (above button row) triggers Expanded Artwork mode
+                        click_on_art_or_info = (pt.y < button_y - 20 && pt.x < window_width - 40);
+                    }
+                    
+                    if (click_on_art_or_info) {
+                        // Click on album art or info area
                         if (panel && panel->m_visible && !panel->m_animating) {
                             if (!panel->m_is_undocked) {
                                 // If docked, slide the panel away
@@ -3348,7 +3380,8 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                     int art_x = margin;
                     int art_y = margin;
                     
-                    bool over_artwork = (pt.x >= art_x && pt.x <= art_x + art_size && 
+                    bool show_art = get_show_cover_art();
+                    bool over_artwork = show_art && (pt.x >= art_x && pt.x <= art_x + art_size && 
                                        pt.y >= art_y && pt.y <= art_y + art_size);
                     
                     if (over_artwork) {
@@ -3403,8 +3436,9 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                     art_size = (art_size < (window_height - 30) ? art_size : (window_height - 30));
                     int art_x = 15;
                     int art_y = 15;
+                    bool show_art = get_show_cover_art();
                     
-                    if (pt.x >= art_x && pt.x <= art_x + art_size && 
+                    if (show_art && pt.x >= art_x && pt.x <= art_x + art_size && 
                         pt.y >= art_y && pt.y <= art_y + art_size) {
                         // Mouse is over artwork - show overlay immediately
                         if (!panel->m_undocked_overlay_visible) {
@@ -3483,10 +3517,18 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                     int button_spacing = 60;
 
                     // Mirror paint logic: center in area right of artwork
-                    // Use dynamic art_size calculation
-                    int art_size = (80 < (window_width - 30) ? 80 : (window_width - 30));
-                    art_size = (art_size < (window_height - 30) ? art_size : (window_height - 30));
-                    int button_area_left = 15 + art_size + 10;
+                    bool show_art = get_show_cover_art();
+                    bool has_margin = get_cover_margin();
+                    int art_size = 0;
+                    if (show_art) {
+                        if (has_margin) {
+                            art_size = (80 < (window_width - 30) ? 80 : (window_width - 30));
+                            art_size = (art_size < (window_height - 30) ? art_size : (window_height - 30));
+                        } else {
+                            art_size = window_height;
+                        }
+                    }
+                    int button_area_left = show_art ? (has_margin ? (15 + art_size + 10) : (art_size + 10)) : 10;
                     int button_area_width = window_width - button_area_left - 10;
                     int center_x = button_area_left + button_area_width / 2;
                     
@@ -3566,14 +3608,27 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                      int window_height = client_rect.bottom - client_rect.top;
                      
                      int button_y = window_height - 30;
-                     // Match paint function: button_spacing = 40 for undocked mode
                      int button_spacing = 40;
-                     // Calculate art_size and center_x the same way as paint function
-                     int art_size = (80 < (window_width - 30) ? 80 : (window_width - 30));
-                     art_size = (art_size < (window_height - 30) ? art_size : (window_height - 30));
-                     int button_area_left = 15 + art_size + 10;
+                     
+                     bool show_art = get_show_cover_art();
+                     bool has_margin = get_cover_margin();
+                     int art_size = 0;
+                     if (show_art) {
+                         if (has_margin) {
+                             art_size = (80 < (window_width - 30) ? 80 : (window_width - 30));
+                             art_size = (art_size < (window_height - 30) ? art_size : (window_height - 30));
+                         } else {
+                             art_size = window_height;
+                         }
+                     }
+                     int button_area_left = show_art ? (has_margin ? (15 + art_size + 10) : (art_size + 10)) : 10;
                      int button_area_width = window_width - button_area_left - 10;
                      int center_x = button_area_left + button_area_width / 2;
+                     
+                     if (window_width < 360) {
+                         button_spacing = (button_area_width * 16) / 100;
+                         if (button_spacing < 26) button_spacing = 26;
+                     }
                      
                      int click_radius = 15;
                      int play_click_radius = 20;
@@ -3821,15 +3876,27 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                     
                     
                     int button_y = window_height - 30;
-                    // Match paint function: button_spacing = 40 for undocked mode
                     int button_spacing = 40;
-                    // Calculate art_size the same way as paint function
-                    int art_size = (80 < (window_width - 30) ? 80 : (window_width - 30));
-                    art_size = (art_size < (window_height - 30) ? art_size : (window_height - 30));
-                    // Calculate center_x the same way as paint function
-                    int button_area_left = 15 + art_size + 10; // x after artwork area
+                    
+                    bool show_art = get_show_cover_art();
+                    bool has_margin = get_cover_margin();
+                    int art_size = 0;
+                    if (show_art) {
+                        if (has_margin) {
+                            art_size = (80 < (window_width - 30) ? 80 : (window_width - 30));
+                            art_size = (art_size < (window_height - 30) ? art_size : (window_height - 30));
+                        } else {
+                            art_size = window_height;
+                        }
+                    }
+                    int button_area_left = show_art ? (has_margin ? (15 + art_size + 10) : (art_size + 10)) : 10;
                     int button_area_width = window_width - button_area_left - 10;
                     int center_x = button_area_left + button_area_width / 2;
+                    
+                    if (window_width < 360) {
+                        button_spacing = (button_area_width * 16) / 100;
+                        if (button_spacing < 26) button_spacing = 26;
+                    }
                     
                     // Check if click is in button areas - don't allow dragging here
                     // Use ±20px to match click detection in WM_LBUTTONDOWN
@@ -3847,9 +3914,12 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                         }
                     }
                     
-                    // Check if click is in artwork area - don't allow dragging here
-                    if (pt.x >= 15 && pt.x < 15 + art_size && pt.y >= 15 && pt.y < 15 + art_size) {
+                    // Check if click is in artwork area (or information area when cover art is disabled)
+                    if (show_art && pt.x >= 15 && pt.x < 15 + art_size && pt.y >= 15 && pt.y < 15 + art_size) {
                         return HTCLIENT; // Normal click behavior for artwork
+                    }
+                    if (!show_art && pt.y < button_y - 20) {
+                        return HTCLIENT; // Click on info area triggers Expanded Artwork mode
                     }
 
                     // Check if click is on close button in upper-right corner (25x25px target area)
@@ -3874,7 +3944,7 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                     
                     // Only return resize handle for left edge if not in button or artwork areas
                     bool in_button_area = (pt.y >= button_y - 10 && pt.y <= button_y + 10);
-                    bool in_artwork_area = (pt.x >= 15 && pt.x < 15 + art_size && pt.y >= 15 && pt.y < 15 + art_size);
+                    bool in_artwork_area = show_art && (pt.x >= 15 && pt.x < 15 + art_size && pt.y >= 15 && pt.y < 15 + art_size);
                     
                     if (!in_button_area && !in_artwork_area) {
                         if (at_left) return HTLEFT;
@@ -3898,12 +3968,20 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                     int window_width = client_rect.right - client_rect.left;
                     int window_height = client_rect.bottom - client_rect.top;
                     int button_y = window_height - 30;
-                    // Docked mode uses button_spacing = 60
                     int button_spacing = 60;
-                    // Calculate art_size and center_x the same way as paint function
-                    int art_size = (80 < (window_width - 30) ? 80 : (window_width - 30));
-                    art_size = (art_size < (window_height - 30) ? art_size : (window_height - 30));
-                    int button_area_left = 15 + art_size + 10;
+                    
+                    bool show_art = get_show_cover_art();
+                    bool has_margin = get_cover_margin();
+                    int art_size = 0;
+                    if (show_art) {
+                        if (has_margin) {
+                            art_size = (80 < (window_width - 30) ? 80 : (window_width - 30));
+                            art_size = (art_size < (window_height - 30) ? art_size : (window_height - 30));
+                        } else {
+                            art_size = window_height;
+                        }
+                    }
+                    int button_area_left = show_art ? (has_margin ? (15 + art_size + 10) : (art_size + 10)) : 10;
                     int button_area_width = window_width - button_area_left - 10;
                     int center_x = button_area_left + button_area_width / 2;
                     
@@ -3920,7 +3998,7 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                     }
                     
                     // Check if click is in artwork area - don't allow dragging here
-                    if (pt.x >= 15 && pt.x < 15 + art_size && pt.y >= 15 && pt.y < 15 + art_size) {
+                    if (show_art && pt.x >= 15 && pt.x < 15 + art_size && pt.y >= 15 && pt.y < 15 + art_size) {
                         return HTCLIENT; // Normal click behavior for artwork
                     }
                     
@@ -4461,28 +4539,69 @@ void control_panel::draw_cover_art_styled(HDC hdc, HBITMAP hbmp, const RECT& rec
     if (w <= 0 || h <= 0) return;
 
     if (is_rounded) {
-        int corner_r = (w < h ? w : h) / 8;
-        if (corner_r < 4) corner_r = 4;
-        HRGN rgn = CreateRoundRectRgn(rect.left, rect.top, rect.right + 1, rect.bottom + 1, corner_r * 2, corner_r * 2);
-        SelectClipRgn(hdc, rgn);
+        float radius = (w < h ? (float)w : (float)h) * 0.10f;
+        if (radius < 4.0f) radius = 4.0f;
+        if (radius > 12.0f) radius = 12.0f;
+        float d = radius * 2.0f;
 
-        if (hbmp) {
-            HDC cover_dc = CreateCompatibleDC(hdc);
-            HBITMAP old_bm = (HBITMAP)SelectObject(cover_dc, hbmp);
-            BITMAP bmp_info;
-            GetObject(hbmp, sizeof(BITMAP), &bmp_info);
-            SetStretchBltMode(hdc, HALFTONE);
-            StretchBlt(hdc, rect.left, rect.top, w, h, cover_dc, 0, 0, bmp_info.bmWidth, bmp_info.bmHeight, SRCCOPY);
-            SelectObject(cover_dc, old_bm);
-            DeleteDC(cover_dc);
-        } else {
-            HBRUSH cover_brush = CreateSolidBrush(m_placeholder_color);
-            FillRect(hdc, &rect, cover_brush);
-            DeleteObject(cover_brush);
+        // Draw artwork into an off-screen GDI+ bitmap for smooth anti-aliased corner rendering
+        Gdiplus::Bitmap offscreen(w, h, PixelFormat32bppPARGB);
+        {
+            Gdiplus::Graphics og(&offscreen);
+            og.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+            og.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHighQuality);
+
+            if (hbmp) {
+                Gdiplus::Bitmap srcBitmap(hbmp, nullptr);
+                int srcW = srcBitmap.GetWidth();
+                int srcH = srcBitmap.GetHeight();
+                if (srcW > 0 && srcH > 0) {
+                    float srcAspect = (float)srcW / (float)srcH;
+                    float dstAspect = (float)w / (float)h;
+                    int cropX = 0, cropY = 0, cropW = srcW, cropH = srcH;
+                    if (srcAspect > dstAspect) {
+                        cropH = srcH;
+                        cropW = (int)(srcH * dstAspect);
+                        cropX = (srcW - cropW) / 2;
+                    } else {
+                        cropW = srcW;
+                        cropH = (int)(srcW / dstAspect);
+                        cropY = (srcH - cropH) / 2;
+                    }
+                    Gdiplus::Rect destRect(0, 0, w, h);
+                    og.DrawImage(&srcBitmap, destRect, cropX, cropY, cropW, cropH, Gdiplus::UnitPixel);
+                } else {
+                    Gdiplus::SolidBrush brush(Gdiplus::Color(255, GetRValue(m_placeholder_color), GetGValue(m_placeholder_color), GetBValue(m_placeholder_color)));
+                    og.FillRectangle(&brush, 0, 0, w, h);
+                }
+            } else {
+                Gdiplus::SolidBrush brush(Gdiplus::Color(255, GetRValue(m_placeholder_color), GetGValue(m_placeholder_color), GetBValue(m_placeholder_color)));
+                og.FillRectangle(&brush, 0, 0, w, h);
+            }
         }
 
-        SelectClipRgn(hdc, nullptr);
-        DeleteObject(rgn);
+        // Build rounded-rect path in destination coordinates
+        float x = (float)rect.left;
+        float y = (float)rect.top;
+        float fw = (float)w;
+        float fh = (float)h;
+
+        Gdiplus::GraphicsPath roundedPath;
+        roundedPath.AddArc(x, y, d, d, 180, 90);
+        roundedPath.AddArc(x + fw - d, y, d, d, 270, 90);
+        roundedPath.AddArc(x + fw - d, y + fh - d, d, d, 0, 90);
+        roundedPath.AddArc(x, y + fh - d, d, d, 90, 90);
+        roundedPath.CloseFigure();
+
+        // TextureBrush + FillPath with AntiAlias produces silky-smooth rounded corners
+        Gdiplus::Graphics g(hdc);
+        Gdiplus::TextureBrush texBrush(&offscreen, Gdiplus::WrapModeClamp);
+        texBrush.TranslateTransform((float)rect.left, (float)rect.top);
+
+        Gdiplus::SmoothingMode prevSmoothing = g.GetSmoothingMode();
+        g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+        g.FillPath(&texBrush, &roundedPath);
+        g.SetSmoothingMode(prevSmoothing);
     } else {
         if (hbmp) {
             HDC cover_dc = CreateCompatibleDC(hdc);
