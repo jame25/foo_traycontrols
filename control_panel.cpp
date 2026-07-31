@@ -139,11 +139,24 @@ control_panel& control_panel::get_instance() {
     return *s_instance;
 }
 
+class traycontrols_playlist_callback : public playlist_callback_impl_base {
+public:
+    traycontrols_playlist_callback()
+        : playlist_callback_impl_base(playlist_callback::flag_on_playback_order_changed) {}
+
+    void on_playback_order_changed(t_size) override {
+        control_panel::get_instance().update_playback_order_state();
+    }
+};
+
 void control_panel::initialize() {
     if (m_initialized) return;
     
     create_control_window();
     load_fonts();
+    try {
+        m_playlist_callback = std::make_unique<traycontrols_playlist_callback>();
+    } catch (...) {}
     m_initialized = true;
 }
 
@@ -152,6 +165,8 @@ void control_panel::cleanup() {
         hide_control_panel_immediate(); // Use immediate hide during cleanup
     }
     
+    m_playlist_callback.reset();
+
     // Kill update timers
     if (m_control_window) {
         KillTimer(m_control_window, UPDATE_TIMER_ID);
@@ -2001,18 +2016,24 @@ bool control_panel::detect_foobar_dark_mode() {
 }
 
 void control_panel::update_theme_colors() {
-    int theme_mode = get_theme_mode();
-    
-    // Determine if we should use dark mode
-    if (theme_mode == 0) {
-        // Auto mode - detect from foobar2000
-        m_is_dark_mode = detect_foobar_dark_mode();
-    } else if (theme_mode == 1) {
-        // Force dark mode
+    int bg_style = get_background_style(); // 0 = Solid, 1 = Artwork Colors, 2 = Blurred Artwork
+    if (bg_style != 0) {
+        // Light mode has no effect for Artwork Colors or Blurred Artwork
         m_is_dark_mode = true;
     } else {
-        // Force light mode
-        m_is_dark_mode = false;
+        int theme_mode = get_theme_mode();
+        
+        // Determine if we should use dark mode
+        if (theme_mode == 0) {
+            // Auto mode - detect from foobar2000
+            m_is_dark_mode = detect_foobar_dark_mode();
+        } else if (theme_mode == 1) {
+            // Force dark mode
+            m_is_dark_mode = true;
+        } else {
+            // Force light mode
+            m_is_dark_mode = false;
+        }
     }
     
     // Set colors based on dark/light mode
@@ -2471,6 +2492,10 @@ void control_panel::update_playback_order_state() {
         m_shuffle_active = false;
         m_repeat_mode = 0;
     }
+
+    if (m_control_window && IsWindow(m_control_window)) {
+        InvalidateRect(m_control_window, nullptr, FALSE);
+    }
 }
 
 void control_panel::handle_timer() {
@@ -2832,6 +2857,10 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                 EndPaint(hwnd, &ps);
                 return 0;
             }
+
+        case WM_ERASEBKGND:
+            // Prevent GDI background erase flickering - double-buffered WM_PAINT handles background
+            return 1;
             
         case WM_LBUTTONDOWN:
             // Handle compact mode click
@@ -2842,19 +2871,19 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                 int window_width = client_rect.right - client_rect.left;
                 int window_height = client_rect.bottom - client_rect.top;
                 
-                // Check for Upper-Right Close button click FIRST
-                if (pt.x >= window_width - 40 && pt.y <= 40) {
+                // Check for Upper-Right Close button click FIRST (25x25px target area around top-right Close icon)
+                if (pt.x >= window_width - 25 && pt.y <= 25) {
                     panel->close_panel_and_focus_foobar();
                     return 0;
                 }
 
-                // Slide-to-side: Check for click on right edge below Close button (last 40px, y > 40)
+                // Slide-to-side: Check for click on right edge below Close button (last 40px, y > 25)
                 const int SLIDE_CLICK_ZONE = 40;
                 if (panel->m_is_slid_to_side) {
                     // If slid, any click brings it back
                     panel->slide_back_from_side();
                     return 0;
-                } else if (pt.x >= window_width - SLIDE_CLICK_ZONE && pt.y > 40) {
+                } else if (pt.x >= window_width - SLIDE_CLICK_ZONE && pt.y > 25) {
                     // Right edge clicked (below close button) - slide to side
                     panel->slide_to_side();
                     return 0;
@@ -2904,13 +2933,16 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                 // Check if click is on compact control overlay buttons
                 if (panel->m_compact_controls_visible) {
                     // Calculate button positions (same as in draw_compact_control_overlay)
-                    int text_left = margin + art_size + margin;
-                    int text_right = window_width - margin;
-                    int text_area_width = text_right - text_left;
+                    bool show_art = get_show_cover_art();
+                    bool has_margin = get_cover_margin();
+                    int art_size_calc = show_art ? (has_margin ? (window_height - 2 * margin) : window_height) : 0;
 
-                    int text_top = 0;
-                    int text_bottom = window_height;
-                    int text_area_height = text_bottom - text_top;
+                    int text_left = 0;
+                    if (show_art && art_size_calc > 0) {
+                        text_left = has_margin ? (margin + art_size_calc + margin) : art_size_calc;
+                    }
+                    int text_right = window_width;
+                    int text_area_width = text_right - text_left;
 
                     int button_size = 24; 
                     int play_button_size = 36;
@@ -2918,8 +2950,10 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                     
                     int total_buttons_width = (4 * button_size) + play_button_size + (4 * button_spacing);
                     
-                    // Must match the drawing offset (-15) for proper click detection
-                    int buttons_start_x = text_left + (text_area_width - total_buttons_width) / 2 - 15;
+                    int buttons_start_x = text_left + (text_area_width - total_buttons_width) / 2;
+                    if (show_art) {
+                        buttons_start_x -= 15;
+                    }
                     
                     // Button Y center line - must match drawing calculation using overlay_bottom
                     int progress_bar_height = 5;
@@ -2981,14 +3015,14 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                 int window_width = client_rect.right - client_rect.left;
                 int window_height = client_rect.bottom - client_rect.top;
 
-                // Check for close button click in upper-right corner
-                if (pt.x >= window_width - 40 && pt.y <= 40) {
+                // Check for close button click in upper-right corner (25x25px target area)
+                if (pt.x >= window_width - 25 && pt.y <= 25) {
                     panel->close_panel_and_focus_foobar();
                     return 0;
                 }
 
-                // Check for collapse triangle click in bottom-right corner
-                if (pt.x >= window_width - 40 && pt.y >= window_height - 40) {
+                // Check for collapse triangle click in bottom-right corner (25x25px target area)
+                if (pt.x >= window_width - 25 && pt.y >= window_height - 25) {
                     panel->toggle_compact_mode();
                     return 0;
                 }
@@ -2998,7 +3032,7 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                 if (panel->m_is_slid_to_side) {
                     panel->slide_back_from_side();
                     return 0;
-                } else if (pt.x >= window_width - SLIDE_CLICK_ZONE && pt.y > 40 && pt.y < window_height - 40) {
+                } else if (pt.x >= window_width - SLIDE_CLICK_ZONE && pt.y > 25 && pt.y < window_height - 25) {
                     panel->slide_to_side();
                     return 0;
                 }
@@ -3020,14 +3054,14 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                     int window_width = client_rect.right - client_rect.left;
                     int window_height = client_rect.bottom - client_rect.top;
 
-                    // Check for CLOSE button in upper-right corner
-                    if (panel->m_overlay_visible && pt.x >= window_width - 40 && pt.y <= 40) {
+                    // Check for CLOSE button in upper-right corner (25x25px target area)
+                    if (panel->m_overlay_visible && pt.x >= window_width - 25 && pt.y <= 25) {
                         panel->close_panel_and_focus_foobar();
                         return 0;
                     }
 
-                    // Check for COLLAPSE triangle in bottom-right corner
-                    if (panel->m_overlay_visible && pt.x >= window_width - 40 && pt.y >= window_height - 40) {
+                    // Check for COLLAPSE triangle in bottom-right corner (25x25px target area)
+                    if (panel->m_overlay_visible && pt.x >= window_width - 25 && pt.y >= window_height - 25) {
                         panel->m_is_artwork_expanded = false;
                         SetWindowPos(hwnd, NULL, 0, 0, panel->m_saved_undocked_width, panel->m_saved_undocked_height, SWP_NOMOVE | SWP_NOZORDER);
                         InvalidateRect(hwnd, NULL, TRUE);
@@ -3042,7 +3076,7 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                         return 0;
                     } else if (pt.x >= window_width - SLIDE_CLICK_ZONE - resize_border && 
                                pt.x < window_width - resize_border &&
-                               pt.y > 40 && pt.y < window_height - overlay_height) {
+                               pt.y > 25 && pt.y < window_height - overlay_height) {
                         panel->slide_to_side();
                         return 0;
                     }
@@ -3112,14 +3146,14 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                 int window_width = client_rect.right - client_rect.left;
                 int window_height = client_rect.bottom - client_rect.top;
 
-                // Check for CLOSE button in upper-right corner
-                if (pt.x >= window_width - 40 && pt.y <= 40) {
+                // Check for CLOSE button in upper-right corner (25x25px target area)
+                if (pt.x >= window_width - 25 && pt.y <= 25) {
                     panel->close_panel_and_focus_foobar();
                     return 0;
                 }
 
-                // Check for COLLAPSE triangle in bottom-right corner
-                if (pt.x >= window_width - 40 && pt.y >= window_height - 40) {
+                // Check for COLLAPSE triangle in bottom-right corner (25x25px target area)
+                if (pt.x >= window_width - 25 && pt.y >= window_height - 25) {
                     panel->toggle_compact_mode();
                     return 0;
                 }
@@ -3736,14 +3770,14 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                     // Return resize handles for left edge only - right edge is for slide-to-side
                     if (at_left) return HTLEFT;
                     
-                    // Check for Close button in upper-right corner FIRST
-                    if (pt.x >= window_width - 40 && pt.y <= 40) {
+                    // Check for Close button in upper-right corner FIRST (25x25px target area)
+                    if (pt.x >= window_width - 25 && pt.y <= 25) {
                         return HTCLIENT; // Allow WM_LBUTTONDOWN for close button
                     }
 
-                    // Slide-to-side: Allow clicks on right edge below Close button for slide feature (y > 40)
+                    // Slide-to-side: Allow clicks on right edge below Close button for slide feature (y > 25)
                     const int SLIDE_CLICK_ZONE = 40;
-                    if (pt.x >= window_width - SLIDE_CLICK_ZONE && pt.y > 40) {
+                    if (pt.x >= window_width - SLIDE_CLICK_ZONE && pt.y > 25) {
                         return HTCLIENT; // Allow WM_LBUTTONDOWN for slide-to-side
                     }
                     
@@ -3818,19 +3852,19 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                         return HTCLIENT; // Normal click behavior for artwork
                     }
 
-                    // Check if click is on close button in upper-right corner
-                    if (pt.x >= window_width - 40 && pt.y <= 40) {
+                    // Check if click is on close button in upper-right corner (25x25px target area)
+                    if (pt.x >= window_width - 25 && pt.y <= 25) {
                         return HTCLIENT; // Allow click handling for close button
                     }
 
-                    // Check if click is on collapse triangle in bottom-right corner
-                    if (pt.x >= window_width - 40 && pt.y >= window_height - 40) {
+                    // Check if click is on collapse triangle in bottom-right corner (25x25px target area)
+                    if (pt.x >= window_width - 25 && pt.y >= window_height - 25) {
                         return HTCLIENT; // Allow click handling for collapse triangle
                     }
 
                     // Slide-to-side: Allow clicks on right edge for slide feature (between top and bottom corner zones)
                     const int SLIDE_CLICK_ZONE = 40;
-                    if (pt.x >= window_width - SLIDE_CLICK_ZONE && pt.y > 40 && pt.y < window_height - 40) {
+                    if (pt.x >= window_width - SLIDE_CLICK_ZONE && pt.y > 25 && pt.y < window_height - 25) {
                         return HTCLIENT; // Allow WM_LBUTTONDOWN for slide-to-side
                     }
 
@@ -4189,8 +4223,286 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
 }
 
 
-void control_panel::paint_control_panel(HDC hdc) {
+static std::unique_ptr<Gdiplus::Bitmap> create_gdiplus_bitmap_from_hbitmap(HDC hdc, HBITMAP hbmp) {
+    if (!hbmp || !hdc) return nullptr;
+
+    BITMAP bmp;
+    if (!GetObject(hbmp, sizeof(bmp), &bmp) || bmp.bmWidth <= 0 || bmp.bmHeight <= 0) return nullptr;
+
+    std::unique_ptr<Gdiplus::Bitmap> gdi_bmp(Gdiplus::Bitmap::FromHBITMAP(hbmp, nullptr));
+    if (gdi_bmp && gdi_bmp->GetLastStatus() == Gdiplus::Ok) {
+        return gdi_bmp;
+    }
+
+    // Fallback: Copy via GDI BitBlt
+    std::unique_ptr<Gdiplus::Bitmap> copy_bmp(new Gdiplus::Bitmap(bmp.bmWidth, bmp.bmHeight, PixelFormat32bppARGB));
+    Gdiplus::Graphics g(copy_bmp.get());
+    HDC g_dc = g.GetHDC();
+    if (g_dc) {
+        HDC mem_dc = CreateCompatibleDC(hdc);
+        HBITMAP old_bm = (HBITMAP)SelectObject(mem_dc, hbmp);
+        BitBlt(g_dc, 0, 0, bmp.bmWidth, bmp.bmHeight, mem_dc, 0, 0, SRCCOPY);
+        SelectObject(mem_dc, old_bm);
+        DeleteDC(mem_dc);
+        g.ReleaseHDC(g_dc);
+    }
+    return copy_bmp;
+}
+
+void control_panel::paint_background_style(HDC hdc, const RECT& rect) {
     if (!hdc) return;
+    int bg_style = get_background_style(); // 0 = Solid, 1 = Artwork Colors, 2 = Blurred Artwork
+    HBITMAP art_bm = m_cover_art_bitmap_original ? m_cover_art_bitmap_original : m_cover_art_bitmap;
+
+    if (bg_style == 1 && art_bm) {
+        int w = rect.right - rect.left;
+        int h = rect.bottom - rect.top;
+        if (w > 0 && h > 0) {
+            BITMAP bmp;
+            if (GetObject(art_bm, sizeof(bmp), &bmp) && bmp.bmWidth > 0 && bmp.bmHeight > 0) {
+                HDC mem_dc = CreateCompatibleDC(hdc);
+                HBITMAP old_bm = (HBITMAP)SelectObject(mem_dc, art_bm);
+
+                long total_r = 0, total_g = 0, total_b = 0;
+                int pixel_count = 0;
+                const int grid_size = 8;
+
+                for (int y = 0; y < grid_size; y++) {
+                    int sample_y = (bmp.bmHeight * (y + 1)) / (grid_size + 1);
+                    for (int x = 0; x < grid_size; x++) {
+                        int sample_x = (bmp.bmWidth * (x + 1)) / (grid_size + 1);
+                        COLORREF c = GetPixel(mem_dc, sample_x, sample_y);
+                        if (c != CLR_INVALID) {
+                            total_r += GetRValue(c);
+                            total_g += GetGValue(c);
+                            total_b += GetBValue(c);
+                            pixel_count++;
+                        }
+                    }
+                }
+
+                SelectObject(mem_dc, old_bm);
+                DeleteDC(mem_dc);
+
+                if (pixel_count > 0) {
+                    int avg_r = total_r / pixel_count;
+                    int avg_g = total_g / pixel_count;
+                    int avg_b = total_b / pixel_count;
+
+                    Gdiplus::Color primary(255, avg_r, avg_g, avg_b);
+                    Gdiplus::Color secondary(255, avg_r * 65 / 100, avg_g * 65 / 100, avg_b * 65 / 100);
+
+                    Gdiplus::Graphics g(hdc);
+                    Gdiplus::Rect g_rect(rect.left, rect.top, w, h);
+                    Gdiplus::LinearGradientBrush brush(
+                        Gdiplus::Point(rect.left, rect.top),
+                        Gdiplus::Point(rect.left + w, rect.top),
+                        secondary,
+                        primary
+                    );
+                    g.FillRectangle(&brush, g_rect);
+
+                    BYTE overlay_alpha = m_is_dark_mode ? 70 : 30;
+                    Gdiplus::SolidBrush overlay(Gdiplus::Color(overlay_alpha, 0, 0, 0));
+                    g.FillRectangle(&overlay, g_rect);
+                    return;
+                }
+            }
+        }
+    } else if (bg_style == 2 && art_bm) {
+        int target_width = rect.right - rect.left;
+        int target_height = rect.bottom - rect.top;
+        if (target_width > 0 && target_height > 0) {
+            std::unique_ptr<Gdiplus::Bitmap> src_bitmap = create_gdiplus_bitmap_from_hbitmap(hdc, art_bm);
+            if (src_bitmap && src_bitmap->GetLastStatus() == Gdiplus::Ok) {
+                const int blur_size = 64;
+                Gdiplus::Bitmap scaled(blur_size, blur_size, PixelFormat32bppARGB);
+                {
+                    Gdiplus::Graphics gfx(&scaled);
+                    gfx.SetInterpolationMode(Gdiplus::InterpolationModeBilinear);
+                    gfx.DrawImage(src_bitmap.get(), 0, 0, blur_size, blur_size);
+                }
+
+                Gdiplus::Rect lockRect(0, 0, blur_size, blur_size);
+                Gdiplus::BitmapData scaledData;
+                if (scaled.LockBits(&lockRect, Gdiplus::ImageLockModeRead, PixelFormat32bppARGB, &scaledData) == Gdiplus::Ok) {
+                    std::vector<BYTE> tempBuffer(blur_size * blur_size * 4);
+                    std::vector<BYTE> blurBuffer(blur_size * blur_size * 4);
+
+                    BYTE* srcPixels = static_cast<BYTE*>(scaledData.Scan0);
+                    int srcStride = scaledData.Stride;
+                    const int radius = 4;
+
+                    // Pass 1: Horizontal blur
+                    for (int y = 0; y < blur_size; y++) {
+                        for (int x = 0; x < blur_size; x++) {
+                            int total_r = 0, total_g = 0, total_b = 0, total_a = 0;
+                            int count = 0;
+                            for (int dx = -radius; dx <= radius; dx++) {
+                                int sx = x + dx;
+                                if (sx >= 0 && sx < blur_size) {
+                                    BYTE* pixel = srcPixels + y * srcStride + sx * 4;
+                                    total_b += pixel[0];
+                                    total_g += pixel[1];
+                                    total_r += pixel[2];
+                                    total_a += pixel[3];
+                                    count++;
+                                }
+                            }
+                            int dstIdx = (y * blur_size + x) * 4;
+                            tempBuffer[dstIdx + 0] = static_cast<BYTE>(total_b / count);
+                            tempBuffer[dstIdx + 1] = static_cast<BYTE>(total_g / count);
+                            tempBuffer[dstIdx + 2] = static_cast<BYTE>(total_r / count);
+                            tempBuffer[dstIdx + 3] = static_cast<BYTE>(total_a / count);
+                        }
+                    }
+
+                    scaled.UnlockBits(&scaledData);
+
+                    // Pass 2: Vertical blur
+                    for (int y = 0; y < blur_size; y++) {
+                        for (int x = 0; x < blur_size; x++) {
+                            int total_r = 0, total_g = 0, total_b = 0, total_a = 0;
+                            int count = 0;
+                            for (int dy = -radius; dy <= radius; dy++) {
+                                int sy = y + dy;
+                                if (sy >= 0 && sy < blur_size) {
+                                    int srcIdx = (sy * blur_size + x) * 4;
+                                    total_b += tempBuffer[srcIdx + 0];
+                                    total_g += tempBuffer[srcIdx + 1];
+                                    total_r += tempBuffer[srcIdx + 2];
+                                    total_a += tempBuffer[srcIdx + 3];
+                                    count++;
+                                }
+                            }
+                            int dstIdx = (y * blur_size + x) * 4;
+                            blurBuffer[dstIdx + 0] = static_cast<BYTE>(total_b / count);
+                            blurBuffer[dstIdx + 1] = static_cast<BYTE>(total_g / count);
+                            blurBuffer[dstIdx + 2] = static_cast<BYTE>(total_r / count);
+                            blurBuffer[dstIdx + 3] = static_cast<BYTE>(total_a / count);
+                        }
+                    }
+
+                    Gdiplus::Bitmap blurred_artwork(target_width, target_height, PixelFormat32bppARGB);
+                    Gdiplus::Rect outRect(0, 0, target_width, target_height);
+                    Gdiplus::BitmapData outData;
+                    if (blurred_artwork.LockBits(&outRect, Gdiplus::ImageLockModeWrite, PixelFormat32bppARGB, &outData) == Gdiplus::Ok) {
+                        BYTE* outPixels = static_cast<BYTE*>(outData.Scan0);
+                        int outStride = outData.Stride;
+
+                        float targetAspect = static_cast<float>(target_width) / static_cast<float>(target_height);
+                        float srcX = 0, srcY = 0, srcW = static_cast<float>(blur_size), srcH = static_cast<float>(blur_size);
+
+                        if (targetAspect > 1.0f) {
+                            srcH = blur_size / targetAspect;
+                            srcY = (blur_size - srcH) / 2.0f;
+                        } else {
+                            srcW = blur_size * targetAspect;
+                            srcX = (blur_size - srcW) / 2.0f;
+                        }
+
+                        for (int y = 0; y < target_height; y++) {
+                            BYTE* outRow = outPixels + y * outStride;
+                            float sy_base = srcY + (y / static_cast<float>(target_height)) * srcH;
+
+                            for (int x = 0; x < target_width; x++) {
+                                float sx = srcX + (x / static_cast<float>(target_width)) * srcW;
+                                float sy = sy_base;
+
+                                int x0 = static_cast<int>(sx);
+                                int y0 = static_cast<int>(sy);
+                                int x1 = (std::min)(x0 + 1, blur_size - 1);
+                                int y1 = (std::min)(y0 + 1, blur_size - 1);
+                                x0 = (std::max)(0, (std::min)(x0, blur_size - 1));
+                                y0 = (std::max)(0, (std::min)(y0, blur_size - 1));
+
+                                float fx = sx - static_cast<int>(sx);
+                                float fy = sy - static_cast<int>(sy);
+                                float fx_inv = 1.0f - fx;
+                                float fy_inv = 1.0f - fy;
+
+                                int idx00 = (y0 * blur_size + x0) * 4;
+                                int idx10 = (y0 * blur_size + x1) * 4;
+                                int idx01 = (y1 * blur_size + x0) * 4;
+                                int idx11 = (y1 * blur_size + x1) * 4;
+
+                                for (int c = 0; c < 4; c++) {
+                                    float top_ch = blurBuffer[idx00 + c] * fx_inv + blurBuffer[idx10 + c] * fx;
+                                    float bottom_ch = blurBuffer[idx01 + c] * fx_inv + blurBuffer[idx11 + c] * fx;
+                                    outRow[x * 4 + c] = static_cast<BYTE>(top_ch * fy_inv + bottom_ch * fy);
+                                }
+                            }
+                        }
+
+                        blurred_artwork.UnlockBits(&outData);
+
+                        Gdiplus::Graphics g(hdc);
+                        g.DrawImage(&blurred_artwork, rect.left, rect.top, target_width, target_height);
+
+                        BYTE overlay_alpha = m_is_dark_mode ? 120 : 160;
+                        Gdiplus::Color overlayColor(overlay_alpha, 0, 0, 0);
+                        Gdiplus::SolidBrush overlayBrush(overlayColor);
+                        g.FillRectangle(&overlayBrush, rect.left, rect.top, target_width, target_height);
+                        return;
+                    }
+                }
+            }
+        }
+    }
+
+    HBRUSH bg_brush = CreateSolidBrush(m_bg_color);
+    FillRect(hdc, &rect, bg_brush);
+    DeleteObject(bg_brush);
+}
+
+void control_panel::draw_cover_art_styled(HDC hdc, HBITMAP hbmp, const RECT& rect, bool is_rounded) {
+    int w = rect.right - rect.left;
+    int h = rect.bottom - rect.top;
+    if (w <= 0 || h <= 0) return;
+
+    if (is_rounded) {
+        int corner_r = (w < h ? w : h) / 8;
+        if (corner_r < 4) corner_r = 4;
+        HRGN rgn = CreateRoundRectRgn(rect.left, rect.top, rect.right + 1, rect.bottom + 1, corner_r * 2, corner_r * 2);
+        SelectClipRgn(hdc, rgn);
+
+        if (hbmp) {
+            HDC cover_dc = CreateCompatibleDC(hdc);
+            HBITMAP old_bm = (HBITMAP)SelectObject(cover_dc, hbmp);
+            BITMAP bmp_info;
+            GetObject(hbmp, sizeof(BITMAP), &bmp_info);
+            SetStretchBltMode(hdc, HALFTONE);
+            StretchBlt(hdc, rect.left, rect.top, w, h, cover_dc, 0, 0, bmp_info.bmWidth, bmp_info.bmHeight, SRCCOPY);
+            SelectObject(cover_dc, old_bm);
+            DeleteDC(cover_dc);
+        } else {
+            HBRUSH cover_brush = CreateSolidBrush(m_placeholder_color);
+            FillRect(hdc, &rect, cover_brush);
+            DeleteObject(cover_brush);
+        }
+
+        SelectClipRgn(hdc, nullptr);
+        DeleteObject(rgn);
+    } else {
+        if (hbmp) {
+            HDC cover_dc = CreateCompatibleDC(hdc);
+            HBITMAP old_bm = (HBITMAP)SelectObject(cover_dc, hbmp);
+            BITMAP bmp_info;
+            GetObject(hbmp, sizeof(BITMAP), &bmp_info);
+            SetStretchBltMode(hdc, HALFTONE);
+            StretchBlt(hdc, rect.left, rect.top, w, h, cover_dc, 0, 0, bmp_info.bmWidth, bmp_info.bmHeight, SRCCOPY);
+            SelectObject(cover_dc, old_bm);
+            DeleteDC(cover_dc);
+        } else {
+            HBRUSH cover_brush = CreateSolidBrush(m_placeholder_color);
+            FillRect(hdc, &rect, cover_brush);
+            DeleteObject(cover_brush);
+        }
+    }
+}
+
+void control_panel::paint_control_panel(HDC hdc) {
+    if (!hdc || !m_control_window) return;
     
     RECT client_rect;
     GetClientRect(m_control_window, &client_rect);
@@ -4207,101 +4519,52 @@ void control_panel::paint_control_panel(HDC hdc) {
         return;
     }
     
-    // Fill background (no border)
-    HBRUSH bg_brush = CreateSolidBrush(m_bg_color);
-    FillRect(hdc, &client_rect, bg_brush);
-    DeleteObject(bg_brush);
+    // Fill background using configured background style
+    paint_background_style(hdc, client_rect);
     
-    // Calculate album art area (left side) - adapt to window size
     int window_width = client_rect.right - client_rect.left;
     int window_height = client_rect.bottom - client_rect.top;
-    int art_size = (80 < (window_width - 30) ? 80 : (window_width - 30));
-    art_size = (art_size < (window_height - 30) ? art_size : (window_height - 30)); // Adaptive size with minimums
-    RECT cover_rect = {15, 15, 15 + art_size, 15 + art_size};
-    if (m_cover_art_bitmap) {
-        // Draw actual cover art
-        HDC cover_dc = CreateCompatibleDC(hdc);
-        HBITMAP old_bitmap = (HBITMAP)SelectObject(cover_dc, m_cover_art_bitmap);
-
-        // Get actual bitmap dimensions (bridge artwork may differ from 80x80 thumbnail)
-        BITMAP bmp_info;
-        GetObject(m_cover_art_bitmap, sizeof(BITMAP), &bmp_info);
-
-        // Draw the cover art bitmap scaled to fit the adaptive cover area
-        SetStretchBltMode(hdc, HALFTONE);
-        StretchBlt(hdc, cover_rect.left, cover_rect.top, art_size, art_size,
-                   cover_dc, 0, 0, bmp_info.bmWidth, bmp_info.bmHeight, SRCCOPY);
-
-        SelectObject(cover_dc, old_bitmap);
-        DeleteDC(cover_dc);
-    } else {
-        // Draw placeholder
-        HBRUSH cover_brush = CreateSolidBrush(m_placeholder_color);
-        FillRect(hdc, &cover_rect, cover_brush);
-        DeleteObject(cover_brush);
-        
-        // Check if current track is a stream and show radio icon
-        try {
-            auto playback = playback_control::get();
-            metadb_handle_ptr track;
-            
-            if (playback->get_now_playing(track) && track.is_valid()) {
-                pfc::string8 path = track->get_path();
-                bool is_stream = strstr(path.get_ptr(), "://") != nullptr;
-                
-                if (is_stream) {
-                    // Load and draw radio icon for internet streams
-                    // Try LoadImage first for better flexibility with icon sizes
-                    HICON radio_icon = (HICON)LoadImage(g_hIns, MAKEINTRESOURCE(IDI_RADIO_ICON), IMAGE_ICON, art_size/2, art_size/2, LR_DEFAULTCOLOR);
-                    
-                    // If LoadImage fails, try LoadIcon as fallback
-                    if (!radio_icon) {
-                        radio_icon = LoadIcon(g_hIns, MAKEINTRESOURCE(IDI_RADIO_ICON));
-                    }
-                    
-                    if (radio_icon) {
-                        // Center the icon in the cover rect
-                        int icon_size = art_size / 2; // Half the artwork size
-                        int icon_x = cover_rect.left + (art_size - icon_size) / 2;
-                        int icon_y = cover_rect.top + (art_size - icon_size) / 2;
-                        
-                        DrawIconEx(hdc, icon_x, icon_y, radio_icon, icon_size, icon_size, 0, nullptr, DI_NORMAL);
-                        DestroyIcon(radio_icon); // Clean up the icon handle
-                    } else {
-                        // Fallback to text if icon can't be loaded
-                        SetTextColor(hdc, m_text_dim_color);
-                        SetBkMode(hdc, TRANSPARENT);
-                        int font_size = art_size / 3; // Scale font with artwork size
-                        HFONT symbol_font = CreateFont(font_size, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-                                                       DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                                                       DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI Symbol");
-                        HFONT old_symbol_font = (HFONT)SelectObject(hdc, symbol_font);
-                        
-                        DrawText(hdc, L"📻", -1, &cover_rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-                        
-                        SelectObject(hdc, old_symbol_font);
-                        DeleteObject(symbol_font);
-                    }
-                } else {
-                    // Draw musical note symbol for local files
-                    SetTextColor(hdc, m_text_dim_color);
-                    SetBkMode(hdc, TRANSPARENT);
-                    int font_size = art_size / 3; // Scale font with artwork size
-                    HFONT symbol_font = CreateFont(font_size, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-                                                   DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                                                   DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI Symbol");
-                    HFONT old_symbol_font = (HFONT)SelectObject(hdc, symbol_font);
-                    
-                    DrawText(hdc, L"♪", -1, &cover_rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-                    
-                    SelectObject(hdc, old_symbol_font);
-                    DeleteObject(symbol_font);
-                }
-            }
-        } catch (...) {
-            // Ignore errors - placeholder will remain plain gray
+    
+    bool show_art = get_show_cover_art();
+    int art_size = 0;
+    
+    if (show_art) {
+        bool has_margin = get_cover_margin();
+        RECT cover_rect;
+        if (has_margin) {
+            art_size = (80 < (window_width - 30) ? 80 : (window_width - 30));
+            art_size = (art_size < (window_height - 30) ? art_size : (window_height - 30));
+            cover_rect = {15, 15, 15 + art_size, 15 + art_size};
+        } else {
+            art_size = window_height;
+            cover_rect = {0, 0, art_size, art_size};
         }
         
+        bool is_rounded = (get_cover_style() == 1);
+        draw_cover_art_styled(hdc, m_cover_art_bitmap, cover_rect, is_rounded);
+        
+        if (!m_cover_art_bitmap) {
+            // Check if stream/radio icon placeholder needed
+            try {
+                auto playback = playback_control::get();
+                metadb_handle_ptr track;
+                if (playback->get_now_playing(track) && track.is_valid()) {
+                    pfc::string8 path = track->get_path();
+                    bool is_stream = strstr(path.get_ptr(), "://") != nullptr;
+                    if (is_stream) {
+                        HICON radio_icon = (HICON)LoadImage(g_hIns, MAKEINTRESOURCE(IDI_RADIO_ICON), IMAGE_ICON, art_size/2, art_size/2, LR_DEFAULTCOLOR);
+                        if (!radio_icon) radio_icon = LoadIcon(g_hIns, MAKEINTRESOURCE(IDI_RADIO_ICON));
+                        if (radio_icon) {
+                            int icon_size = art_size / 2;
+                            int icon_x = cover_rect.left + (art_size - icon_size) / 2;
+                            int icon_y = cover_rect.top + (art_size - icon_size) / 2;
+                            DrawIconEx(hdc, icon_x, icon_y, radio_icon, icon_size, icon_size, 0, nullptr, DI_NORMAL);
+                            DestroyIcon(radio_icon);
+                        }
+                    }
+                }
+            } catch (...) {}
+        }
     }
     
     // Draw track info (pass art_size for adaptive layout)
@@ -4630,115 +4893,45 @@ void control_panel::draw_track_info(HDC hdc, const RECT& client_rect, int art_si
 void control_panel::paint_compact_mode(HDC hdc, const RECT& rect) {
     if (!hdc) return;
     
-    // Fill background with dark color
-    HBRUSH bg_brush = CreateSolidBrush(m_bg_color);
-    FillRect(hdc, &rect, bg_brush);
-    DeleteObject(bg_brush);
+    // Fill background using configured background style
+    paint_background_style(hdc, rect);
     
     int window_width = rect.right - rect.left;
     int window_height = rect.bottom - rect.top;
     
-    // Draw compact layout: [Artwork] [Song Title] [Artist] [Toggle Button]
     int margin = 5;
-    int art_size = window_height - (2 * margin); // Use almost full height for artwork
+    bool show_art = get_show_cover_art();
+    bool has_margin = get_cover_margin();
+    int art_size = 0;
     
-    // Draw artwork
-    RECT art_rect = {margin, margin, margin + art_size, margin + art_size};
-    
-    if (m_cover_art_bitmap) {
-        HDC mem_dc = CreateCompatibleDC(hdc);
-        HBITMAP old_bitmap = (HBITMAP)SelectObject(mem_dc, m_cover_art_bitmap);
-        
-        // Get bitmap dimensions
-        BITMAP bmp_info;
-        GetObject(m_cover_art_bitmap, sizeof(BITMAP), &bmp_info);
-        
-        // Draw artwork with proper scaling
-        SetStretchBltMode(hdc, HALFTONE);
-        StretchBlt(hdc, art_rect.left, art_rect.top, 
-                   art_rect.right - art_rect.left, art_rect.bottom - art_rect.top,
-                   mem_dc, 0, 0, bmp_info.bmWidth, bmp_info.bmHeight, SRCCOPY);
-        
-        SelectObject(mem_dc, old_bitmap);
-        DeleteDC(mem_dc);
-    } else {
-        // Draw placeholder
-        HBRUSH cover_brush = CreateSolidBrush(m_placeholder_color);
-        FillRect(hdc, &art_rect, cover_brush);
-        DeleteObject(cover_brush);
-        
-        // Check if current track is a stream and show radio icon
-        try {
-            auto playback = playback_control::get();
-            metadb_handle_ptr track;
-            
-            if (playback->get_now_playing(track) && track.is_valid()) {
-                pfc::string8 path = track->get_path();
-                bool is_stream = strstr(path.get_ptr(), "://") != nullptr;
-                
-                if (is_stream) {
-                    // Load and draw radio icon for internet streams
-                    HICON radio_icon = (HICON)LoadImage(g_hIns, MAKEINTRESOURCE(IDI_RADIO_ICON), IMAGE_ICON, art_size/2, art_size/2, LR_DEFAULTCOLOR);
-                    
-                    if (!radio_icon) {
-                        radio_icon = LoadIcon(g_hIns, MAKEINTRESOURCE(IDI_RADIO_ICON));
-                    }
-                    
-                    if (radio_icon) {
-                        int icon_size = art_size / 2;
-                        int icon_x = art_rect.left + (art_size - icon_size) / 2;
-                        int icon_y = art_rect.top + (art_size - icon_size) / 2;
-                        
-                        DrawIconEx(hdc, icon_x, icon_y, radio_icon, icon_size, icon_size, 0, nullptr, DI_NORMAL);
-                        DestroyIcon(radio_icon);
-                    } else {
-                        // Fallback to text if icon can't be loaded
-                        SetTextColor(hdc, m_text_dim_color);
-                        SetBkMode(hdc, TRANSPARENT);
-                        int font_size = art_size / 3;
-                        HFONT symbol_font = CreateFont(font_size, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-                                                       DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                                                       DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI Symbol");
-                        HFONT old_symbol_font = (HFONT)SelectObject(hdc, symbol_font);
-                        
-                        DrawText(hdc, L"📻", -1, &art_rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-                        
-                        SelectObject(hdc, old_symbol_font);
-                        DeleteObject(symbol_font);
-                    }
-                } else {
-                    // Draw musical note symbol for local files
-                    SetTextColor(hdc, m_text_dim_color);
-                    SetBkMode(hdc, TRANSPARENT);
-                    int font_size = art_size / 3;
-                    HFONT symbol_font = CreateFont(font_size, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-                                                   DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                                                   DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI Symbol");
-                    HFONT old_symbol_font = (HFONT)SelectObject(hdc, symbol_font);
-                    
-                    DrawText(hdc, L"♪", -1, &art_rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-                    
-                    SelectObject(hdc, old_symbol_font);
-                    DeleteObject(symbol_font);
-                }
-            }
-        } catch (...) {
-            // Ignore errors - placeholder will remain plain gray
+    if (show_art) {
+        RECT art_rect;
+        if (has_margin) {
+            art_size = window_height - (2 * margin);
+            art_rect = {margin, margin, margin + art_size, margin + art_size};
+        } else {
+            art_size = window_height;
+            art_rect = {0, 0, art_size, art_size};
         }
-    }
-    
-    // Draw artwork hover arrows if hovering over artwork (same as undocked mode)
-    if (m_undocked_overlay_visible) {
-        draw_undocked_artwork_overlay(hdc, window_width, window_height);
+
+        bool is_rounded = (get_cover_style() == 1);
+        draw_cover_art_styled(hdc, m_cover_art_bitmap, art_rect, is_rounded);
+        
+        if (m_undocked_overlay_visible) {
+            draw_undocked_artwork_overlay(hdc, window_width, window_height);
+        }
     }
     
     // Set text properties
     SetTextColor(hdc, m_text_color);
     SetBkMode(hdc, TRANSPARENT);
     
-    // Calculate text area (shifted right slightly per user request)
-    int text_left = margin + art_size + margin + 10;
-    int text_right = window_width - margin; // No dots, use full width
+    // Calculate text area based on cover artwork and margin settings
+    int text_left = margin + 5;
+    if (show_art && art_size > 0) {
+        text_left = has_margin ? (margin + art_size + margin + 10) : (art_size + 10);
+    }
+    int text_right = window_width - margin;
     
     // Draw song title (use configured track font, fallback to default if not set)
     HFONT title_font = m_track_font;
@@ -4751,11 +4944,6 @@ void control_panel::paint_compact_mode(HDC hdc, const RECT& rect) {
     }
     HFONT old_font = (HFONT)SelectObject(hdc, title_font);
     
-    RECT title_rect = {text_left, margin - (int)(window_height * 0.10), text_right, window_height / 2 + margin - (int)(window_height * 0.10)};
-    pfc::stringcvt::string_wide_from_utf8 wide_title(m_current_title.c_str());
-    DrawText(hdc, wide_title.get_ptr(), -1, &title_rect, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-    
-    // Draw artist name (use configured artist font, fallback to default if not set)
     HFONT artist_font = m_artist_font;
     bool need_delete_artist = false;
     if (!artist_font) {
@@ -4764,12 +4952,20 @@ void control_panel::paint_compact_mode(HDC hdc, const RECT& rect) {
                                    DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Microsoft YaHei");
         need_delete_artist = true;
     }
-    SelectObject(hdc, artist_font);
-    
-    RECT artist_rect = {text_left, window_height / 2 + margin - (int)(window_height * 0.15), text_right, window_height - margin - (int)(window_height * 0.15)};
-    pfc::stringcvt::string_wide_from_utf8 wide_artist(m_current_artist.c_str());
-    SetTextColor(hdc, m_text_dim_color); // Slightly dimmer for artist
-    DrawText(hdc, wide_artist.get_ptr(), -1, &artist_rect, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+
+    // Draw track title and artist text only when control overlay is not active
+    if (!m_compact_controls_visible) {
+        RECT title_rect = {text_left, margin - (int)(window_height * 0.10), text_right, window_height / 2 + margin - (int)(window_height * 0.10)};
+        pfc::stringcvt::string_wide_from_utf8 wide_title(m_current_title.c_str());
+        DrawText(hdc, wide_title.get_ptr(), -1, &title_rect, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+        
+        SelectObject(hdc, artist_font);
+        
+        RECT artist_rect = {text_left, window_height / 2 + margin - (int)(window_height * 0.15), text_right, window_height - margin - (int)(window_height * 0.15)};
+        pfc::stringcvt::string_wide_from_utf8 wide_artist(m_current_artist.c_str());
+        SetTextColor(hdc, m_text_dim_color); // Slightly dimmer for artist
+        DrawText(hdc, wide_artist.get_ptr(), -1, &artist_rect, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+    }
     
     
     // Draw progress bar at bottom - moved up by 10%
@@ -5096,66 +5292,48 @@ void control_panel::draw_compact_control_overlay(HDC hdc, int window_width, int 
         return;
     }
 
-    // Calculate text area where controls will be drawn (same as text layout in paint_compact_mode)
     int margin = 5;
-    int art_size = window_height - (2 * margin);
-    int text_left = margin + art_size + margin;
-    int text_right = window_width - margin;
+    bool show_art = get_show_cover_art();
+    bool has_margin = get_cover_margin();
+    int art_size = show_art ? (has_margin ? (window_height - 2 * margin) : window_height) : 0;
+
+    int text_left = 0;
+    if (show_art && art_size > 0) {
+        text_left = has_margin ? (margin + art_size + margin) : art_size;
+    }
+    int text_right = window_width;
     int text_area_width = text_right - text_left;
 
-    // Use a simplified text area for the overlay
-    int text_top = 0;
-    int text_bottom = window_height;
-    int text_area_height = text_bottom - text_top;
     int overlay_bottom = window_height - 18; // Leave minimal space for progress bar and time
 
-    // Create control button layout in the text area (5 buttons: shuffle, prev, play, next, repeat)
-    // Create control button layout in the text area (5 buttons: shuffle, prev, play, next, repeat)
-    int button_size = 24; // Standard size matching other modes
-    int play_button_size = 36; // Larger play button (a bit smaller than full overlay to fit text area)
+    int button_size = 24; 
+    int play_button_size = 36;
+    int button_spacing = 10;
     
-    // Adjust spacing to account for larger center button
-    int button_spacing = 10; 
-    
-    // Width calculation: 
-    // Shuffle(24) + space(10) + Prev(24) + space(10) + Play(36) + space(10) + Next(24) + space(10) + Repeat(24)
     int total_buttons_width = (4 * button_size) + play_button_size + (4 * button_spacing);
 
-    // Center the buttons horizontally in the text area (shifted left slightly per user request)
-    int buttons_start_x = text_left + (text_area_width - total_buttons_width) / 2 - 15;
+    // Center the buttons horizontally in the text/overlay area
+    int buttons_start_x = text_left + (text_area_width - total_buttons_width) / 2;
+    if (show_art) {
+        buttons_start_x -= 15;
+    }
 
-    // Position buttons slightly below center
-    // Ideally center vertically based on the largest button (Play)
-    int button_y = margin + (window_height - 2 * margin - play_button_size) / 2 + 5; 
-    // So button_y should be the vertical center line.
-    
-    // Correct vertical centering: center within the overlay area (0 to overlay_bottom)
-    // Add small offset (+5) to lower buttons slightly for better visual balance
     int center_y_line = (overlay_bottom / 2) + 5;
 
-    // Calculate button CENTER positions
-    // Start x is the left edge of the group.
-    
-    // Shuffle center: starts at buttons_start_x + size/2
     int shuffle_x = buttons_start_x + button_size / 2;
-    
-    // Prev center: shuffle_end + space + size/2 = shuffle_center + size/2 + space + size/2
     int prev_x = shuffle_x + button_size/2 + button_spacing + button_size/2;
-    
-    // Play center: prev_center + size/2 + space + play_size/2
     int play_x = prev_x + button_size/2 + button_spacing + play_button_size/2;
-    
-    // Next center: play_center + play_size/2 + space + size/2
     int next_x = play_x + play_button_size/2 + button_spacing + button_size/2;
-    
-    // Repeat center: next_center + size/2 + space + size/2
     int repeat_x = next_x + button_size/2 + button_spacing + button_size/2;
 
-    // Create background overlay to completely hide the text (don't cover progress bar)
-    RECT overlay_rect = {text_left, 0, text_right, overlay_bottom};
-    HBRUSH overlay_brush = CreateSolidBrush(m_bg_color); // Use theme-aware background color
-    FillRect(hdc, &overlay_rect, overlay_brush);
-    DeleteObject(overlay_brush);
+    // Create background overlay (Solid mode paints solid background, Artwork Colors and Blurred Artwork are transparent)
+    int bg_style = get_background_style();
+    if (bg_style == 0) {
+        RECT overlay_rect = {show_art ? text_left : 0, 0, window_width, overlay_bottom};
+        HBRUSH overlay_brush = CreateSolidBrush(m_bg_color);
+        FillRect(hdc, &overlay_rect, overlay_brush);
+        DeleteObject(overlay_brush);
+    }
 
     // Draw control buttons
     // Shuffle button
