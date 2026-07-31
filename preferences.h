@@ -14,6 +14,10 @@ int get_slide_duration(); // Returns slide duration in milliseconds
 bool get_use_rounded_corners(); // Windows 11 style rounded corners
 bool get_always_slide_to_side(); // Always slide instead of close
 int get_theme_mode(); // 0=Auto, 1=Force Dark, 2=Force Light
+bool get_show_cover_art(); // true=Yes, false=No
+bool get_cover_margin(); // true=Yes, false=No
+int get_cover_style(); // 0=Square, 1=Rounded
+int get_background_style(); // 0=Solid, 1=Artwork Colors, 2=Blurred Artwork
 
 // MiniPlayer mode size functions
 int get_miniplayer_undocked_width();
@@ -72,7 +76,7 @@ private:
     preferences_page_callback::ptr m_callback;
     bool m_has_changes;
     fb2k::CCoreDarkModeHooks m_darkMode;
-    int m_current_tab; // 0 = General, 1 = MiniPlayer, 2 = Fonts
+    int m_current_tab; // 0 = General, 1 = Appearance, 2 = MiniPlayer, 3 = Fonts
     
 public:
     tray_preferences(preferences_page_callback::ptr callback);
