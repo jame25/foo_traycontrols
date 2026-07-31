@@ -2,6 +2,7 @@
 #include "popup_window.h"
 #include "preferences.h"
 #include "artwork_bridge.h"
+#include "control_panel.h"
 #include <dwmapi.h>
 #pragma comment(lib, "dwmapi.lib")
 
@@ -157,6 +158,84 @@ void popup_window::show_track_info(metadb_handle_ptr p_track) {
         if (m_popup_window) {
             SetTimer(m_popup_window, ARTWORK_WAIT_TIMER_ID, ARTWORK_WAIT_INTERVAL, nullptr);
         }
+    }
+}
+
+static HBITMAP copy_hbitmap_surface(HBITMAP src_bmp) {
+    if (!src_bmp) return nullptr;
+    BITMAP bmp;
+    if (!GetObject(src_bmp, sizeof(bmp), &bmp) || bmp.bmWidth <= 0 || bmp.bmHeight <= 0) return nullptr;
+
+    HDC screen_dc = GetDC(nullptr);
+    HDC src_dc = CreateCompatibleDC(screen_dc);
+    HDC dst_dc = CreateCompatibleDC(screen_dc);
+    HBITMAP dst_bmp = CreateCompatibleBitmap(screen_dc, bmp.bmWidth, bmp.bmHeight);
+
+    HBITMAP old_src = (HBITMAP)SelectObject(src_dc, src_bmp);
+    HBITMAP old_dst = (HBITMAP)SelectObject(dst_dc, dst_bmp);
+
+    BitBlt(dst_dc, 0, 0, bmp.bmWidth, bmp.bmHeight, src_dc, 0, 0, SRCCOPY);
+
+    SelectObject(src_dc, old_src);
+    SelectObject(dst_dc, old_dst);
+    DeleteDC(src_dc);
+    DeleteDC(dst_dc);
+    ReleaseDC(nullptr, screen_dc);
+
+    return dst_bmp;
+}
+
+void popup_window::show_preview() {
+    if (!m_initialized) {
+        initialize();
+    }
+    if (!m_popup_window) {
+        create_popup_window();
+    }
+    if (!m_popup_window) return;
+
+    m_last_track_path.clear();
+
+    if (m_popup_window) {
+        KillTimer(m_popup_window, ARTWORK_WAIT_TIMER_ID);
+    }
+    cleanup_cover_art();
+
+    metadb_handle_ptr track;
+    try {
+        auto playback = playback_control::get();
+        if (playback->get_now_playing(track) && track.is_valid()) {
+            m_pending_track = track;
+            m_current_track = track;
+            update_track_info(track);
+            load_cover_art(track, true);
+
+            position_popup();
+            if (m_visible && !m_animating) {
+                SetWindowPos(m_popup_window, HWND_TOPMOST, m_final_x, m_final_y, 320, 80, SWP_NOACTIVATE);
+                InvalidateRect(m_popup_window, nullptr, TRUE);
+                UpdateWindow(m_popup_window);
+                SetTimer(m_popup_window, POPUP_TIMER_ID, get_popup_duration(), hide_timer_proc);
+            } else if (!m_visible) {
+                start_slide_in_animation();
+            }
+            return;
+        }
+    } catch (...) {
+    }
+
+    // Nothing currently playing - display sample preview popup notification
+    m_current_track = nullptr;
+    m_pending_track = nullptr;
+
+    position_popup();
+    if (m_visible && !m_animating) {
+        SetWindowPos(m_popup_window, HWND_TOPMOST, m_final_x, m_final_y, 320, 80, SWP_NOACTIVATE);
+        InvalidateRect(m_popup_window, nullptr, TRUE);
+        UpdateWindow(m_popup_window);
+        SetTimer(m_popup_window, POPUP_TIMER_ID, get_popup_duration(), hide_timer_proc);
+    } else if (!m_visible) {
+        start_slide_in_animation();
     }
 }
 
@@ -375,7 +454,7 @@ void popup_window::update_track_info(metadb_handle_ptr p_track) {
     }
 }
 
-void popup_window::load_cover_art(metadb_handle_ptr p_track) {
+void popup_window::load_cover_art(metadb_handle_ptr p_track, bool allow_stale_fallback) {
     if (!p_track.is_valid()) return;
 
     // Check if artwork has arrived via callback from foo_artwork for this search
@@ -405,13 +484,39 @@ void popup_window::load_cover_art(metadb_handle_ptr p_track) {
                         // Found local/embedded artwork - replace old artwork
                         cleanup_cover_art();
                         m_cover_art_bitmap = convert_album_art_to_bitmap(data);
-                        return;
+                        if (m_cover_art_bitmap) return;
                     }
                 }
             }
         } catch (...) {}
 
-        // No artwork available
+        // Fallbacks ONLY allowed for manual preview button click
+        if (allow_stale_fallback) {
+            // Fallback 1: Check foo_artwork active or last received online artwork
+            try {
+                HBITMAP online_art = get_current_online_artwork();
+                if (!online_art) {
+                    online_art = get_last_online_artwork();
+                }
+                if (online_art) {
+                    cleanup_cover_art();
+                    m_cover_art_bitmap = online_art;
+                    m_artwork_from_bridge = false;
+                    return;
+                }
+            } catch (...) {}
+
+            // Fallback 2: Check Control Panel active artwork bitmap
+            HBITMAP cp_art = control_panel::get_instance().get_cover_art_bitmap();
+            if (cp_art) {
+                cleanup_cover_art();
+                m_cover_art_bitmap = copy_hbitmap_surface(cp_art);
+                m_artwork_from_bridge = false;
+                if (m_cover_art_bitmap) return;
+            }
+        }
+
+        // No artwork available for this track yet
         cleanup_cover_art();
     } catch (...) {
         // Ignore errors
@@ -529,10 +634,29 @@ LRESULT CALLBACK popup_window::popup_window_proc(HWND hwnd, UINT msg, WPARAM wpa
             {
                 PAINTSTRUCT ps;
                 HDC hdc = BeginPaint(hwnd, &ps);
-                popup->paint_popup(hdc);
+                RECT client_rect;
+                GetClientRect(hwnd, &client_rect);
+                int width = client_rect.right - client_rect.left;
+                int height = client_rect.bottom - client_rect.top;
+
+                HDC mem_dc = CreateCompatibleDC(hdc);
+                HBITMAP mem_bitmap = CreateCompatibleBitmap(hdc, width, height);
+                HBITMAP old_bitmap = (HBITMAP)SelectObject(mem_dc, mem_bitmap);
+
+                popup->paint_popup(mem_dc);
+
+                BitBlt(hdc, 0, 0, width, height, mem_dc, 0, 0, SRCCOPY);
+
+                SelectObject(mem_dc, old_bitmap);
+                DeleteObject(mem_bitmap);
+                DeleteDC(mem_dc);
+
                 EndPaint(hwnd, &ps);
                 return 0;
             }
+
+        case WM_ERASEBKGND:
+            return 1;
             
         case WM_LBUTTONDOWN:
         case WM_RBUTTONDOWN:
@@ -578,27 +702,272 @@ VOID CALLBACK popup_window::hide_timer_proc(HWND hwnd, UINT msg, UINT_PTR timer_
         s_instance->hide_popup();
     }
 }
-
 VOID CALLBACK popup_window::animation_timer_proc(HWND hwnd, UINT msg, UINT_PTR timer_id, DWORD time) {
     if (timer_id == ANIMATION_TIMER_ID && s_instance) {
         s_instance->update_animation();
     }
 }
 
+static std::unique_ptr<Gdiplus::Bitmap> create_gdiplus_bitmap_from_hbitmap(HDC hdc, HBITMAP hbmp) {
+    if (!hbmp || !hdc) return nullptr;
+
+    BITMAP bmp;
+    if (!GetObject(hbmp, sizeof(bmp), &bmp) || bmp.bmWidth <= 0 || bmp.bmHeight <= 0) return nullptr;
+
+    std::unique_ptr<Gdiplus::Bitmap> gdi_bmp(Gdiplus::Bitmap::FromHBITMAP(hbmp, nullptr));
+    if (gdi_bmp && gdi_bmp->GetLastStatus() == Gdiplus::Ok) {
+        return gdi_bmp;
+    }
+
+    // Fallback: Copy via GDI BitBlt
+    std::unique_ptr<Gdiplus::Bitmap> copy_bmp(new Gdiplus::Bitmap(bmp.bmWidth, bmp.bmHeight, PixelFormat32bppARGB));
+    Gdiplus::Graphics g(copy_bmp.get());
+    HDC g_dc = g.GetHDC();
+    if (g_dc) {
+        HDC mem_dc = CreateCompatibleDC(hdc);
+        HBITMAP old_bm = (HBITMAP)SelectObject(mem_dc, hbmp);
+        BitBlt(g_dc, 0, 0, bmp.bmWidth, bmp.bmHeight, mem_dc, 0, 0, SRCCOPY);
+        SelectObject(mem_dc, old_bm);
+        DeleteDC(mem_dc);
+        g.ReleaseHDC(g_dc);
+    }
+    return copy_bmp;
+}
+
+static bool is_popup_dark_mode() {
+    int bg_style = get_background_style(); // 0 = Solid, 1 = Artwork Colors, 2 = Blurred Artwork
+    if (bg_style != 0) {
+        // Light mode has no effect for Artwork Colors or Blurred Artwork
+        return true;
+    }
+
+    int theme_mode = get_theme_mode(); // 0 = Auto, 1 = Dark, 2 = Light
+    if (theme_mode == 0) {
+        try {
+            fb2k::CCoreDarkModeHooks darkModeHooks;
+            return (bool)darkModeHooks;
+        } catch (...) {
+            return true;
+        }
+    } else if (theme_mode == 1) {
+        return true; // Dark mode
+    } else {
+        return false; // Light mode
+    }
+}
+
 void popup_window::paint_popup(HDC hdc) {
-    
     if (!hdc) return;
     
     RECT client_rect;
     GetClientRect(m_popup_window, &client_rect);
+    int window_width = client_rect.right - client_rect.left;
+    int window_height = client_rect.bottom - client_rect.top;
     
-    // Set background
-    HBRUSH bg_brush = CreateSolidBrush(RGB(45, 45, 48));
-    FillRect(hdc, &client_rect, bg_brush);
-    DeleteObject(bg_brush);
+    int bg_style = get_background_style(); // 0 = Solid, 1 = Artwork Colors, 2 = Blurred Artwork
+    bool bg_painted = false;
+
+    if (bg_style == 1 && m_cover_art_bitmap) {
+        if (window_width > 0 && window_height > 0) {
+            BITMAP bmp;
+            if (GetObject(m_cover_art_bitmap, sizeof(bmp), &bmp) && bmp.bmWidth > 0 && bmp.bmHeight > 0) {
+                HDC mem_dc = CreateCompatibleDC(hdc);
+                HBITMAP old_bm = (HBITMAP)SelectObject(mem_dc, m_cover_art_bitmap);
+
+                long total_r = 0, total_g = 0, total_b = 0;
+                int pixel_count = 0;
+                const int grid_size = 8;
+
+                for (int y = 0; y < grid_size; y++) {
+                    int sample_y = (bmp.bmHeight * (y + 1)) / (grid_size + 1);
+                    for (int x = 0; x < grid_size; x++) {
+                        int sample_x = (bmp.bmWidth * (x + 1)) / (grid_size + 1);
+                        COLORREF c = GetPixel(mem_dc, sample_x, sample_y);
+                        if (c != CLR_INVALID) {
+                            total_r += GetRValue(c);
+                            total_g += GetGValue(c);
+                            total_b += GetBValue(c);
+                            pixel_count++;
+                        }
+                    }
+                }
+
+                SelectObject(mem_dc, old_bm);
+                DeleteDC(mem_dc);
+
+                if (pixel_count > 0) {
+                    int avg_r = total_r / pixel_count;
+                    int avg_g = total_g / pixel_count;
+                    int avg_b = total_b / pixel_count;
+
+                    Gdiplus::Color primary(255, avg_r, avg_g, avg_b);
+                    Gdiplus::Color secondary(255, avg_r * 65 / 100, avg_g * 65 / 100, avg_b * 65 / 100);
+
+                    Gdiplus::Graphics g(hdc);
+                    Gdiplus::Rect g_rect(0, 0, window_width, window_height);
+                    Gdiplus::LinearGradientBrush brush(
+                        Gdiplus::Point(0, 0),
+                        Gdiplus::Point(window_width, 0),
+                        secondary,
+                        primary
+                    );
+                    g.FillRectangle(&brush, g_rect);
+
+                    Gdiplus::SolidBrush overlay(Gdiplus::Color(50, 0, 0, 0));
+                    g.FillRectangle(&overlay, g_rect);
+                    bg_painted = true;
+                }
+            }
+        }
+    } else if (bg_style == 2 && m_cover_art_bitmap) {
+        if (window_width > 0 && window_height > 0) {
+            std::unique_ptr<Gdiplus::Bitmap> src_bitmap = create_gdiplus_bitmap_from_hbitmap(hdc, m_cover_art_bitmap);
+            if (src_bitmap && src_bitmap->GetLastStatus() == Gdiplus::Ok) {
+                const int blur_size = 64;
+                Gdiplus::Bitmap scaled(blur_size, blur_size, PixelFormat32bppARGB);
+                {
+                    Gdiplus::Graphics gfx(&scaled);
+                    gfx.SetInterpolationMode(Gdiplus::InterpolationModeBilinear);
+                    gfx.DrawImage(src_bitmap.get(), 0, 0, blur_size, blur_size);
+                }
+
+                Gdiplus::Rect lockRect(0, 0, blur_size, blur_size);
+                Gdiplus::BitmapData scaledData;
+                if (scaled.LockBits(&lockRect, Gdiplus::ImageLockModeRead, PixelFormat32bppARGB, &scaledData) == Gdiplus::Ok) {
+                    std::vector<BYTE> tempBuffer(blur_size * blur_size * 4);
+                    std::vector<BYTE> blurBuffer(blur_size * blur_size * 4);
+
+                    BYTE* srcPixels = static_cast<BYTE*>(scaledData.Scan0);
+                    int srcStride = scaledData.Stride;
+                    const int radius = 4;
+
+                    // Pass 1: Horizontal blur
+                    for (int y = 0; y < blur_size; y++) {
+                        for (int x = 0; x < blur_size; x++) {
+                            int total_r = 0, total_g = 0, total_b = 0, total_a = 0;
+                            int count = 0;
+                            for (int dx = -radius; dx <= radius; dx++) {
+                                int sx = x + dx;
+                                if (sx >= 0 && sx < blur_size) {
+                                    BYTE* pixel = srcPixels + y * srcStride + sx * 4;
+                                    total_b += pixel[0];
+                                    total_g += pixel[1];
+                                    total_r += pixel[2];
+                                    total_a += pixel[3];
+                                    count++;
+                                }
+                            }
+                            int dstIdx = (y * blur_size + x) * 4;
+                            tempBuffer[dstIdx + 0] = static_cast<BYTE>(total_b / count);
+                            tempBuffer[dstIdx + 1] = static_cast<BYTE>(total_g / count);
+                            tempBuffer[dstIdx + 2] = static_cast<BYTE>(total_r / count);
+                            tempBuffer[dstIdx + 3] = static_cast<BYTE>(total_a / count);
+                        }
+                    }
+
+                    scaled.UnlockBits(&scaledData);
+
+                    // Pass 2: Vertical blur
+                    for (int y = 0; y < blur_size; y++) {
+                        for (int x = 0; x < blur_size; x++) {
+                            int total_r = 0, total_g = 0, total_b = 0, total_a = 0;
+                            int count = 0;
+                            for (int dy = -radius; dy <= radius; dy++) {
+                                int sy = y + dy;
+                                if (sy >= 0 && sy < blur_size) {
+                                    int srcIdx = (sy * blur_size + x) * 4;
+                                    total_b += tempBuffer[srcIdx + 0];
+                                    total_g += tempBuffer[srcIdx + 1];
+                                    total_r += tempBuffer[srcIdx + 2];
+                                    total_a += tempBuffer[srcIdx + 3];
+                                    count++;
+                                }
+                            }
+                            int dstIdx = (y * blur_size + x) * 4;
+                            blurBuffer[dstIdx + 0] = static_cast<BYTE>(total_b / count);
+                            blurBuffer[dstIdx + 1] = static_cast<BYTE>(total_g / count);
+                            blurBuffer[dstIdx + 2] = static_cast<BYTE>(total_r / count);
+                            blurBuffer[dstIdx + 3] = static_cast<BYTE>(total_a / count);
+                        }
+                    }
+
+                    Gdiplus::Bitmap blurred_artwork(window_width, window_height, PixelFormat32bppARGB);
+                    Gdiplus::Rect outRect(0, 0, window_width, window_height);
+                    Gdiplus::BitmapData outData;
+                    if (blurred_artwork.LockBits(&outRect, Gdiplus::ImageLockModeWrite, PixelFormat32bppARGB, &outData) == Gdiplus::Ok) {
+                        BYTE* outPixels = static_cast<BYTE*>(outData.Scan0);
+                        int outStride = outData.Stride;
+
+                        float targetAspect = static_cast<float>(window_width) / static_cast<float>(window_height);
+                        float srcX = 0, srcY = 0, srcW = static_cast<float>(blur_size), srcH = static_cast<float>(blur_size);
+
+                        if (targetAspect > 1.0f) {
+                            srcH = blur_size / targetAspect;
+                            srcY = (blur_size - srcH) / 2.0f;
+                        } else {
+                            srcW = blur_size * targetAspect;
+                            srcX = (blur_size - srcW) / 2.0f;
+                        }
+
+                        for (int y = 0; y < window_height; y++) {
+                            BYTE* outRow = outPixels + y * outStride;
+                            float sy_base = srcY + (y / static_cast<float>(window_height)) * srcH;
+
+                            for (int x = 0; x < window_width; x++) {
+                                float sx = srcX + (x / static_cast<float>(window_width)) * srcW;
+                                float sy = sy_base;
+
+                                int x0 = static_cast<int>(sx);
+                                int y0 = static_cast<int>(sy);
+                                int x1 = (std::min)(x0 + 1, blur_size - 1);
+                                int y1 = (std::min)(y0 + 1, blur_size - 1);
+                                x0 = (std::max)(0, (std::min)(x0, blur_size - 1));
+                                y0 = (std::max)(0, (std::min)(y0, blur_size - 1));
+
+                                float fx = sx - static_cast<int>(sx);
+                                float fy = sy - static_cast<int>(sy);
+                                float fx_inv = 1.0f - fx;
+                                float fy_inv = 1.0f - fy;
+
+                                int idx00 = (y0 * blur_size + x0) * 4;
+                                int idx10 = (y0 * blur_size + x1) * 4;
+                                int idx01 = (y1 * blur_size + x0) * 4;
+                                int idx11 = (y1 * blur_size + x1) * 4;
+
+                                for (int c = 0; c < 4; c++) {
+                                    float top_ch = blurBuffer[idx00 + c] * fx_inv + blurBuffer[idx10 + c] * fx;
+                                    float bottom_ch = blurBuffer[idx01 + c] * fx_inv + blurBuffer[idx11 + c] * fx;
+                                    outRow[x * 4 + c] = static_cast<BYTE>(top_ch * fy_inv + bottom_ch * fy);
+                                }
+                            }
+                        }
+
+                        blurred_artwork.UnlockBits(&outData);
+
+                        Gdiplus::Graphics g(hdc);
+                        g.DrawImage(&blurred_artwork, 0, 0, window_width, window_height);
+
+                        Gdiplus::SolidBrush overlay(Gdiplus::Color(140, 0, 0, 0));
+                        g.FillRectangle(&overlay, 0, 0, window_width, window_height);
+                        bg_painted = true;
+                    }
+                }
+            }
+        }
+    }
+
+    bool is_dark = is_popup_dark_mode();
+
+    if (!bg_painted) {
+        COLORREF bg_color = is_dark ? RGB(45, 45, 48) : RGB(245, 245, 245);
+        HBRUSH bg_brush = CreateSolidBrush(bg_color);
+        FillRect(hdc, &client_rect, bg_brush);
+        DeleteObject(bg_brush);
+    }
     
     // Draw border
-    HPEN border_pen = CreatePen(PS_SOLID, 1, RGB(100, 100, 100));
+    COLORREF border_color = is_dark ? RGB(100, 100, 100) : RGB(200, 200, 200);
+    HPEN border_pen = CreatePen(PS_SOLID, 1, border_color);
     HPEN old_pen = (HPEN)SelectObject(hdc, border_pen);
     HBRUSH old_brush = (HBRUSH)SelectObject(hdc, GetStockObject(NULL_BRUSH));
     
@@ -608,83 +977,56 @@ void popup_window::paint_popup(HDC hdc) {
     SelectObject(hdc, old_brush);
     DeleteObject(border_pen);
     
-    // Draw cover art (left side)
-    RECT cover_rect = {10, 10, 70, 70};
-    
-    if (m_cover_art_bitmap) {
-        // Draw the loaded cover art
-        HDC bitmap_dc = CreateCompatibleDC(hdc);
-        HBITMAP old_bitmap = (HBITMAP)SelectObject(bitmap_dc, m_cover_art_bitmap);
-
-        // Get actual bitmap dimensions (bridge artwork may differ from 60x60 thumbnail)
-        BITMAP bmp_info;
-        GetObject(m_cover_art_bitmap, sizeof(BITMAP), &bmp_info);
-
-        // Draw the bitmap scaled to fit the cover rect (60x60)
-        SetStretchBltMode(hdc, HALFTONE);
-        StretchBlt(hdc, cover_rect.left, cover_rect.top, 60, 60,
-                   bitmap_dc, 0, 0, bmp_info.bmWidth, bmp_info.bmHeight, SRCCOPY);
-
-        SelectObject(bitmap_dc, old_bitmap);
-        DeleteDC(bitmap_dc);
-    } else {
-        // Draw placeholder if no cover art
-        HBRUSH cover_brush = CreateSolidBrush(RGB(80, 80, 80));
-        FillRect(hdc, &cover_rect, cover_brush);
-        DeleteObject(cover_brush);
+    bool show_art = get_show_cover_art();
+    if (show_art) {
+        bool has_margin = get_cover_margin();
+        bool is_rounded = (get_cover_style() == 1);
+        COLORREF placeholder_color = is_dark ? RGB(80, 80, 80) : RGB(220, 220, 220);
         
-        // Determine icon based on whether this is a stream or local file
-        bool is_stream = false;
-        if (m_current_track.is_valid()) {
-            pfc::string8 path = m_current_track->get_path();
-            is_stream = strstr(path.get_ptr(), "://") != nullptr;
-        }
-        
-        if (is_stream) {
-            // Load and draw radio icon for internet streams
-            // Try LoadImage first for better flexibility with icon sizes
-            HICON radio_icon = (HICON)LoadImage(g_hIns, MAKEINTRESOURCE(IDI_RADIO_ICON), IMAGE_ICON, 32, 32, LR_DEFAULTCOLOR);
-            
-            // If LoadImage fails, try LoadIcon as fallback
-            if (!radio_icon) {
-                radio_icon = LoadIcon(g_hIns, MAKEINTRESOURCE(IDI_RADIO_ICON));
-            }
-            
-            if (radio_icon) {
-                // Center the icon in the cover rect
-                int icon_size = 32; // Standard small icon size
-                int icon_x = cover_rect.left + (60 - icon_size) / 2;
-                int icon_y = cover_rect.top + (60 - icon_size) / 2;
-                
-                DrawIconEx(hdc, icon_x, icon_y, radio_icon, icon_size, icon_size, 0, nullptr, DI_NORMAL);
-                DestroyIcon(radio_icon); // Clean up the icon handle
+        RECT cover_rect = has_margin ? RECT{10, 10, 70, 70} : RECT{0, 0, window_height, window_height};
+        int art_w = cover_rect.right - cover_rect.left;
+        int art_h = cover_rect.bottom - cover_rect.top;
+
+        if (is_rounded) {
+            int corner_r = (art_w < art_h ? art_w : art_h) / 8;
+            if (corner_r < 4) corner_r = 4;
+            HRGN rgn = CreateRoundRectRgn(cover_rect.left, cover_rect.top, cover_rect.right + 1, cover_rect.bottom + 1, corner_r * 2, corner_r * 2);
+            SelectClipRgn(hdc, rgn);
+
+            if (m_cover_art_bitmap) {
+                HDC bitmap_dc = CreateCompatibleDC(hdc);
+                HBITMAP old_bitmap = (HBITMAP)SelectObject(bitmap_dc, m_cover_art_bitmap);
+                BITMAP bmp_info;
+                GetObject(m_cover_art_bitmap, sizeof(BITMAP), &bmp_info);
+                SetStretchBltMode(hdc, HALFTONE);
+                StretchBlt(hdc, cover_rect.left, cover_rect.top, art_w, art_h,
+                           bitmap_dc, 0, 0, bmp_info.bmWidth, bmp_info.bmHeight, SRCCOPY);
+                SelectObject(bitmap_dc, old_bitmap);
+                DeleteDC(bitmap_dc);
             } else {
-                // Fallback to text if icon can't be loaded
-                SetTextColor(hdc, RGB(200, 200, 200));
-                SetBkMode(hdc, TRANSPARENT);
-                HFONT symbol_font = CreateFont(get_dpi_scaled_font_height(24), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-                                               DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                                               DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI Symbol");
-                HFONT old_symbol_font = (HFONT)SelectObject(hdc, symbol_font);
-                
-                DrawText(hdc, L"📻", -1, &cover_rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-                
-                SelectObject(hdc, old_symbol_font);
-                DeleteObject(symbol_font);
+                HBRUSH cover_brush = CreateSolidBrush(placeholder_color);
+                FillRect(hdc, &cover_rect, cover_brush);
+                DeleteObject(cover_brush);
             }
+
+            SelectClipRgn(hdc, nullptr);
+            DeleteObject(rgn);
         } else {
-            // Draw musical note symbol for local files
-            SetTextColor(hdc, RGB(200, 200, 200));
-            SetBkMode(hdc, TRANSPARENT);
-            HFONT symbol_font = CreateFont(get_dpi_scaled_font_height(24), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-                                           DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                                           DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI Symbol");
-            HFONT old_symbol_font = (HFONT)SelectObject(hdc, symbol_font);
-            
-            DrawText(hdc, L"♪", -1, &cover_rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-            
-            SelectObject(hdc, old_symbol_font);
-            DeleteObject(symbol_font);
+            if (m_cover_art_bitmap) {
+                HDC bitmap_dc = CreateCompatibleDC(hdc);
+                HBITMAP old_bitmap = (HBITMAP)SelectObject(bitmap_dc, m_cover_art_bitmap);
+                BITMAP bmp_info;
+                GetObject(m_cover_art_bitmap, sizeof(BITMAP), &bmp_info);
+                SetStretchBltMode(hdc, HALFTONE);
+                StretchBlt(hdc, cover_rect.left, cover_rect.top, art_w, art_h,
+                           bitmap_dc, 0, 0, bmp_info.bmWidth, bmp_info.bmHeight, SRCCOPY);
+                SelectObject(bitmap_dc, old_bitmap);
+                DeleteDC(bitmap_dc);
+            } else {
+                HBRUSH cover_brush = CreateSolidBrush(placeholder_color);
+                FillRect(hdc, &cover_rect, cover_brush);
+                DeleteObject(cover_brush);
+            }
         }
     }
     
@@ -693,7 +1035,6 @@ void popup_window::paint_popup(HDC hdc) {
 }
 
 void popup_window::draw_track_info(HDC hdc, const RECT& client_rect) {
-    
     if (!hdc) return;
     
     // Get track info using configurable display format
@@ -703,8 +1044,13 @@ void popup_window::draw_track_info(HDC hdc, const RECT& client_rect) {
     if (title.is_empty()) title = "Unknown Title";
     if (artist.is_empty()) artist = "Unknown Artist";
     
-    // Setup text drawing
-    SetTextColor(hdc, RGB(255, 255, 255));
+    // Setup text colors based on theme mode and background style
+    bool is_dark = is_popup_dark_mode();
+    int bg_style = get_background_style(); // 0 = Solid, 1 = Artwork Colors, 2 = Blurred Artwork
+    
+    COLORREF title_color = (bg_style == 0 && !is_dark) ? RGB(20, 20, 20) : RGB(255, 255, 255);
+    COLORREF artist_color = (bg_style == 0 && !is_dark) ? RGB(80, 80, 80) : RGB(220, 220, 220);
+
     SetBkMode(hdc, TRANSPARENT);
     
     // Use Docked Control Panel fonts for consistency between popup and docked panel
@@ -727,17 +1073,26 @@ void popup_window::draw_track_info(HDC hdc, const RECT& client_rect) {
                                  DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Microsoft YaHei");
     }
     
+    bool show_art = get_show_cover_art();
+    bool has_margin = get_cover_margin();
+    int text_left = 15;
+    if (show_art) {
+        text_left = has_margin ? 85 : (client_rect.bottom - client_rect.top + 10);
+    }
+
     // Draw title first (top line)
     HFONT old_font = (HFONT)SelectObject(hdc, title_font);
+    SetTextColor(hdc, title_color);
     
-    RECT title_rect = {85, 15, client_rect.right - 10, 35};
+    RECT title_rect = {text_left, 15, client_rect.right - 10, 35};
     pfc::stringcvt::string_wide_from_utf8 wide_title(title.c_str());
     DrawText(hdc, wide_title.get_ptr(), -1, &title_rect, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
     
     // Draw artist second (bottom line)
     SelectObject(hdc, artist_font);
+    SetTextColor(hdc, artist_color);
     
-    RECT artist_rect = {85, 40, client_rect.right - 10, 60};
+    RECT artist_rect = {text_left, 40, client_rect.right - 10, 60};
     pfc::stringcvt::string_wide_from_utf8 wide_artist(artist.c_str());
     DrawText(hdc, wide_artist.get_ptr(), -1, &artist_rect, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
     
