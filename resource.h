@@ -82,6 +82,19 @@
 #define IDC_THEME_MODE_LABEL         271
 #define IDC_THEME_MODE_COMBO         272
 
+// Appearance tab options
+#define IDC_COVER_ARTWORK_LABEL      273
+#define IDC_COVER_ARTWORK_COMBO      274
+#define IDC_COVER_MARGIN_LABEL       275
+#define IDC_COVER_MARGIN_COMBO       276
+#define IDC_COVER_STYLE_LABEL        277
+#define IDC_COVER_STYLE_COMBO        278
+#define IDC_BACKGROUND_STYLE_LABEL   279
+#define IDC_BACKGROUND_STYLE_COMBO   284
+
+// Preview button for popup notifications
+#define IDC_PREVIEW_POPUP_BTN        285
+
 // Timer font controls (shared across Docked, Undocked, Compact modes)
 #define IDC_TIMER_TITLE              280
 #define IDC_TIMER_FONT_LABEL         281
