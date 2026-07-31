@@ -6,6 +6,8 @@
 
 // Standard C++ headers first
 #include <memory>
+#include <vector>
+#include <algorithm>
 
 // Windows headers - include COM definitions
 #ifndef _WIN32_WINNT
