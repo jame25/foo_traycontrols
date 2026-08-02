@@ -48,7 +48,7 @@ static cfg_struct_t<LOGFONT> cfg_artist_font(GUID{0x12345692, 0x9abc, 0xdef0, {0
     lf.lfClipPrecision = CLIP_DEFAULT_PRECIS;
     lf.lfQuality = DEFAULT_QUALITY;
     lf.lfPitchAndFamily = DEFAULT_PITCH | FF_DONTCARE;
-    wcscpy_s(lf.lfFaceName, L"Microsoft YaHei");
+    wcscpy_s(lf.lfFaceName, L"Microsoft YaHei UI");
     return lf;
 }());
 static cfg_struct_t<LOGFONT> cfg_track_font(GUID{0x12345693, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, []() {
@@ -60,10 +60,11 @@ static cfg_struct_t<LOGFONT> cfg_track_font(GUID{0x12345693, 0x9abc, 0xdef0, {0x
     lf.lfClipPrecision = CLIP_DEFAULT_PRECIS;
     lf.lfQuality = DEFAULT_QUALITY;
     lf.lfPitchAndFamily = DEFAULT_PITCH | FF_DONTCARE;
-    wcscpy_s(lf.lfFaceName, L"Microsoft YaHei");
+    wcscpy_s(lf.lfFaceName, L"Microsoft YaHei UI");
     return lf;
 }());
-static cfg_int cfg_use_custom_fonts(GUID{0x12345694, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0);
+static cfg_int cfg_use_artist_custom_font(GUID{0x12345694, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0);
+static cfg_int cfg_use_track_custom_font(GUID{0x1234569C, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0);
 
 // Control Panel specific font configuration
 static cfg_struct_t<LOGFONT> cfg_cp_artist_font(GUID{0x1234569A, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, []() {
@@ -75,7 +76,7 @@ static cfg_struct_t<LOGFONT> cfg_cp_artist_font(GUID{0x1234569A, 0x9abc, 0xdef0,
     lf.lfClipPrecision = CLIP_DEFAULT_PRECIS;
     lf.lfQuality = DEFAULT_QUALITY;
     lf.lfPitchAndFamily = DEFAULT_PITCH | FF_DONTCARE;
-    wcscpy_s(lf.lfFaceName, L"Microsoft YaHei");
+    wcscpy_s(lf.lfFaceName, L"Microsoft YaHei UI");
     return lf;
 }());
 static cfg_struct_t<LOGFONT> cfg_cp_track_font(GUID{0x1234569B, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, []() {
@@ -87,10 +88,11 @@ static cfg_struct_t<LOGFONT> cfg_cp_track_font(GUID{0x1234569B, 0x9abc, 0xdef0, 
     lf.lfClipPrecision = CLIP_DEFAULT_PRECIS;
     lf.lfQuality = DEFAULT_QUALITY;
     lf.lfPitchAndFamily = DEFAULT_PITCH | FF_DONTCARE;
-    wcscpy_s(lf.lfFaceName, L"Microsoft YaHei");
+    wcscpy_s(lf.lfFaceName, L"Microsoft YaHei UI");
     return lf;
 }());
-static cfg_int cfg_cp_use_custom_fonts(GUID{0x1234569D, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0);
+static cfg_int cfg_cp_use_artist_custom_font(GUID{0x1234569D, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0);
+static cfg_int cfg_cp_use_track_custom_font(GUID{0x1234569E, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0);
 
 // Undocked mode font configuration
 static cfg_struct_t<LOGFONT> cfg_undocked_artist_font(GUID{0x123456A0, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, []() {
@@ -102,7 +104,7 @@ static cfg_struct_t<LOGFONT> cfg_undocked_artist_font(GUID{0x123456A0, 0x9abc, 0
     lf.lfClipPrecision = CLIP_DEFAULT_PRECIS;
     lf.lfQuality = DEFAULT_QUALITY;
     lf.lfPitchAndFamily = DEFAULT_PITCH | FF_DONTCARE;
-    wcscpy_s(lf.lfFaceName, L"Microsoft YaHei");
+    wcscpy_s(lf.lfFaceName, L"Microsoft YaHei UI");
     return lf;
 }());
 static cfg_struct_t<LOGFONT> cfg_undocked_track_font(GUID{0x123456A1, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, []() {
@@ -114,10 +116,11 @@ static cfg_struct_t<LOGFONT> cfg_undocked_track_font(GUID{0x123456A1, 0x9abc, 0x
     lf.lfClipPrecision = CLIP_DEFAULT_PRECIS;
     lf.lfQuality = DEFAULT_QUALITY;
     lf.lfPitchAndFamily = DEFAULT_PITCH | FF_DONTCARE;
-    wcscpy_s(lf.lfFaceName, L"Microsoft YaHei");
+    wcscpy_s(lf.lfFaceName, L"Microsoft YaHei UI");
     return lf;
 }());
-static cfg_int cfg_undocked_use_custom_fonts(GUID{0x123456A2, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0);
+static cfg_int cfg_undocked_use_artist_custom_font(GUID{0x123456A2, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0);
+static cfg_int cfg_undocked_use_track_custom_font(GUID{0x123456A3, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0);
 
 // Expanded mode font configuration
 static cfg_struct_t<LOGFONT> cfg_expanded_artist_font(GUID{0x123456B0, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, []() {
@@ -129,7 +132,7 @@ static cfg_struct_t<LOGFONT> cfg_expanded_artist_font(GUID{0x123456B0, 0x9abc, 0
     lf.lfClipPrecision = CLIP_DEFAULT_PRECIS;
     lf.lfQuality = DEFAULT_QUALITY;
     lf.lfPitchAndFamily = DEFAULT_PITCH | FF_DONTCARE;
-    wcscpy_s(lf.lfFaceName, L"Microsoft YaHei");
+    wcscpy_s(lf.lfFaceName, L"Microsoft YaHei UI");
     return lf;
 }());
 static cfg_struct_t<LOGFONT> cfg_expanded_track_font(GUID{0x123456B1, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, []() {
@@ -141,10 +144,11 @@ static cfg_struct_t<LOGFONT> cfg_expanded_track_font(GUID{0x123456B1, 0x9abc, 0x
     lf.lfClipPrecision = CLIP_DEFAULT_PRECIS;
     lf.lfQuality = DEFAULT_QUALITY;
     lf.lfPitchAndFamily = DEFAULT_PITCH | FF_DONTCARE;
-    wcscpy_s(lf.lfFaceName, L"Microsoft YaHei");
+    wcscpy_s(lf.lfFaceName, L"Microsoft YaHei UI");
     return lf;
 }());
-static cfg_int cfg_expanded_use_custom_fonts(GUID{0x123456B2, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0);
+static cfg_int cfg_expanded_use_artist_custom_font(GUID{0x123456B2, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0);
+static cfg_int cfg_expanded_use_track_custom_font(GUID{0x123456B3, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0);
 
 // Compact mode font configuration
 static cfg_struct_t<LOGFONT> cfg_compact_artist_font(GUID{0x123456C0, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, []() {
@@ -156,7 +160,7 @@ static cfg_struct_t<LOGFONT> cfg_compact_artist_font(GUID{0x123456C0, 0x9abc, 0x
     lf.lfClipPrecision = CLIP_DEFAULT_PRECIS;
     lf.lfQuality = DEFAULT_QUALITY;
     lf.lfPitchAndFamily = DEFAULT_PITCH | FF_DONTCARE;
-    wcscpy_s(lf.lfFaceName, L"Microsoft YaHei");
+    wcscpy_s(lf.lfFaceName, L"Microsoft YaHei UI");
     return lf;
 }());
 static cfg_struct_t<LOGFONT> cfg_compact_track_font(GUID{0x123456C1, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, []() {
@@ -168,10 +172,11 @@ static cfg_struct_t<LOGFONT> cfg_compact_track_font(GUID{0x123456C1, 0x9abc, 0xd
     lf.lfClipPrecision = CLIP_DEFAULT_PRECIS;
     lf.lfQuality = DEFAULT_QUALITY;
     lf.lfPitchAndFamily = DEFAULT_PITCH | FF_DONTCARE;
-    wcscpy_s(lf.lfFaceName, L"Microsoft YaHei");
+    wcscpy_s(lf.lfFaceName, L"Microsoft YaHei UI");
     return lf;
 }());
-static cfg_int cfg_compact_use_custom_fonts(GUID{0x123456C2, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0);
+static cfg_int cfg_compact_use_artist_custom_font(GUID{0x123456C2, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0);
+static cfg_int cfg_compact_use_track_custom_font(GUID{0x123456C3, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0);
 
 // Timer font configuration (shared across Docked, Undocked, Compact modes)
 static cfg_struct_t<LOGFONT> cfg_timer_font(GUID{0x123456D0, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, []() {
@@ -183,7 +188,7 @@ static cfg_struct_t<LOGFONT> cfg_timer_font(GUID{0x123456D0, 0x9abc, 0xdef0, {0x
     lf.lfClipPrecision = CLIP_DEFAULT_PRECIS;
     lf.lfQuality = DEFAULT_QUALITY;
     lf.lfPitchAndFamily = DEFAULT_PITCH | FF_DONTCARE;
-    wcscpy_s(lf.lfFaceName, L"Microsoft YaHei");
+    wcscpy_s(lf.lfFaceName, L"Microsoft YaHei UI");
     return lf;
 }());
 static cfg_int cfg_timer_use_custom_font(GUID{0x123456D1, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0);
@@ -295,8 +300,16 @@ int get_miniplayer_compact_height() { return cfg_miniplayer_compact_height; }
 int get_miniplayer_expanded_size() { return cfg_miniplayer_expanded_size; }
 
 // Font configuration access functions
+bool get_use_artist_custom_font() {
+    return cfg_use_artist_custom_font != 0;
+}
+
+bool get_use_track_custom_font() {
+    return cfg_use_track_custom_font != 0;
+}
+
 bool get_use_custom_fonts() {
-    return cfg_use_custom_fonts != 0;
+    return get_use_artist_custom_font() || get_use_track_custom_font();
 }
 
 LOGFONT get_artist_font() {
@@ -309,24 +322,32 @@ LOGFONT get_track_font() {
 
 void set_artist_font(const LOGFONT& font) {
     cfg_artist_font = font;
-    cfg_use_custom_fonts = 1;
+    cfg_use_artist_custom_font = 1;
 }
 
 void set_track_font(const LOGFONT& font) {
     cfg_track_font = font;
-    cfg_use_custom_fonts = 1;
+    cfg_use_track_custom_font = 1;
 }
 
 void reset_fonts() {
-    cfg_use_custom_fonts = 0;
-    // Set font configurations to new default values
-    cfg_artist_font = get_default_font(true, 9);   // Artist: 9pt, regular
-    cfg_track_font = get_default_font(false, 11);   // Track: 11pt, bold
+    cfg_use_artist_custom_font = 0;
+    cfg_use_track_custom_font = 0;
+    cfg_artist_font = get_default_font(true, 9);
+    cfg_track_font = get_default_font(false, 11);
 }
 
 // Control Panel font configuration access functions
+bool get_cp_use_artist_custom_font() {
+    return cfg_cp_use_artist_custom_font != 0;
+}
+
+bool get_cp_use_track_custom_font() {
+    return cfg_cp_use_track_custom_font != 0;
+}
+
 bool get_cp_use_custom_fonts() {
-    return cfg_cp_use_custom_fonts != 0;
+    return get_cp_use_artist_custom_font() || get_cp_use_track_custom_font();
 }
 
 LOGFONT get_cp_artist_font() {
@@ -339,29 +360,36 @@ LOGFONT get_cp_track_font() {
 
 void set_cp_artist_font(const LOGFONT& font) {
     cfg_cp_artist_font = font;
-    cfg_cp_use_custom_fonts = 1;
+    cfg_cp_use_artist_custom_font = 1;
 }
 
 void set_cp_track_font(const LOGFONT& font) {
     cfg_cp_track_font = font;
-    cfg_cp_use_custom_fonts = 1;
+    cfg_cp_use_track_custom_font = 1;
 }
 
 void reset_cp_fonts() {
-    // Set font configurations to new default values
-    LOGFONT default_artist = get_default_font(true, 9);   // Artist: 9pt
-    LOGFONT default_track = get_default_font(false, 11);   // Track: 11pt, bold
+    LOGFONT default_artist = get_default_font(true, 9);
+    LOGFONT default_track = get_default_font(false, 11);
     
     cfg_cp_artist_font = default_artist;
     cfg_cp_track_font = default_track;
     
-    // Disable custom fonts so control panel uses defaults from get_default_font
-    cfg_cp_use_custom_fonts = 0;
+    cfg_cp_use_artist_custom_font = 0;
+    cfg_cp_use_track_custom_font = 0;
 }
 
 // Undocked mode font accessor functions
+bool get_undocked_use_artist_custom_font() {
+    return cfg_undocked_use_artist_custom_font != 0;
+}
+
+bool get_undocked_use_track_custom_font() {
+    return cfg_undocked_use_track_custom_font != 0;
+}
+
 bool get_undocked_use_custom_fonts() {
-    return cfg_undocked_use_custom_fonts != 0;
+    return get_undocked_use_artist_custom_font() || get_undocked_use_track_custom_font();
 }
 
 LOGFONT get_undocked_artist_font() {
@@ -373,8 +401,16 @@ LOGFONT get_undocked_track_font() {
 }
 
 // Expanded mode font accessor functions
+bool get_expanded_use_artist_custom_font() {
+    return cfg_expanded_use_artist_custom_font != 0;
+}
+
+bool get_expanded_use_track_custom_font() {
+    return cfg_expanded_use_track_custom_font != 0;
+}
+
 bool get_expanded_use_custom_fonts() {
-    return cfg_expanded_use_custom_fonts != 0;
+    return get_expanded_use_artist_custom_font() || get_expanded_use_track_custom_font();
 }
 
 LOGFONT get_expanded_artist_font() {
@@ -386,8 +422,16 @@ LOGFONT get_expanded_track_font() {
 }
 
 // Compact mode font accessor functions
+bool get_compact_use_artist_custom_font() {
+    return cfg_compact_use_artist_custom_font != 0;
+}
+
+bool get_compact_use_track_custom_font() {
+    return cfg_compact_use_track_custom_font != 0;
+}
+
 bool get_compact_use_custom_fonts() {
-    return cfg_compact_use_custom_fonts != 0;
+    return get_compact_use_artist_custom_font() || get_compact_use_track_custom_font();
 }
 
 LOGFONT get_compact_artist_font() {
@@ -424,7 +468,7 @@ LOGFONT get_default_font(bool is_artist, int size) {
     lf.lfClipPrecision = CLIP_DEFAULT_PRECIS;
     lf.lfQuality = CLEARTYPE_QUALITY; // Use ClearType for better rendering
     lf.lfPitchAndFamily = DEFAULT_PITCH | FF_DONTCARE;
-    wcscpy_s(lf.lfFaceName, L"Microsoft YaHei");
+    wcscpy_s(lf.lfFaceName, L"Microsoft YaHei UI");
     
     // Force no scaling constraints
     lf.lfWidth = 0; // Let Windows calculate width
@@ -473,12 +517,17 @@ void tray_preferences::reset() {
     reset_settings();
     
     // Reset Fonts tab settings (all modes)
-    cfg_cp_use_custom_fonts = 0;      // Docked mode
-    cfg_undocked_use_custom_fonts = 0; // Undocked mode
-    cfg_expanded_use_custom_fonts = 0; // Expanded mode
-    cfg_compact_use_custom_fonts = 0;  // Compact mode
-    cfg_use_custom_fonts = 0;          // Popup notification
-    cfg_timer_use_custom_font = 0;     // Timer font
+    cfg_cp_use_artist_custom_font = 0;
+    cfg_cp_use_track_custom_font = 0;
+    cfg_undocked_use_artist_custom_font = 0;
+    cfg_undocked_use_track_custom_font = 0;
+    cfg_expanded_use_artist_custom_font = 0;
+    cfg_expanded_use_track_custom_font = 0;
+    cfg_compact_use_artist_custom_font = 0;
+    cfg_compact_use_track_custom_font = 0;
+    cfg_use_artist_custom_font = 0;
+    cfg_use_track_custom_font = 0;
+    cfg_timer_use_custom_font = 0;
     
     // Update font displays to show defaults
     update_font_displays();
@@ -514,10 +563,14 @@ INT_PTR CALLBACK tray_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, LP
         // Initialize general tab comboboxes
         HWND hPosCombo = GetDlgItem(hwnd, IDC_POPUP_POSITION_COMBO);
         SendMessage(hPosCombo, CB_ADDSTRING, 0, (LPARAM)L"Top Left");
-        SendMessage(hPosCombo, CB_ADDSTRING, 0, (LPARAM)L"Top Right");
+        SendMessage(hPosCombo, CB_ADDSTRING, 0, (LPARAM)L"Middle Left");
         SendMessage(hPosCombo, CB_ADDSTRING, 0, (LPARAM)L"Bottom Left");
+        SendMessage(hPosCombo, CB_ADDSTRING, 0, (LPARAM)L"Top Right");
+        SendMessage(hPosCombo, CB_ADDSTRING, 0, (LPARAM)L"Middle Right");
         SendMessage(hPosCombo, CB_ADDSTRING, 0, (LPARAM)L"Bottom Right");
-        SendMessage(hPosCombo, CB_SETCURSEL, cfg_popup_position, 0);
+        int pos = cfg_popup_position;
+        if (pos < 0 || pos > 5) pos = 0;
+        SendMessage(hPosCombo, CB_SETCURSEL, pos, 0);
 
         HWND hDurationCombo = GetDlgItem(hwnd, IDC_POPUP_DURATION_COMBO);
         SendMessage(hDurationCombo, CB_ADDSTRING, 0, (LPARAM)L"1 second");
@@ -1092,77 +1145,85 @@ void tray_preferences::update_font_displays() {
     if (!m_hwnd) return;
     
     // Update original artist font display
-    if (get_use_custom_fonts()) {
+    if (get_use_artist_custom_font()) {
         LOGFONT lf = get_artist_font();
         pfc::string8 font_desc = format_font_name(lf);
         uSetDlgItemText(m_hwnd, IDC_ARTIST_FONT_DISPLAY, font_desc);
     } else {
-        uSetDlgItemText(m_hwnd, IDC_ARTIST_FONT_DISPLAY, "Segoe UI, 11pt, Regular (Default)");
+        uSetDlgItemText(m_hwnd, IDC_ARTIST_FONT_DISPLAY, "Microsoft YaHei UI, 11pt, Regular (Default)");
     }
     
     // Update original track font display
-    if (get_use_custom_fonts()) {
+    if (get_use_track_custom_font()) {
         LOGFONT lf = get_track_font();
         pfc::string8 font_desc = format_font_name(lf);
         uSetDlgItemText(m_hwnd, IDC_TRACK_FONT_DISPLAY, font_desc);
     } else {
-        uSetDlgItemText(m_hwnd, IDC_TRACK_FONT_DISPLAY, "Segoe UI, 14pt, Bold (Default)");
+        uSetDlgItemText(m_hwnd, IDC_TRACK_FONT_DISPLAY, "Microsoft YaHei UI, 14pt, Bold (Default)");
     }
     
     // Update Docked Control Panel font displays
-    if (get_cp_use_custom_fonts()) {
+    if (get_cp_use_artist_custom_font()) {
         LOGFONT artist_lf = get_cp_artist_font();
         pfc::string8 artist_desc = format_font_name(artist_lf);
         uSetDlgItemText(m_hwnd, IDC_DOCKED_ARTIST_DISPLAY, artist_desc);
-        
+    } else {
+        uSetDlgItemText(m_hwnd, IDC_DOCKED_ARTIST_DISPLAY, "Microsoft YaHei UI, 9pt (Default)");
+    }
+    if (get_cp_use_track_custom_font()) {
         LOGFONT track_lf = get_cp_track_font();
         pfc::string8 track_desc = format_font_name(track_lf);
         uSetDlgItemText(m_hwnd, IDC_DOCKED_TRACK_DISPLAY, track_desc);
     } else {
-        uSetDlgItemText(m_hwnd, IDC_DOCKED_ARTIST_DISPLAY, "Microsoft YaHei, 9pt (Default)");
-        uSetDlgItemText(m_hwnd, IDC_DOCKED_TRACK_DISPLAY, "Microsoft YaHei, 11pt, Bold (Default)");
+        uSetDlgItemText(m_hwnd, IDC_DOCKED_TRACK_DISPLAY, "Microsoft YaHei UI, 11pt, Bold (Default)");
     }
     
     // Update Undocked mode font displays
-    if (cfg_undocked_use_custom_fonts) {
+    if (get_undocked_use_artist_custom_font()) {
         LOGFONT artist_lf = cfg_undocked_artist_font.get_value();
         pfc::string8 artist_desc = format_font_name(artist_lf);
         uSetDlgItemText(m_hwnd, IDC_UNDOCKED_ARTIST_DISPLAY, artist_desc);
-        
+    } else {
+        uSetDlgItemText(m_hwnd, IDC_UNDOCKED_ARTIST_DISPLAY, "Microsoft YaHei UI, 9pt (Default)");
+    }
+    if (get_undocked_use_track_custom_font()) {
         LOGFONT track_lf = cfg_undocked_track_font.get_value();
         pfc::string8 track_desc = format_font_name(track_lf);
         uSetDlgItemText(m_hwnd, IDC_UNDOCKED_TRACK_DISPLAY, track_desc);
     } else {
-        uSetDlgItemText(m_hwnd, IDC_UNDOCKED_ARTIST_DISPLAY, "Microsoft YaHei, 9pt (Default)");
-        uSetDlgItemText(m_hwnd, IDC_UNDOCKED_TRACK_DISPLAY, "Microsoft YaHei, 11pt, Bold (Default)");
+        uSetDlgItemText(m_hwnd, IDC_UNDOCKED_TRACK_DISPLAY, "Microsoft YaHei UI, 11pt, Bold (Default)");
     }
     
     // Update Expanded mode font displays
-    if (cfg_expanded_use_custom_fonts) {
+    if (get_expanded_use_artist_custom_font()) {
         LOGFONT artist_lf = cfg_expanded_artist_font.get_value();
         pfc::string8 artist_desc = format_font_name(artist_lf);
         uSetDlgItemText(m_hwnd, IDC_EXPANDED_ARTIST_DISPLAY, artist_desc);
-        
+    } else {
+        uSetDlgItemText(m_hwnd, IDC_EXPANDED_ARTIST_DISPLAY, "Microsoft YaHei UI, 9pt (Default)");
+    }
+    if (get_expanded_use_track_custom_font()) {
         LOGFONT track_lf = cfg_expanded_track_font.get_value();
         pfc::string8 track_desc = format_font_name(track_lf);
         uSetDlgItemText(m_hwnd, IDC_EXPANDED_TRACK_DISPLAY, track_desc);
     } else {
-        uSetDlgItemText(m_hwnd, IDC_EXPANDED_ARTIST_DISPLAY, "Microsoft YaHei, 9pt (Default)");
-        uSetDlgItemText(m_hwnd, IDC_EXPANDED_TRACK_DISPLAY, "Microsoft YaHei, 11pt, Bold (Default)");
+        uSetDlgItemText(m_hwnd, IDC_EXPANDED_TRACK_DISPLAY, "Microsoft YaHei UI, 11pt, Bold (Default)");
     }
     
     // Update Compact mode font displays
-    if (cfg_compact_use_custom_fonts) {
+    if (get_compact_use_artist_custom_font()) {
         LOGFONT artist_lf = cfg_compact_artist_font.get_value();
         pfc::string8 artist_desc = format_font_name(artist_lf);
         uSetDlgItemText(m_hwnd, IDC_COMPACT_ARTIST_DISPLAY, artist_desc);
-        
+    } else {
+        uSetDlgItemText(m_hwnd, IDC_COMPACT_ARTIST_DISPLAY, "Microsoft YaHei UI, 9pt (Default)");
+    }
+    if (get_compact_use_track_custom_font()) {
         LOGFONT track_lf = cfg_compact_track_font.get_value();
         pfc::string8 track_desc = format_font_name(track_lf);
         uSetDlgItemText(m_hwnd, IDC_COMPACT_TRACK_DISPLAY, track_desc);
     } else {
-        uSetDlgItemText(m_hwnd, IDC_COMPACT_ARTIST_DISPLAY, "Microsoft YaHei, 9pt (Default)");
-        uSetDlgItemText(m_hwnd, IDC_COMPACT_TRACK_DISPLAY, "Microsoft YaHei, 11pt, Bold (Default)");
+        uSetDlgItemText(m_hwnd, IDC_COMPACT_TRACK_DISPLAY, "Microsoft YaHei UI, 11pt, Bold (Default)");
     }
     
     // Update Timer font display
@@ -1171,27 +1232,82 @@ void tray_preferences::update_font_displays() {
         pfc::string8 timer_desc = format_font_name(timer_lf);
         uSetDlgItemText(m_hwnd, IDC_TIMER_FONT_DISPLAY, timer_desc);
     } else {
-        uSetDlgItemText(m_hwnd, IDC_TIMER_FONT_DISPLAY, "Microsoft YaHei, 9pt (Default)");
+        uSetDlgItemText(m_hwnd, IDC_TIMER_FONT_DISPLAY, "Microsoft YaHei UI, 9pt (Default)");
     }
 }
 
-void tray_preferences::select_artist_font() {
+static void filter_at_fonts_from_control(HWND hCtrl) {
+    wchar_t className[64] = {};
+    GetClassName(hCtrl, className, 64);
+    if (_wcsicmp(className, L"COMBOBOX") == 0) {
+        int count = (int)SendMessage(hCtrl, CB_GETCOUNT, 0, 0);
+        if (count > 0 && count != CB_ERR) {
+            for (int i = count - 1; i >= 0; --i) {
+                wchar_t text[256] = {};
+                if (SendMessage(hCtrl, CB_GETLBTEXT, i, (LPARAM)text) != CB_ERR) {
+                    if (text[0] == L'@') {
+                        SendMessage(hCtrl, CB_DELETESTRING, i, 0);
+                    }
+                }
+            }
+        }
+    } else if (_wcsicmp(className, L"LISTBOX") == 0) {
+        int count = (int)SendMessage(hCtrl, LB_GETCOUNT, 0, 0);
+        if (count > 0 && count != LB_ERR) {
+            for (int i = count - 1; i >= 0; --i) {
+                wchar_t text[256] = {};
+                if (SendMessage(hCtrl, LB_GETTEXT, i, (LPARAM)text) != LB_ERR) {
+                    if (text[0] == L'@') {
+                        SendMessage(hCtrl, LB_DELETESTRING, i, 0);
+                    }
+                }
+            }
+        }
+    }
+}
+
+static BOOL CALLBACK FilterAtFontsChildEnumProc(HWND hwnd, LPARAM lParam) {
+    filter_at_fonts_from_control(hwnd);
+    return TRUE;
+}
+
+static UINT_PTR CALLBACK FontHookProc(HWND hwndDlg, UINT msg, WPARAM wp, LPARAM lp) {
+    if (msg == WM_INITDIALOG || (msg == WM_COMMAND && HIWORD(wp) == CBN_SELCHANGE)) {
+        EnumChildWindows(hwndDlg, FilterAtFontsChildEnumProc, 0);
+    }
+    return 0;
+}
+
+static bool show_font_picker(HWND hwndOwner, LOGFONT& lf) {
     CHOOSEFONT cf = {};
+    cf.lStructSize = sizeof(CHOOSEFONT);
+    cf.hwndOwner = hwndOwner;
+    cf.lpLogFont = &lf;
+    cf.Flags = CF_INITTOLOGFONTSTRUCT | CF_SCREENFONTS | CF_ENABLEHOOK;
+    cf.lpfnHook = FontHookProc;
+    
+    if (ChooseFont(&cf)) {
+        if (lf.lfFaceName[0] == L'@') {
+            wchar_t temp[LF_FACESIZE] = {};
+            wcscpy_s(temp, lf.lfFaceName + 1);
+            wcscpy_s(lf.lfFaceName, temp);
+        }
+        return true;
+    }
+    return false;
+}
+
+void tray_preferences::select_artist_font() {
     LOGFONT lf;
     
     // Get current font or default
-    if (get_use_custom_fonts()) {
+    if (get_use_artist_custom_font()) {
         lf = get_artist_font();
     } else {
         lf = get_default_font(true, 11);
     }
     
-    cf.lStructSize = sizeof(CHOOSEFONT);
-    cf.hwndOwner = m_hwnd;
-    cf.lpLogFont = &lf;
-    cf.Flags = CF_INITTOLOGFONTSTRUCT | CF_SCREENFONTS;
-    
-    if (ChooseFont(&cf)) {
+    if (show_font_picker(m_hwnd, lf)) {
         set_artist_font(lf);
         update_font_displays();
         on_changed();
@@ -1199,22 +1315,16 @@ void tray_preferences::select_artist_font() {
 }
 
 void tray_preferences::select_track_font() {
-    CHOOSEFONT cf = {};
     LOGFONT lf;
     
     // Get current font or default
-    if (get_use_custom_fonts()) {
+    if (get_use_track_custom_font()) {
         lf = get_track_font();
     } else {
         lf = get_default_font(false, 14);
     }
     
-    cf.lStructSize = sizeof(CHOOSEFONT);
-    cf.hwndOwner = m_hwnd;
-    cf.lpLogFont = &lf;
-    cf.Flags = CF_INITTOLOGFONTSTRUCT | CF_SCREENFONTS;
-    
-    if (ChooseFont(&cf)) {
+    if (show_font_picker(m_hwnd, lf)) {
         set_track_font(lf);
         update_font_displays();
         on_changed();
@@ -1228,22 +1338,16 @@ void tray_preferences::reset_fonts_to_default() {
 }
 
 void tray_preferences::select_cp_artist_font() {
-    CHOOSEFONT cf = {};
     LOGFONT lf;
     
     // Get current font or default
-    if (get_cp_use_custom_fonts()) {
+    if (get_cp_use_artist_custom_font()) {
         lf = get_cp_artist_font();
     } else {
         lf = get_default_font(true, 13);
     }
     
-    cf.lStructSize = sizeof(CHOOSEFONT);
-    cf.hwndOwner = m_hwnd;
-    cf.lpLogFont = &lf;
-    cf.Flags = CF_INITTOLOGFONTSTRUCT | CF_SCREENFONTS;
-    
-    if (ChooseFont(&cf)) {
+    if (show_font_picker(m_hwnd, lf)) {
         set_cp_artist_font(lf);
         update_font_displays();
         on_changed();
@@ -1251,22 +1355,16 @@ void tray_preferences::select_cp_artist_font() {
 }
 
 void tray_preferences::select_cp_track_font() {
-    CHOOSEFONT cf = {};
     LOGFONT lf;
     
     // Get current font or default
-    if (get_cp_use_custom_fonts()) {
+    if (get_cp_use_track_custom_font()) {
         lf = get_cp_track_font();
     } else {
         lf = get_default_font(false, 14);
     }
     
-    cf.lStructSize = sizeof(CHOOSEFONT);
-    cf.hwndOwner = m_hwnd;
-    cf.lpLogFont = &lf;
-    cf.Flags = CF_INITTOLOGFONTSTRUCT | CF_SCREENFONTS;
-    
-    if (ChooseFont(&cf)) {
+    if (show_font_picker(m_hwnd, lf)) {
         set_cp_track_font(lf);
         update_font_displays();
         on_changed();
@@ -1280,27 +1378,26 @@ void tray_preferences::reset_cp_fonts_to_default() {
 }
 
 void tray_preferences::select_font_for_mode(int mode, bool is_artist) {
-    CHOOSEFONT cf = {};
     LOGFONT lf;
     
     // Get current font or default based on mode
     switch (mode) {
     case 1: // Undocked
-        if (cfg_undocked_use_custom_fonts) {
+        if (is_artist ? get_undocked_use_artist_custom_font() : get_undocked_use_track_custom_font()) {
             lf = is_artist ? cfg_undocked_artist_font.get_value() : cfg_undocked_track_font.get_value();
         } else {
             lf = get_default_font(is_artist, is_artist ? 11 : 14);
         }
         break;
     case 2: // Expanded
-        if (cfg_expanded_use_custom_fonts) {
+        if (is_artist ? get_expanded_use_artist_custom_font() : get_expanded_use_track_custom_font()) {
             lf = is_artist ? cfg_expanded_artist_font.get_value() : cfg_expanded_track_font.get_value();
         } else {
             lf = get_default_font(is_artist, is_artist ? 11 : 14);
         }
         break;
     case 3: // Compact
-        if (cfg_compact_use_custom_fonts) {
+        if (is_artist ? get_compact_use_artist_custom_font() : get_compact_use_track_custom_font()) {
             lf = is_artist ? cfg_compact_artist_font.get_value() : cfg_compact_track_font.get_value();
         } else {
             lf = get_default_font(is_artist, is_artist ? 11 : 14);
@@ -1310,37 +1407,35 @@ void tray_preferences::select_font_for_mode(int mode, bool is_artist) {
         return;
     }
     
-    cf.lStructSize = sizeof(CHOOSEFONT);
-    cf.hwndOwner = m_hwnd;
-    cf.lpLogFont = &lf;
-    cf.Flags = CF_INITTOLOGFONTSTRUCT | CF_SCREENFONTS;
-    
-    if (ChooseFont(&cf)) {
+    if (show_font_picker(m_hwnd, lf)) {
         // Save font based on mode
         switch (mode) {
         case 1: // Undocked
             if (is_artist) {
                 cfg_undocked_artist_font = lf;
+                cfg_undocked_use_artist_custom_font = 1;
             } else {
                 cfg_undocked_track_font = lf;
+                cfg_undocked_use_track_custom_font = 1;
             }
-            cfg_undocked_use_custom_fonts = 1;
             break;
         case 2: // Expanded
             if (is_artist) {
                 cfg_expanded_artist_font = lf;
+                cfg_expanded_use_artist_custom_font = 1;
             } else {
                 cfg_expanded_track_font = lf;
+                cfg_expanded_use_track_custom_font = 1;
             }
-            cfg_expanded_use_custom_fonts = 1;
             break;
         case 3: // Compact
             if (is_artist) {
                 cfg_compact_artist_font = lf;
+                cfg_compact_use_artist_custom_font = 1;
             } else {
                 cfg_compact_track_font = lf;
+                cfg_compact_use_track_custom_font = 1;
             }
-            cfg_compact_use_custom_fonts = 1;
             break;
         }
         
@@ -1350,7 +1445,6 @@ void tray_preferences::select_font_for_mode(int mode, bool is_artist) {
 }
 
 void tray_preferences::select_timer_font() {
-    CHOOSEFONT cf = {};
     LOGFONT lf;
     
     // Get current timer font or default
@@ -1360,12 +1454,7 @@ void tray_preferences::select_timer_font() {
         lf = get_default_font(true, 9); // 9pt like artist font
     }
     
-    cf.lStructSize = sizeof(CHOOSEFONT);
-    cf.hwndOwner = m_hwnd;
-    cf.lpLogFont = &lf;
-    cf.Flags = CF_INITTOLOGFONTSTRUCT | CF_SCREENFONTS;
-    
-    if (ChooseFont(&cf)) {
+    if (show_font_picker(m_hwnd, lf)) {
         cfg_timer_font = lf;
         cfg_timer_use_custom_font = 1;
         
@@ -1379,19 +1468,23 @@ void tray_preferences::select_timer_font() {
 
 void tray_preferences::reset_all_fonts_to_default() {
     // Reset Docked mode fonts
-    cfg_cp_use_custom_fonts = 0;
+    reset_cp_fonts();
     
     // Reset Undocked mode fonts
-    cfg_undocked_use_custom_fonts = 0;
+    cfg_undocked_use_artist_custom_font = 0;
+    cfg_undocked_use_track_custom_font = 0;
     
     // Reset Expanded mode fonts
-    cfg_expanded_use_custom_fonts = 0;
+    cfg_expanded_use_artist_custom_font = 0;
+    cfg_expanded_use_track_custom_font = 0;
     
     // Reset Compact mode fonts
-    cfg_compact_use_custom_fonts = 0;
+    cfg_compact_use_artist_custom_font = 0;
+    cfg_compact_use_track_custom_font = 0;
     
     // Also reset the popup notification fonts
-    cfg_use_custom_fonts = 0;
+    cfg_use_artist_custom_font = 0;
+    cfg_use_track_custom_font = 0;
     
     // Update displays and notify of change
     update_font_displays();
