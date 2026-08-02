@@ -384,6 +384,7 @@ void popup_window::position_popup() {
     int x;
     int y;
     int popup_position = get_popup_position();
+    if (popup_position < 0 || popup_position > 5) popup_position = 0;
     bool is_right_side = (popup_position >= 3); // 3, 4, 5 are right-side positions
 
     // Set X position based on left/right side
@@ -1093,21 +1094,22 @@ void popup_window::draw_track_info(HDC hdc, const RECT& client_rect) {
     // Use Docked Control Panel fonts for consistency between popup and docked panel
     HFONT artist_font, title_font;
     
-    if (get_cp_use_custom_fonts()) {
-        // Use Docked Control Panel custom fonts
+    if (get_cp_use_artist_custom_font()) {
         LOGFONT artist_lf = get_cp_artist_font();
-        LOGFONT title_lf = get_cp_track_font();
-        
         artist_font = CreateFontIndirect(&artist_lf);
-        title_font = CreateFontIndirect(&title_lf);
     } else {
-        // Default fonts matching Docked Control Panel defaults (9pt artist, 11pt track)
-        title_font = CreateFont(get_dpi_scaled_font_height(11), 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
-                                DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                                DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Microsoft YaHei");
         artist_font = CreateFont(get_dpi_scaled_font_height(9), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
                                  DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                                 DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Microsoft YaHei");
+                                 DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Microsoft YaHei UI");
+    }
+
+    if (get_cp_use_track_custom_font()) {
+        LOGFONT title_lf = get_cp_track_font();
+        title_font = CreateFontIndirect(&title_lf);
+    } else {
+        title_font = CreateFont(get_dpi_scaled_font_height(11), 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+                                DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                                DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Microsoft YaHei UI");
     }
     
     bool show_art = get_show_cover_art();
@@ -1144,6 +1146,7 @@ void popup_window::start_slide_in_animation() {
 
     // Determine if sliding from right or left based on popup position
     int popup_position = get_popup_position();
+    if (popup_position < 0 || popup_position > 5) popup_position = 0;
     bool is_right_side = (popup_position >= 3);
 
     // Get screen width for right-side calculations
@@ -1177,6 +1180,7 @@ void popup_window::start_slide_out_animation() {
 
     // Determine if sliding to right or left based on popup position
     int popup_position = get_popup_position();
+    if (popup_position < 0 || popup_position > 5) popup_position = 0;
     bool is_right_side = (popup_position >= 3);
 
     // Get screen width for right-side calculations
