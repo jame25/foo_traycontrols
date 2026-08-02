@@ -1882,54 +1882,66 @@ void control_panel::load_fonts() {
     // Select fonts based on current display mode
     if (m_is_artwork_expanded) {
         // Expanded artwork mode
-        if (get_expanded_use_custom_fonts()) {
+        if (get_expanded_use_artist_custom_font()) {
             LOGFONT artist_lf = get_expanded_artist_font();
-            LOGFONT track_lf = get_expanded_track_font();
             m_artist_font = CreateFontIndirect(&artist_lf);
-            m_track_font = CreateFontIndirect(&track_lf);
         } else {
             LOGFONT artist_lf = get_default_font(true, 9);
-            LOGFONT track_lf = get_default_font(false, 11);
             m_artist_font = CreateFontIndirect(&artist_lf);
+        }
+        if (get_expanded_use_track_custom_font()) {
+            LOGFONT track_lf = get_expanded_track_font();
+            m_track_font = CreateFontIndirect(&track_lf);
+        } else {
+            LOGFONT track_lf = get_default_font(false, 11);
             m_track_font = CreateFontIndirect(&track_lf);
         }
     } else if (m_is_compact_mode) {
         // Compact mode
-        if (get_compact_use_custom_fonts()) {
+        if (get_compact_use_artist_custom_font()) {
             LOGFONT artist_lf = get_compact_artist_font();
-            LOGFONT track_lf = get_compact_track_font();
             m_artist_font = CreateFontIndirect(&artist_lf);
-            m_track_font = CreateFontIndirect(&track_lf);
         } else {
             LOGFONT artist_lf = get_default_font(true, 9);
-            LOGFONT track_lf = get_default_font(false, 11);
             m_artist_font = CreateFontIndirect(&artist_lf);
+        }
+        if (get_compact_use_track_custom_font()) {
+            LOGFONT track_lf = get_compact_track_font();
+            m_track_font = CreateFontIndirect(&track_lf);
+        } else {
+            LOGFONT track_lf = get_default_font(false, 11);
             m_track_font = CreateFontIndirect(&track_lf);
         }
     } else if (m_is_undocked) {
         // Undocked mode
-        if (get_undocked_use_custom_fonts()) {
+        if (get_undocked_use_artist_custom_font()) {
             LOGFONT artist_lf = get_undocked_artist_font();
-            LOGFONT track_lf = get_undocked_track_font();
             m_artist_font = CreateFontIndirect(&artist_lf);
-            m_track_font = CreateFontIndirect(&track_lf);
         } else {
             LOGFONT artist_lf = get_default_font(true, 9);
-            LOGFONT track_lf = get_default_font(false, 11);
             m_artist_font = CreateFontIndirect(&artist_lf);
+        }
+        if (get_undocked_use_track_custom_font()) {
+            LOGFONT track_lf = get_undocked_track_font();
+            m_track_font = CreateFontIndirect(&track_lf);
+        } else {
+            LOGFONT track_lf = get_default_font(false, 11);
             m_track_font = CreateFontIndirect(&track_lf);
         }
     } else {
         // Docked mode (default)
-        if (get_cp_use_custom_fonts()) {
+        if (get_cp_use_artist_custom_font()) {
             LOGFONT artist_lf = get_cp_artist_font();
-            LOGFONT track_lf = get_cp_track_font();
             m_artist_font = CreateFontIndirect(&artist_lf);
-            m_track_font = CreateFontIndirect(&track_lf);
         } else {
             LOGFONT artist_lf = get_default_font(true, 9);
-            LOGFONT track_lf = get_default_font(false, 11);
             m_artist_font = CreateFontIndirect(&artist_lf);
+        }
+        if (get_cp_use_track_custom_font()) {
+            LOGFONT track_lf = get_cp_track_font();
+            m_track_font = CreateFontIndirect(&track_lf);
+        } else {
+            LOGFONT track_lf = get_default_font(false, 11);
             m_track_font = CreateFontIndirect(&track_lf);
         }
     }
@@ -5058,7 +5070,7 @@ void control_panel::paint_compact_mode(HDC hdc, const RECT& rect) {
     if (!title_font) {
         title_font = CreateFont(get_dpi_scaled_font_height(15), 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
                                   DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                                  DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Microsoft YaHei");
+                                  DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Microsoft YaHei UI");
         need_delete_title = true;
     }
     HFONT old_font = (HFONT)SelectObject(hdc, title_font);
@@ -5068,19 +5080,22 @@ void control_panel::paint_compact_mode(HDC hdc, const RECT& rect) {
     if (!artist_font) {
         artist_font = CreateFont(get_dpi_scaled_font_height(12), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
                                    DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                                   DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Microsoft YaHei");
+                                   DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Microsoft YaHei UI");
         need_delete_artist = true;
     }
 
     // Draw track title and artist text only when control overlay is not active
     if (!m_compact_controls_visible) {
-        RECT title_rect = {text_left, margin - (int)(window_height * 0.10), text_right, window_height / 2 + margin - (int)(window_height * 0.10)};
+        int title_bottom = margin + (int)(window_height * 0.36);
+        RECT title_rect = {text_left, margin, text_right, title_bottom};
         pfc::stringcvt::string_wide_from_utf8 wide_title(m_current_title.c_str());
         DrawText(hdc, wide_title.get_ptr(), -1, &title_rect, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
         
         SelectObject(hdc, artist_font);
         
-        RECT artist_rect = {text_left, window_height / 2 + margin - (int)(window_height * 0.15), text_right, window_height - margin - (int)(window_height * 0.15)};
+        int artist_top = margin + (int)(window_height * 0.31);
+        int artist_bottom = margin + (int)(window_height * 0.63);
+        RECT artist_rect = {text_left, artist_top, text_right, artist_bottom};
         pfc::stringcvt::string_wide_from_utf8 wide_artist(m_current_artist.c_str());
         SetTextColor(hdc, m_text_dim_color); // Slightly dimmer for artist
         DrawText(hdc, wide_artist.get_ptr(), -1, &artist_rect, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
