@@ -35,6 +35,8 @@ void format_display_lines(pfc::string8& line1_out, pfc::string8& line2_out);
 
 // Font configuration functions
 bool get_use_custom_fonts();
+bool get_use_artist_custom_font();
+bool get_use_track_custom_font();
 LOGFONT get_artist_font();
 LOGFONT get_track_font();
 void set_artist_font(const LOGFONT& font);
@@ -44,6 +46,8 @@ LOGFONT get_default_font(bool is_artist, int size);
 
 // Docked Control Panel font configuration functions
 bool get_cp_use_custom_fonts();
+bool get_cp_use_artist_custom_font();
+bool get_cp_use_track_custom_font();
 LOGFONT get_cp_artist_font();
 LOGFONT get_cp_track_font();
 void set_cp_artist_font(const LOGFONT& font);
@@ -52,16 +56,22 @@ void reset_cp_fonts();
 
 // Undocked mode font configuration functions
 bool get_undocked_use_custom_fonts();
+bool get_undocked_use_artist_custom_font();
+bool get_undocked_use_track_custom_font();
 LOGFONT get_undocked_artist_font();
 LOGFONT get_undocked_track_font();
 
 // Expanded mode font configuration functions  
 bool get_expanded_use_custom_fonts();
+bool get_expanded_use_artist_custom_font();
+bool get_expanded_use_track_custom_font();
 LOGFONT get_expanded_artist_font();
 LOGFONT get_expanded_track_font();
 
 // Compact mode font configuration functions
 bool get_compact_use_custom_fonts();
+bool get_compact_use_artist_custom_font();
+bool get_compact_use_track_custom_font();
 LOGFONT get_compact_artist_font();
 LOGFONT get_compact_track_font();
 
