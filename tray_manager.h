@@ -40,11 +40,13 @@ private:
     bool m_was_visible;
     bool m_was_minimized;
     bool m_processing_minimize;
+    bool m_ignore_next_lbuttonup;
     WNDPROC m_original_wndproc;
     // Mouse hook removed - was causing conflicts with artwork downloading
     
-    // Timer for periodic tooltip updates
+    // Timer for periodic tooltip updates and single-click disambiguation
     static const UINT TOOLTIP_TIMER_ID = 2001;
+    static const UINT TRAY_SINGLE_CLICK_TIMER_ID = 2002;
     pfc::string8 m_last_track_path;
     pfc::string8 m_last_track_metadata;
 
@@ -60,6 +62,7 @@ private:
     static LRESULT CALLBACK tray_window_proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam);
     
     // Tray functionality
+    void execute_single_click();
     void show_context_menu(int x, int y);
     void handle_menu_command(int cmd);
     bool is_cursor_over_tray_icon();
@@ -68,4 +71,5 @@ private:
     void check_for_track_changes();
     void check_window_visibility();
     static VOID CALLBACK tooltip_timer_proc(HWND hwnd, UINT msg, UINT_PTR timer_id, DWORD time);
+    static VOID CALLBACK single_click_timer_proc(HWND hwnd, UINT msg, UINT_PTR timer_id, DWORD time);
 };
