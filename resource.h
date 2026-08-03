@@ -91,6 +91,7 @@
 #define IDC_COVER_STYLE_COMBO        278
 #define IDC_BACKGROUND_STYLE_LABEL   279
 #define IDC_BACKGROUND_STYLE_COMBO   284
+#define IDC_SHOW_VOLUME_FEEDBACK     286
 
 // Preview button for popup notifications
 #define IDC_PREVIEW_POPUP_BTN        285
