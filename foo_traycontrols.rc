@@ -71,6 +71,8 @@ BEGIN
     LTEXT           "Background Style:", IDC_BACKGROUND_STYLE_LABEL, 15, 112, 85, 12
     COMBOBOX        IDC_BACKGROUND_STYLE_COMBO, 105, 110, 110, 100, CBS_DROPDOWNLIST | CBS_HASSTRINGS | WS_VSCROLL | WS_TABSTOP
 
+    CONTROL         "Show volume visual feedback", IDC_SHOW_VOLUME_FEEDBACK, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 15, 135, 200, 10
+
 
     // === MiniPlayer Tab Controls (hidden initially) ===
     
