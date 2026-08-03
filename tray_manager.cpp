@@ -6,6 +6,7 @@
 #include "preferences.h"
 #include "popup_window.h"
 #include "control_panel.h"
+#include "volume_popup.h"
 
 // External declaration from main.cpp
 extern HINSTANCE g_hIns;
@@ -658,16 +659,39 @@ LRESULT CALLBACK tray_manager::low_level_mouse_proc(int nCode, WPARAM wParam, LP
             short wheelDelta = HIWORD(hookData->mouseData);
 
             try {
-                // Use foobar2000's native volume stepping, which respects
-                // the user's configured step size and perceptual curve.
+                // Adjust volume with mouse wheel using position-based stepping
+                // matching Now Bar Control Panel volume controls (position_step = 20/1000).
                 static_api_ptr_t<playback_control> pc;
-                if (wheelDelta > 0)
-                    pc->volume_up();
-                else
-                    pc->volume_down();
+                constexpr float position_step = 20.0f / 1000.0f;
+                float current_db = pc->get_volume();
+
+                // Convert dB to slider position (0.0 to 1.0): position = 2^(dB/10)
+                double current_pos = std::pow(2.0, static_cast<double>(current_db) / 10.0);
+                if (current_pos < 0.0) current_pos = 0.0;
+                if (current_pos > 1.0) current_pos = 1.0;
+
+                double new_pos = current_pos + ((wheelDelta > 0) ? position_step : -position_step);
+                if (new_pos < 0.0) new_pos = 0.0;
+                if (new_pos > 1.0) new_pos = 1.0;
+
+                // Convert slider position to dB: dB = 10 * log2(position)
+                float new_volume_db = -100.0f;
+                if (new_pos > 0.0) {
+                    new_volume_db = static_cast<float>(10.0 * std::log2(new_pos));
+                    if (new_volume_db < -100.0f) new_volume_db = -100.0f;
+                    if (new_volume_db > 0.0f) new_volume_db = 0.0f;
+                }
+
+                pc->set_volume(new_volume_db);
+
+                if (get_show_volume_feedback()) {
+                    volume_popup::get_instance().show_feedback();
+                }
             } catch (...) {
                 // Ignore volume control errors
             }
+
+
 
             // Don't consume the message - let other apps handle it too
             // return 1; // Uncomment to consume the message
