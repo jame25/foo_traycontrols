@@ -45,6 +45,7 @@ tray_manager::tray_manager()
     , m_was_visible(true)
     , m_was_minimized(false)
     , m_processing_minimize(false)
+    , m_ignore_next_lbuttonup(false)
     , m_original_wndproc(nullptr)
 {
     memset(&m_nid, 0, sizeof(m_nid));
@@ -162,6 +163,7 @@ void tray_manager::cleanup() {
     }
 
     if (m_tray_window) {
+        KillTimer(m_tray_window, TRAY_SINGLE_CLICK_TIMER_ID);
         DestroyWindow(m_tray_window);
         m_tray_window = nullptr;
     }
@@ -383,7 +385,17 @@ void tray_manager::minimize_to_tray() {
 
 void tray_manager::restore_from_tray() {
     if (m_main_window && m_initialized) {
-        ShowWindow(m_main_window, SW_RESTORE);
+        // Hide control panel if visible
+        auto& panel = control_panel::get_instance();
+        if (panel.get_control_window() && IsWindowVisible(panel.get_control_window())) {
+            panel.hide_control_panel_immediate();
+        }
+
+        if (IsIconic(m_main_window)) {
+            ShowWindow(m_main_window, SW_RESTORE);
+        } else {
+            ShowWindow(m_main_window, SW_SHOW);
+        }
         SetForegroundWindow(m_main_window);
         // Keep tray icon visible, just update state
         m_was_visible = true;
@@ -539,6 +551,40 @@ LRESULT CALLBACK tray_manager::window_proc(HWND hwnd, UINT msg, WPARAM wparam, L
     return DefWindowProc(hwnd, msg, wparam, lparam);
 }
 
+void tray_manager::execute_single_click() {
+    auto& panel = control_panel::get_instance();
+    bool is_visible = panel.get_control_window() && IsWindowVisible(panel.get_control_window());
+    bool is_miniplayer = panel.is_undocked() || panel.is_artwork_expanded() || panel.is_compact_mode();
+
+    if (is_visible && is_miniplayer) {
+        // Check if MiniPlayer is slid to side - if so, slide it back
+        if (panel.is_slid_to_side()) {
+            panel.slide_back_from_side();
+        }
+        // If "Always Slide-to-Side" is enabled, slide instead of hiding
+        else if (get_always_slide_to_side()) {
+            panel.slide_to_side();
+        } else {
+            // Miniplayer (any non-docked mode) is visible - hide it and remember state/position
+            panel.hide_and_remember_miniplayer();
+        }
+    } else if (is_visible) {
+        // Docked panel is visible - hide it
+        panel.hide_control_panel_immediate();
+    } else {
+        // Nothing visible - always show docked panel (ignore saved MiniPlayer state)
+        // User can restore MiniPlayer via the tray menu "Open MiniPlayer" option
+        panel.show_control_panel_simple();
+    }
+}
+
+VOID CALLBACK tray_manager::single_click_timer_proc(HWND hwnd, UINT msg, UINT_PTR timer_id, DWORD time) {
+    KillTimer(hwnd, TRAY_SINGLE_CLICK_TIMER_ID);
+    if (s_instance && s_instance->m_initialized) {
+        s_instance->execute_single_click();
+    }
+}
+
 // Dedicated window procedure for tray messages
 LRESULT CALLBACK tray_manager::tray_window_proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
     if (s_instance && s_instance->m_initialized) {
@@ -548,6 +594,8 @@ LRESULT CALLBACK tray_manager::tray_window_proc(HWND hwnd, UINT msg, WPARAM wpar
             case WM_RBUTTONUP:
             case WM_CONTEXTMENU:
                 {
+                    KillTimer(hwnd, TRAY_SINGLE_CLICK_TIMER_ID);
+                    s_instance->m_ignore_next_lbuttonup = false;
                     POINT pt;
                     GetCursorPos(&pt);
                     s_instance->show_context_menu(pt.x, pt.y);
@@ -555,37 +603,19 @@ LRESULT CALLBACK tray_manager::tray_window_proc(HWND hwnd, UINT msg, WPARAM wpar
                 return 0;
                 
             case WM_LBUTTONUP:
-                // Single-click behavior for tray icon
-                {
-                    auto& panel = control_panel::get_instance();
-                    bool is_visible = panel.get_control_window() && IsWindowVisible(panel.get_control_window());
-                    bool is_miniplayer = panel.is_undocked() || panel.is_artwork_expanded() || panel.is_compact_mode();
-
-                    if (is_visible && is_miniplayer) {
-                        // Check if MiniPlayer is slid to side - if so, slide it back
-                        if (panel.is_slid_to_side()) {
-                            panel.slide_back_from_side();
-                        }
-                        // If "Always Slide-to-Side" is enabled, slide instead of hiding
-                        else if (get_always_slide_to_side()) {
-                            panel.slide_to_side();
-                        } else {
-                            // Miniplayer (any non-docked mode) is visible - hide it and remember state/position
-                            panel.hide_and_remember_miniplayer();
-                        }
-                    } else if (is_visible) {
-                        // Docked panel is visible - hide it
-                        panel.hide_control_panel_immediate();
-                    } else {
-                        // Nothing visible - always show docked panel (ignore saved MiniPlayer state)
-                        // User can restore MiniPlayer via the tray menu "Open MiniPlayer" option
-                        panel.show_control_panel_simple();
-                    }
+                if (s_instance->m_ignore_next_lbuttonup) {
+                    s_instance->m_ignore_next_lbuttonup = false;
+                    return 0;
                 }
+                // Defer single-click action with a fast 100ms TIMERPROC callback so single-click opens instantly (~100ms) without delay or double-click flash
+                SetTimer(hwnd, TRAY_SINGLE_CLICK_TIMER_ID, 100, single_click_timer_proc);
                 return 0;
                 
             case WM_LBUTTONDBLCLK:
-                // Double-click functionality removed - no action
+                // Cancel pending single-click timer and set flag to ignore the trailing WM_LBUTTONUP from the second click
+                KillTimer(hwnd, TRAY_SINGLE_CLICK_TIMER_ID);
+                s_instance->m_ignore_next_lbuttonup = true;
+                s_instance->restore_from_tray();
                 return 0;
                 
             }
