@@ -23,6 +23,7 @@ static cfg_int cfg_show_cover_art(GUID{0x12345695, 0x9abc, 0xdef0, {0x12, 0x34, 
 static cfg_int cfg_cover_margin(GUID{0x12345696, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 1); // 1=Yes, 0=No
 static cfg_int cfg_cover_style(GUID{0x12345697, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0); // 0=Square, 1=Rounded
 static cfg_int cfg_background_style(GUID{0x12345698, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0); // 0=Solid, 1=Artwork Colors, 2=Blurred Artwork
+static cfg_int cfg_show_volume_feedback(GUID{0x12345699, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 1); // 1=Yes, 0=No
 
 // MiniPlayer mode size configuration
 static cfg_int cfg_miniplayer_undocked_width(GUID{0x123456D1, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 400);
@@ -262,6 +263,10 @@ int get_background_style() {
     int style = cfg_background_style;
     if (style < 0 || style > 2) style = 0;
     return style;
+}
+
+bool get_show_volume_feedback() {
+    return cfg_show_volume_feedback != 0;
 }
 
 pfc::string8 get_line1_format() {
@@ -642,6 +647,8 @@ INT_PTR CALLBACK tray_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, LP
         SendMessage(hBgStyleCombo, CB_ADDSTRING, 0, (LPARAM)L"Blurred Artwork");
         SendMessage(hBgStyleCombo, CB_SETCURSEL, cfg_background_style, 0);
 
+        CheckDlgButton(hwnd, IDC_SHOW_VOLUME_FEEDBACK, cfg_show_volume_feedback ? BST_CHECKED : BST_UNCHECKED);
+
         // Initialize display format edit fields
         uSetDlgItemText(hwnd, IDC_LINE1_FORMAT_EDIT, cfg_line1_format);
         uSetDlgItemText(hwnd, IDC_LINE2_FORMAT_EDIT, cfg_line2_format);
@@ -725,10 +732,12 @@ INT_PTR CALLBACK tray_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, LP
         case IDC_DISABLE_SLIDE_TO_SIDE:
         case IDC_ALWAYS_SLIDE_TO_SIDE:
         case IDC_USE_ROUNDED_CORNERS:
+        case IDC_SHOW_VOLUME_FEEDBACK:
             if (HIWORD(wp) == BN_CLICKED) {
                 p_this->on_changed();
             }
             break;
+
 
         case IDC_LINE1_FORMAT_EDIT:
         case IDC_LINE2_FORMAT_EDIT:
@@ -1002,12 +1011,15 @@ bool tray_preferences::has_changed() {
     int current_disable_miniplayer = (IsDlgButtonChecked(m_hwnd, IDC_DISABLE_MINIPLAYER) == BST_CHECKED) ? 1 : 0;
     int current_disable_slide = (IsDlgButtonChecked(m_hwnd, IDC_DISABLE_SLIDE_TO_SIDE) == BST_CHECKED) ? 1 : 0;
     int current_popup_position = (int)SendMessage(GetDlgItem(m_hwnd, IDC_POPUP_POSITION_COMBO), CB_GETCURSEL, 0, 0);
+    int current_show_volume_feedback = (IsDlgButtonChecked(m_hwnd, IDC_SHOW_VOLUME_FEEDBACK) == BST_CHECKED) ? 1 : 0;
     
     return (current_minimize_to_tray != cfg_always_minimize_to_tray) || 
            (current_show_popup != cfg_show_popup_notification) ||
            (current_disable_miniplayer != cfg_disable_miniplayer) ||
            (current_disable_slide != cfg_disable_slide_to_side) ||
-           (current_popup_position != cfg_popup_position);
+           (current_popup_position != cfg_popup_position) ||
+           (current_show_volume_feedback != cfg_show_volume_feedback);
+
 }
 
 void tray_preferences::apply_settings() {
@@ -1042,6 +1054,7 @@ void tray_preferences::apply_settings() {
         cfg_cover_margin = (cover_margin_sel == 0) ? 1 : 0;
         cfg_cover_style = (int)SendMessage(GetDlgItem(m_hwnd, IDC_COVER_STYLE_COMBO), CB_GETCURSEL, 0, 0);
         cfg_background_style = (int)SendMessage(GetDlgItem(m_hwnd, IDC_BACKGROUND_STYLE_COMBO), CB_GETCURSEL, 0, 0);
+        cfg_show_volume_feedback = (IsDlgButtonChecked(m_hwnd, IDC_SHOW_VOLUME_FEEDBACK) == BST_CHECKED) ? 1 : 0;
 
         // Save display format strings
         {
@@ -1090,6 +1103,7 @@ void tray_preferences::reset_settings() {
         cfg_cover_margin = 1;             // Default: Yes (1)
         cfg_cover_style = 0;              // Default: Square (0)
         cfg_background_style = 0;         // Default: Solid (0)
+        cfg_show_volume_feedback = 1;     // Default: Yes (1)
         cfg_line1_format = "%title%";     // Default: title
         cfg_line2_format = "%artist%";    // Default: artist
 
@@ -1115,6 +1129,7 @@ void tray_preferences::reset_settings() {
         SendMessage(GetDlgItem(m_hwnd, IDC_COVER_MARGIN_COMBO), CB_SETCURSEL, 0, 0);          // Yes
         SendMessage(GetDlgItem(m_hwnd, IDC_COVER_STYLE_COMBO), CB_SETCURSEL, 0, 0);           // Square
         SendMessage(GetDlgItem(m_hwnd, IDC_BACKGROUND_STYLE_COMBO), CB_SETCURSEL, 0, 0);      // Solid
+        CheckDlgButton(m_hwnd, IDC_SHOW_VOLUME_FEEDBACK, BST_CHECKED);
         uSetDlgItemText(m_hwnd, IDC_LINE1_FORMAT_EDIT, "%title%");
         uSetDlgItemText(m_hwnd, IDC_LINE2_FORMAT_EDIT, "%artist%");
 
@@ -1595,7 +1610,8 @@ void tray_preferences::switch_tab(int tab) {
         IDC_COVER_STYLE_LABEL,
         IDC_COVER_STYLE_COMBO,
         IDC_BACKGROUND_STYLE_LABEL,
-        IDC_BACKGROUND_STYLE_COMBO
+        IDC_BACKGROUND_STYLE_COMBO,
+        IDC_SHOW_VOLUME_FEEDBACK
     };
 
     // MiniPlayer tab controls
