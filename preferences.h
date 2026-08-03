@@ -18,6 +18,7 @@ bool get_show_cover_art(); // true=Yes, false=No
 bool get_cover_margin(); // true=Yes, false=No
 int get_cover_style(); // 0=Square, 1=Rounded
 int get_background_style(); // 0=Solid, 1=Artwork Colors, 2=Blurred Artwork
+bool get_show_volume_feedback(); // true=Enabled, false=Disabled
 
 // MiniPlayer mode size functions
 int get_miniplayer_undocked_width();
