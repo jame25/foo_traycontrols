@@ -51,10 +51,6 @@ BEGIN
     LTEXT           "Slide Animation:", IDC_SLIDE_DURATION_LABEL, 15, 222, 65, 10
     COMBOBOX        IDC_SLIDE_DURATION_COMBO, 85, 220, 80, 100, CBS_DROPDOWNLIST | CBS_HASSTRINGS | WS_VSCROLL | WS_TABSTOP
 
-    // Window Style Options
-    CONTROL         "Use rounded corners (Windows 11 only)", IDC_USE_ROUNDED_CORNERS, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 15, 240, 200, 10
-
-
     // === Appearance Tab Controls (hidden initially) ===
     LTEXT           "Theme Mode:", IDC_THEME_MODE_LABEL, 15, 32, 85, 12
     COMBOBOX        IDC_THEME_MODE_COMBO, 105, 30, 110, 100, CBS_DROPDOWNLIST | CBS_HASSTRINGS | WS_VSCROLL | WS_TABSTOP
@@ -71,7 +67,10 @@ BEGIN
     LTEXT           "Background Style:", IDC_BACKGROUND_STYLE_LABEL, 15, 112, 85, 12
     COMBOBOX        IDC_BACKGROUND_STYLE_COMBO, 105, 110, 110, 100, CBS_DROPDOWNLIST | CBS_HASSTRINGS | WS_VSCROLL | WS_TABSTOP
 
-    CONTROL         "Show volume visual feedback", IDC_SHOW_VOLUME_FEEDBACK, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 15, 135, 200, 10
+    LTEXT           "MiniPlayer Border:", IDC_MINIPLAYER_BORDER_LABEL, 15, 132, 85, 12
+    COMBOBOX        IDC_MINIPLAYER_BORDER_COMBO, 105, 130, 110, 100, CBS_DROPDOWNLIST | CBS_HASSTRINGS | WS_VSCROLL | WS_TABSTOP
+
+    CONTROL         "Show volume visual feedback", IDC_SHOW_VOLUME_FEEDBACK, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 15, 155, 200, 10
 
 
     // === MiniPlayer Tab Controls (hidden initially) ===
