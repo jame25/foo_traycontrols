@@ -2426,18 +2426,10 @@ void control_panel::toggle_compact_mode() {
 }
 
 void control_panel::close_panel_and_focus_foobar() {
+    // Close the MiniPlayer / control panel. Do NOT show or focus the foobar2000
+    // main window - closing the MiniPlayer should leave foobar2000 as-is.
     if (m_visible) {
         hide_control_panel();
-    }
-    
-    HWND main_wnd = core_api::get_main_window();
-    if (main_wnd && IsWindow(main_wnd)) {
-        if (IsIconic(main_wnd)) {
-            ShowWindow(main_wnd, SW_RESTORE);
-        } else {
-            ShowWindow(main_wnd, SW_SHOW);
-        }
-        SetForegroundWindow(main_wnd);
     }
 }
 
