@@ -563,11 +563,14 @@ void tray_manager::execute_single_click() {
     bool is_miniplayer = panel.is_undocked() || panel.is_artwork_expanded() || panel.is_compact_mode();
 
     if (is_visible && is_miniplayer) {
-        // MiniPlayer is visible. Single-clicking the tray icon must never close, hide,
-        // or slide the MiniPlayer to the side - leave it exactly as it is.
-        // (If it is slid to the side, slide it back out.)
+        // MiniPlayer is visible.
+        // - If it is slid to the side, slide it back out.
+        // - Otherwise, if "Always Slide-to-Side" is enabled in Preferences, slide it to the side.
+        // - Otherwise, do nothing (single-click never closes or hides the MiniPlayer).
         if (panel.is_slid_to_side()) {
             panel.slide_back_from_side();
+        } else if (get_always_slide_to_side()) {
+            panel.slide_to_side();
         }
     } else if (is_visible) {
         // Docked panel is visible - hide it
