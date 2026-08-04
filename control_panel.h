@@ -245,6 +245,7 @@ private:
     void load_fonts();
     void cleanup_fonts();
     void apply_window_corner_preference();
+    void composite_layered_content(); // Immediately re-render and composite the layered window
     
     // Event handlers
     void handle_button_click(int button_id);
