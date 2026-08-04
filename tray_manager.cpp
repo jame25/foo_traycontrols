@@ -379,11 +379,9 @@ BOOL CALLBACK tray_manager::find_window_callback(HWND hwnd, LPARAM lparam) {
 
 void tray_manager::minimize_to_tray() {
     if (m_main_window && m_initialized) {
-        // Hide control panel if visible (same suppression as restore_from_tray)
-        auto& panel = control_panel::get_instance();
-        if (panel.get_control_window() && IsWindowVisible(panel.get_control_window())) {
-            panel.hide_control_panel_immediate();
-        }
+        // NOTE: The control panel / MiniPlayer is intentionally NOT hidden here.
+        // Double-clicking the tray icon (or minimizing the main window) must never
+        // close the MiniPlayer; it stays open in whatever mode it was in.
 
         ShowWindow(m_main_window, SW_HIDE);
         // Tray icon is already added, just update tooltip if needed
@@ -393,11 +391,8 @@ void tray_manager::minimize_to_tray() {
 
 void tray_manager::restore_from_tray() {
     if (m_main_window && m_initialized) {
-        // Hide control panel if visible
-        auto& panel = control_panel::get_instance();
-        if (panel.get_control_window() && IsWindowVisible(panel.get_control_window())) {
-            panel.hide_control_panel_immediate();
-        }
+        // NOTE: The control panel / MiniPlayer is intentionally NOT hidden here so
+        // double-clicking the tray icon never closes the MiniPlayer.
 
         if (IsIconic(m_main_window)) {
             ShowWindow(m_main_window, SW_RESTORE);
@@ -568,16 +563,11 @@ void tray_manager::execute_single_click() {
     bool is_miniplayer = panel.is_undocked() || panel.is_artwork_expanded() || panel.is_compact_mode();
 
     if (is_visible && is_miniplayer) {
-        // Check if MiniPlayer is slid to side - if so, slide it back
+        // MiniPlayer is visible. Single-clicking the tray icon must never close, hide,
+        // or slide the MiniPlayer to the side - leave it exactly as it is.
+        // (If it is slid to the side, slide it back out.)
         if (panel.is_slid_to_side()) {
             panel.slide_back_from_side();
-        }
-        // If "Always Slide-to-Side" is enabled, slide instead of hiding
-        else if (get_always_slide_to_side()) {
-            panel.slide_to_side();
-        } else {
-            // Miniplayer (any non-docked mode) is visible - hide it and remember state/position
-            panel.hide_and_remember_miniplayer();
         }
     } else if (is_visible) {
         // Docked panel is visible - hide it
