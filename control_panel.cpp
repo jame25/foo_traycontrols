@@ -4,8 +4,42 @@
 #include "preferences.h"
 #include "volume_popup.h"
 #include "artwork_bridge.h"
-#include <dwmapi.h>
-#pragma comment(lib, "dwmapi.lib")
+#include <cmath>
+
+// Apply an anti-aliased rounded-rectangle alpha mask to a 32-bit ARGB (BGRA) DIB section.
+// Pixels outside the rounded rectangle are made fully transparent; the corner edge is
+// anti-aliased using a 1px signed-distance coverage falloff for silky-smooth corners.
+static void apply_rounded_corner_alpha(void* bits, int w, int h, float radius) {
+    BYTE* px = static_cast<BYTE*>(bits);
+    if (!px) return;
+    const float cx = w * 0.5f;
+    const float cy = h * 0.5f;
+    const float hw = w * 0.5f - radius;
+    const float hh = h * 0.5f - radius;
+
+    for (int y = 0; y < h; y++) {
+        const float py = (float)y + 0.5f - cy;
+        const float qy = fabsf(py) - hh;
+        const float ay = qy > 0.0f ? qy : 0.0f;
+        for (int x = 0; x < w; x++) {
+            const float p_x = (float)x + 0.5f - cx;
+            const float qx = fabsf(p_x) - hw;
+            const float ax = qx > 0.0f ? qx : 0.0f;
+            const float m = qx > qy ? qx : qy;
+            const float d = sqrtf(ax * ax + ay * ay) + (m < 0.0f ? m : 0.0f) - radius;
+            float coverage = 0.5f - d;
+            if (coverage < 0.0f) coverage = 0.0f;
+            if (coverage > 1.0f) coverage = 1.0f;
+            BYTE* p = px + (y * w + x) * 4;
+            const unsigned int a = (unsigned int)(coverage * 255.0f + 0.5f);
+            // Premultiply RGB by alpha (UpdateLayeredWindow AC_SRC_ALPHA expects premultiplied)
+            p[0] = (BYTE)(((unsigned int)p[0] * a + 127) / 255);
+            p[1] = (BYTE)(((unsigned int)p[1] * a + 127) / 255);
+            p[2] = (BYTE)(((unsigned int)p[2] * a + 127) / 255);
+            p[3] = (BYTE)a;
+        }
+    }
+}
 
 // Timer constants
 #define TIMEOUT_TIMER_ID 9999  // Use unique timer ID to avoid conflicts
@@ -195,6 +229,8 @@ void control_panel::show_control_panel(bool force_docked) {
     // Force docked state if requested (e.g., when opened from tray icon)
     if (force_docked) {
         m_is_undocked = false;
+        m_is_artwork_expanded = false;
+        m_is_compact_mode = false;
     }
     
     // Reset undocked overlay state
@@ -209,6 +245,9 @@ void control_panel::show_control_panel(bool force_docked) {
     
     // Position control panel
     position_control_panel();
+    
+    // Composite the docked content BEFORE showing the window (see show_control_panel_simple).
+    composite_layered_content();
     
     // Show window immediately with proper topmost behavior for docked mode
     ShowWindow(m_control_window, SW_SHOWNOACTIVATE);
@@ -274,6 +313,12 @@ void control_panel::show_control_panel_simple() {
     
     // Position control panel
     position_control_panel();
+    
+    // Composite the docked content BEFORE showing the window. Because the window is
+    // WS_EX_LAYERED, its on-screen surface is whatever UpdateLayeredWindow last pushed -
+    // ShowWindow makes that stale frame visible instantly. Composing first ensures the
+    // layered surface already holds the docked content when the window appears.
+    composite_layered_content();
     
     // Show window with topmost behavior (like original)
     ShowWindow(m_control_window, SW_SHOWNOACTIVATE);
@@ -419,6 +464,9 @@ void control_panel::show_miniplayer_at_saved_position() {
 
     // Position and show the window
     SetWindowPos(m_control_window, HWND_TOPMOST, x, y, width, height, SWP_NOACTIVATE);
+    // Composite the MiniPlayer content BEFORE showing the window so the layered surface does
+    // not flash the previously shown docked panel frame when the window appears.
+    composite_layered_content();
     ShowWindow(m_control_window, SW_SHOWNOACTIVATE);
     m_visible = true;
 
@@ -521,6 +569,9 @@ void control_panel::show_undocked_miniplayer() {
 
     // Position and show the window
     SetWindowPos(m_control_window, HWND_TOPMOST, x, y, width, height, SWP_NOACTIVATE);
+    // Composite the MiniPlayer content BEFORE showing the window so the layered surface does
+    // not flash the previously shown docked panel frame when the window appears.
+    composite_layered_content();
     ShowWindow(m_control_window, SW_SHOWNOACTIVATE);
     m_visible = true;
 
@@ -682,9 +733,9 @@ void control_panel::create_control_window() {
     m_saved_expanded_width = get_miniplayer_expanded_size();
     m_saved_expanded_height = get_miniplayer_expanded_size();
 
-    // Create control window (initially hidden) - temporarily remove WS_EX_NOACTIVATE for testing
+    // Create control window (initially hidden) - layered for smooth per-pixel alpha corners
     m_control_window = CreateWindowEx(
-        WS_EX_TOOLWINDOW | WS_EX_TOPMOST, // Removed WS_EX_NOACTIVATE for testing
+        WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_LAYERED,
         L"TrayControlsControlPanel",
         L"Media Controls",
         WS_POPUP,
@@ -2072,13 +2123,118 @@ void control_panel::update_theme_colors() {
 
 void control_panel::apply_window_corner_preference() {
     if (!m_control_window) return;
-    
-    // DWMWA_WINDOW_CORNER_PREFERENCE = 33
-    // DWMWCP_DONOTROUND = 1 (square corners)
-    // DWMWCP_ROUND = 2 (rounded corners)
-    // DWMWCP_ROUNDSMALL = 3 (small rounded corners)
-    DWORD corner_pref = get_use_rounded_corners() ? 2 : 1;
-    DwmSetWindowAttribute(m_control_window, 33, &corner_pref, sizeof(corner_pref));
+    // Rounded corners are applied per-pixel in WM_PAINT via anti-aliased alpha compositing.
+    // Just trigger a repaint so the new corner style takes effect immediately.
+    InvalidateRect(m_control_window, nullptr, TRUE);
+}
+
+// Immediately re-render and composite the layered window with the current mode's content.
+// The window is always WS_EX_LAYERED, so its visible surface is whatever UpdateLayeredWindow
+// last pushed. Calling this synchronously after showing the panel (rather than waiting for the
+// asynchronous WM_PAINT) prevents a stale frame (e.g. the previous MiniPlayer layout) from
+// flashing over the docked control panel when it re-opens.
+void control_panel::composite_layered_content() {
+    if (!m_control_window) return;
+
+    RECT client_rect;
+    GetClientRect(m_control_window, &client_rect);
+    int width = client_rect.right - client_rect.left;
+    int height = client_rect.bottom - client_rect.top;
+
+    if (width <= 0 || height <= 0) return;
+
+    HDC hdc = GetDC(m_control_window);
+
+    // Double-buffering to eliminate flickering
+    HDC mem_dc = CreateCompatibleDC(hdc);
+    HBITMAP mem_bitmap = CreateCompatibleBitmap(hdc, width, height);
+    HBITMAP old_bitmap = (HBITMAP)SelectObject(mem_dc, mem_bitmap);
+
+    // Pre-clear memory buffer with parent window DC background or container theme color
+    // so outer corners match surrounding light/dark/custom container layout seamlessly
+    bool parent_copied = false;
+    HWND hParent = GetParent(m_control_window);
+    if (hParent) {
+        HDC parent_dc = GetDC(hParent);
+        if (parent_dc) {
+            POINT pt = { 0, 0 };
+            MapWindowPoints(m_control_window, hParent, &pt, 1);
+            parent_copied = BitBlt(mem_dc, 0, 0, width, height, parent_dc, pt.x, pt.y, SRCCOPY) != FALSE;
+            ReleaseDC(hParent, parent_dc);
+        }
+    }
+
+    if (!parent_copied) {
+        COLORREF clear_color;
+        if (m_is_dark_mode) {
+            clear_color = RGB(24, 24, 24);
+        } else {
+            COLORREF sys_win = GetSysColor(COLOR_WINDOW);
+            clear_color = (sys_win != CLR_INVALID) ? sys_win : RGB(255, 255, 255);
+        }
+        HBRUSH clear_brush = CreateSolidBrush(clear_color);
+        FillRect(mem_dc, &client_rect, clear_brush);
+        DeleteObject(clear_brush);
+    }
+
+    // Paint to off-screen buffer
+    paint_control_panel(mem_dc);
+
+    // Create 32-bit ARGB DIBSection for per-pixel alpha compositing
+    BITMAPINFO bmi = {};
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = width;
+    bmi.bmiHeader.biHeight = -height; // Top-down DIB
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+
+    void* pvBits = nullptr;
+    HDC hdcScreen = GetDC(nullptr);
+    HDC alpha_dc = CreateCompatibleDC(hdcScreen);
+    HBITMAP alpha_bitmap = CreateDIBSection(alpha_dc, &bmi, DIB_RGB_COLORS, &pvBits, nullptr, 0);
+    HBITMAP old_alpha_bitmap = (HBITMAP)SelectObject(alpha_dc, alpha_bitmap);
+
+    // Copy opaque content into the ARGB surface
+    BitBlt(alpha_dc, 0, 0, width, height, mem_dc, 0, 0, SRCCOPY);
+
+    // Apply anti-aliased rounded-corner alpha mask
+    bool is_rounded = (get_miniplayer_border_style() == 1);
+    if (is_rounded) {
+        apply_rounded_corner_alpha(pvBits, width, height, 12.0f);
+    } else if (pvBits) {
+        // Square corners - fully opaque
+        BYTE* px = static_cast<BYTE*>(pvBits);
+        for (int i = 0; i < width * height; i++) {
+            px[i * 4 + 3] = 255;
+        }
+    }
+
+    // Composite with per-pixel alpha - the window is always WS_EX_LAYERED so
+    // UpdateLayeredWindow is required in ALL modes (docked AND MiniPlayer);
+    // BitBlt to a layered window's screen DC would render nothing.
+    RECT win_rect;
+    GetWindowRect(m_control_window, &win_rect);
+    POINT ptDst = { win_rect.left, win_rect.top };
+    SIZE size = { width, height };
+    POINT ptSrc = { 0, 0 };
+
+    BLENDFUNCTION blend = {};
+    blend.BlendOp = AC_SRC_OVER;
+    blend.BlendFlags = 0;
+    blend.SourceConstantAlpha = 255;
+    blend.AlphaFormat = AC_SRC_ALPHA;
+    UpdateLayeredWindow(m_control_window, hdcScreen, &ptDst, &size, alpha_dc, &ptSrc, 0, &blend, ULW_ALPHA);
+
+    // Cleanup
+    SelectObject(alpha_dc, old_alpha_bitmap);
+    DeleteObject(alpha_bitmap);
+    DeleteDC(alpha_dc);
+    SelectObject(mem_dc, old_bitmap);
+    DeleteObject(mem_bitmap);
+    DeleteDC(mem_dc);
+    ReleaseDC(nullptr, hdcScreen);
+    ReleaseDC(m_control_window, hdc);
 }
 
 void control_panel::set_undocked(bool undocked) {
@@ -2860,30 +3016,8 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
         case WM_PAINT:
             {
                 PAINTSTRUCT ps;
-                HDC hdc = BeginPaint(hwnd, &ps);
-                
-                // Double-buffering to eliminate flickering
-                RECT client_rect;
-                GetClientRect(hwnd, &client_rect);
-                int width = client_rect.right - client_rect.left;
-                int height = client_rect.bottom - client_rect.top;
-                
-                // Create off-screen buffer
-                HDC mem_dc = CreateCompatibleDC(hdc);
-                HBITMAP mem_bitmap = CreateCompatibleBitmap(hdc, width, height);
-                HBITMAP old_bitmap = (HBITMAP)SelectObject(mem_dc, mem_bitmap);
-                
-                // Paint to off-screen buffer
-                panel->paint_control_panel(mem_dc);
-                
-                // Copy to screen
-                BitBlt(hdc, 0, 0, width, height, mem_dc, 0, 0, SRCCOPY);
-                
-                // Cleanup
-                SelectObject(mem_dc, old_bitmap);
-                DeleteObject(mem_bitmap);
-                DeleteDC(mem_dc);
-                
+                BeginPaint(hwnd, &ps);
+                panel->composite_layered_content();
                 EndPaint(hwnd, &ps);
                 return 0;
             }
@@ -2891,6 +3025,20 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
         case WM_ERASEBKGND:
             // Prevent GDI background erase flickering - double-buffered WM_PAINT handles background
             return 1;
+
+        case WM_WINDOWPOSCHANGED:
+            if (panel) {
+                // Only repaint when the window size actually changed (not during drag moves).
+                // The rounded-corner alpha mask is computed per-pixel from the current client size.
+                RECT rc;
+                GetClientRect(hwnd, &rc);
+                static RECT s_last_rc = {0, 0, 0, 0};
+                if (rc.right != s_last_rc.right || rc.bottom != s_last_rc.bottom) {
+                    s_last_rc = rc;
+                    panel->apply_window_corner_preference();
+                }
+            }
+            break;
             
         case WM_LBUTTONDOWN:
             // Handle compact mode click
@@ -4305,13 +4453,20 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                 // }
                 return 0;
             }
-            break;
         }
     }
     
     return DefWindowProc(hwnd, msg, wparam, lparam);
 }
 
+static void add_rounded_rect_path(Gdiplus::GraphicsPath& path, float x, float y, float w, float h, float radius) {
+    float d = radius * 2.0f;
+    path.AddArc(x, y, d, d, 180, 90);
+    path.AddArc(x + w - d, y, d, d, 270, 90);
+    path.AddArc(x + w - d, y + h - d, d, d, 0, 90);
+    path.AddArc(x, y + h - d, d, d, 90, 90);
+    path.CloseFigure();
+}
 
 static std::unique_ptr<Gdiplus::Bitmap> create_gdiplus_bitmap_from_hbitmap(HDC hdc, HBITMAP hbmp) {
     if (!hbmp || !hdc) return nullptr;
@@ -4343,60 +4498,78 @@ void control_panel::paint_background_style(HDC hdc, const RECT& rect) {
     if (!hdc) return;
     int bg_style = get_background_style(); // 0 = Solid, 1 = Artwork Colors, 2 = Blurred Artwork
     HBITMAP art_bm = m_cover_art_bitmap_original ? m_cover_art_bitmap_original : m_cover_art_bitmap;
+    bool is_rounded = (get_miniplayer_border_style() == 1);
+
+    int w = rect.right - rect.left;
+    int h = rect.bottom - rect.top;
+    if (w <= 0 || h <= 0) return;
+
+    Gdiplus::Graphics g(hdc);
+    g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+    g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
+
+    float stroke = 1.0f;
+    float pad = stroke * 0.5f;
+    float radius = 8.0f;
+    Gdiplus::GraphicsPath card_path;
+    if (is_rounded) {
+        add_rounded_rect_path(card_path, pad, pad, (float)w - stroke, (float)h - stroke, radius);
+    }
 
     if (bg_style == 1 && art_bm) {
-        int w = rect.right - rect.left;
-        int h = rect.bottom - rect.top;
-        if (w > 0 && h > 0) {
-            BITMAP bmp;
-            if (GetObject(art_bm, sizeof(bmp), &bmp) && bmp.bmWidth > 0 && bmp.bmHeight > 0) {
-                HDC mem_dc = CreateCompatibleDC(hdc);
-                HBITMAP old_bm = (HBITMAP)SelectObject(mem_dc, art_bm);
+        BITMAP bmp;
+        if (GetObject(art_bm, sizeof(bmp), &bmp) && bmp.bmWidth > 0 && bmp.bmHeight > 0) {
+            HDC mem_dc = CreateCompatibleDC(hdc);
+            HBITMAP old_bm = (HBITMAP)SelectObject(mem_dc, art_bm);
 
-                long total_r = 0, total_g = 0, total_b = 0;
-                int pixel_count = 0;
-                const int grid_size = 8;
+            long total_r = 0, total_g = 0, total_b = 0;
+            int pixel_count = 0;
+            const int grid_size = 8;
 
-                for (int y = 0; y < grid_size; y++) {
-                    int sample_y = (bmp.bmHeight * (y + 1)) / (grid_size + 1);
-                    for (int x = 0; x < grid_size; x++) {
-                        int sample_x = (bmp.bmWidth * (x + 1)) / (grid_size + 1);
-                        COLORREF c = GetPixel(mem_dc, sample_x, sample_y);
-                        if (c != CLR_INVALID) {
-                            total_r += GetRValue(c);
-                            total_g += GetGValue(c);
-                            total_b += GetBValue(c);
-                            pixel_count++;
-                        }
+            for (int y = 0; y < grid_size; y++) {
+                int sample_y = (bmp.bmHeight * (y + 1)) / (grid_size + 1);
+                for (int x = 0; x < grid_size; x++) {
+                    int sample_x = (bmp.bmWidth * (x + 1)) / (grid_size + 1);
+                    COLORREF c = GetPixel(mem_dc, sample_x, sample_y);
+                    if (c != CLR_INVALID) {
+                        total_r += GetRValue(c);
+                        total_g += GetGValue(c);
+                        total_b += GetBValue(c);
+                        pixel_count++;
                     }
                 }
+            }
 
-                SelectObject(mem_dc, old_bm);
-                DeleteDC(mem_dc);
+            SelectObject(mem_dc, old_bm);
+            DeleteDC(mem_dc);
 
-                if (pixel_count > 0) {
-                    int avg_r = total_r / pixel_count;
-                    int avg_g = total_g / pixel_count;
-                    int avg_b = total_b / pixel_count;
+            if (pixel_count > 0) {
+                int avg_r = total_r / pixel_count;
+                int avg_g = total_g / pixel_count;
+                int avg_b = total_b / pixel_count;
 
-                    Gdiplus::Color primary(255, avg_r, avg_g, avg_b);
-                    Gdiplus::Color secondary(255, avg_r * 65 / 100, avg_g * 65 / 100, avg_b * 65 / 100);
+                Gdiplus::Color primary(255, avg_r, avg_g, avg_b);
+                Gdiplus::Color secondary(255, avg_r * 65 / 100, avg_g * 65 / 100, avg_b * 65 / 100);
 
-                    Gdiplus::Graphics g(hdc);
-                    Gdiplus::Rect g_rect(rect.left, rect.top, w, h);
-                    Gdiplus::LinearGradientBrush brush(
-                        Gdiplus::Point(rect.left, rect.top),
-                        Gdiplus::Point(rect.left + w, rect.top),
-                        secondary,
-                        primary
-                    );
+                Gdiplus::Rect g_rect(rect.left, rect.top, w, h);
+                Gdiplus::LinearGradientBrush brush(
+                    Gdiplus::Point(rect.left, rect.top),
+                    Gdiplus::Point(rect.left + w, rect.top),
+                    secondary,
+                    primary
+                );
+
+                BYTE overlay_alpha = m_is_dark_mode ? 70 : 30;
+                Gdiplus::SolidBrush overlay(Gdiplus::Color(overlay_alpha, 0, 0, 0));
+
+                if (is_rounded) {
+                    g.FillPath(&brush, &card_path);
+                    g.FillPath(&overlay, &card_path);
+                } else {
                     g.FillRectangle(&brush, g_rect);
-
-                    BYTE overlay_alpha = m_is_dark_mode ? 70 : 30;
-                    Gdiplus::SolidBrush overlay(Gdiplus::Color(overlay_alpha, 0, 0, 0));
                     g.FillRectangle(&overlay, g_rect);
-                    return;
                 }
+                return;
             }
         }
     } else if (bg_style == 2 && art_bm) {
@@ -4421,14 +4594,14 @@ void control_panel::paint_background_style(HDC hdc, const RECT& rect) {
 
                     BYTE* srcPixels = static_cast<BYTE*>(scaledData.Scan0);
                     int srcStride = scaledData.Stride;
-                    const int radius = 4;
+                    const int radius_val = 4;
 
                     // Pass 1: Horizontal blur
                     for (int y = 0; y < blur_size; y++) {
                         for (int x = 0; x < blur_size; x++) {
                             int total_r = 0, total_g = 0, total_b = 0, total_a = 0;
                             int count = 0;
-                            for (int dx = -radius; dx <= radius; dx++) {
+                            for (int dx = -radius_val; dx <= radius_val; dx++) {
                                 int sx = x + dx;
                                 if (sx >= 0 && sx < blur_size) {
                                     BYTE* pixel = srcPixels + y * srcStride + sx * 4;
@@ -4526,13 +4699,18 @@ void control_panel::paint_background_style(HDC hdc, const RECT& rect) {
 
                         blurred_artwork.UnlockBits(&outData);
 
-                        Gdiplus::Graphics g(hdc);
-                        g.DrawImage(&blurred_artwork, rect.left, rect.top, target_width, target_height);
-
                         BYTE overlay_alpha = m_is_dark_mode ? 120 : 160;
                         Gdiplus::Color overlayColor(overlay_alpha, 0, 0, 0);
                         Gdiplus::SolidBrush overlayBrush(overlayColor);
-                        g.FillRectangle(&overlayBrush, rect.left, rect.top, target_width, target_height);
+
+                        if (is_rounded) {
+                            Gdiplus::TextureBrush texBrush(&blurred_artwork, Gdiplus::WrapModeClamp);
+                            g.FillPath(&texBrush, &card_path);
+                            g.FillPath(&overlayBrush, &card_path);
+                        } else {
+                            g.DrawImage(&blurred_artwork, rect.left, rect.top, target_width, target_height);
+                            g.FillRectangle(&overlayBrush, rect.left, rect.top, target_width, target_height);
+                        }
                         return;
                     }
                 }
@@ -4540,9 +4718,14 @@ void control_panel::paint_background_style(HDC hdc, const RECT& rect) {
         }
     }
 
-    HBRUSH bg_brush = CreateSolidBrush(m_bg_color);
-    FillRect(hdc, &rect, bg_brush);
-    DeleteObject(bg_brush);
+    Gdiplus::SolidBrush bg_brush(Gdiplus::Color(255, GetRValue(m_bg_color), GetGValue(m_bg_color), GetBValue(m_bg_color)));
+    if (is_rounded) {
+        g.FillPath(&bg_brush, &card_path);
+    } else {
+        HBRUSH h_brush = CreateSolidBrush(m_bg_color);
+        FillRect(hdc, &rect, h_brush);
+        DeleteObject(h_brush);
+    }
 }
 
 void control_panel::draw_cover_art_styled(HDC hdc, HBITMAP hbmp, const RECT& rect, bool is_rounded) {
@@ -4627,14 +4810,39 @@ void control_panel::draw_cover_art_styled(HDC hdc, HBITMAP hbmp, const RECT& rec
         } else {
             HBRUSH cover_brush = CreateSolidBrush(m_placeholder_color);
             FillRect(hdc, &rect, cover_brush);
-            DeleteObject(cover_brush);
         }
+    }
+}
+
+static void draw_panel_border_style(HDC hdc, const RECT& rect, bool is_dark, bool is_rounded) {
+    int w = rect.right - rect.left;
+    int h = rect.bottom - rect.top;
+    if (w <= 0 || h <= 0) return;
+
+    COLORREF border_color = is_dark ? RGB(60, 60, 64) : RGB(218, 218, 222);
+    Gdiplus::Graphics g(hdc);
+    g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+    g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
+
+    Gdiplus::Pen pen(Gdiplus::Color(255, GetRValue(border_color), GetGValue(border_color), GetBValue(border_color)), 1.0f);
+
+    if (is_rounded) {
+        float stroke = 1.0f;
+        float pad = stroke * 0.5f;
+        float radius = 8.0f;
+        float x = pad, y = pad, fw = (float)w - stroke, fh = (float)h - stroke;
+
+        Gdiplus::GraphicsPath path;
+        add_rounded_rect_path(path, x, y, fw, fh, radius);
+        g.DrawPath(&pen, &path);
+    } else {
+        g.DrawRectangle(&pen, 0, 0, w - 1, h - 1);
     }
 }
 
 void control_panel::paint_control_panel(HDC hdc) {
     if (!hdc || !m_control_window) return;
-    
+
     RECT client_rect;
     GetClientRect(m_control_window, &client_rect);
     
@@ -4811,7 +5019,8 @@ void control_panel::paint_control_panel(HDC hdc) {
         }
     }
     
-    
+    bool is_rounded_border = (get_miniplayer_border_style() == 1);
+    draw_panel_border_style(hdc, client_rect, m_is_dark_mode, is_rounded_border);
 }
 
 void control_panel::paint_artwork_expanded(HDC hdc, const RECT& client_rect) {
@@ -5019,6 +5228,9 @@ void control_panel::draw_track_info(HDC hdc, const RECT& client_rect, int art_si
             DeleteObject(artist_font_to_use);
         }
     }
+
+    bool is_rounded_border = (get_miniplayer_border_style() == 1);
+    draw_panel_border_style(hdc, client_rect, m_is_dark_mode, is_rounded_border);
 }
 
 void control_panel::paint_compact_mode(HDC hdc, const RECT& rect) {
@@ -5173,6 +5385,9 @@ void control_panel::paint_compact_mode(HDC hdc, const RECT& rect) {
     if (need_delete_artist) {
         DeleteObject(artist_font);
     }
+
+    bool is_rounded_border = (get_miniplayer_border_style() == 1);
+    draw_panel_border_style(hdc, rect, m_is_dark_mode, is_rounded_border);
 }
 
 void control_panel::draw_time_info(HDC hdc, const RECT& client_rect) {
