@@ -109,11 +109,19 @@ control_panel::control_panel()
     , m_saved_normal_height(120)
     , m_saved_compact_width(320)
     , m_saved_compact_height(75)
+    , m_applied_undocked_width(400)
+    , m_applied_undocked_height(120)
+    , m_applied_compact_width(320)
+    , m_applied_compact_height(75)
+    , m_applied_expanded_size(350)
     , m_was_compact_before_expanded(false)
     , m_is_rolling_animation(false)
     , m_rolling_to_compact(false)
     , m_roll_animation_step(0)
     , m_roll_animation_start_time(0)
+    , m_ticker_offset(0)
+    , m_ticker_direction(1)
+    , m_ticker_active(false)
     , m_cover_art_bitmap(nullptr)
     , m_cover_art_bitmap_large(nullptr)
     , m_cover_art_bitmap_original(nullptr)
@@ -363,6 +371,8 @@ void control_panel::hide_control_panel_immediate() {
     KillTimer(m_control_window, UPDATE_TIMER_ID + 1);
     KillTimer(m_control_window, TIMEOUT_TIMER_ID);
     KillTimer(m_control_window, SLIDE_TIMER_ID);
+    KillTimer(m_control_window, TICKER_TIMER_ID);
+    m_ticker_active = false;
     
     // Reset slide-to-side state so panel reopens at original position
     if (m_is_slid_to_side && m_pre_slide_x != 0) {
@@ -415,6 +425,8 @@ void control_panel::hide_and_remember_miniplayer() {
     KillTimer(m_control_window, UPDATE_TIMER_ID);
     KillTimer(m_control_window, ANIMATION_TIMER_ID);
     KillTimer(m_control_window, TIMEOUT_TIMER_ID);
+    KillTimer(m_control_window, TICKER_TIMER_ID);
+    m_ticker_active = false;
     ShowWindow(m_control_window, SW_HIDE);
     m_visible = false;
 }
@@ -732,6 +744,13 @@ void control_panel::create_control_window() {
     m_saved_compact_height = get_miniplayer_compact_height();
     m_saved_expanded_width = get_miniplayer_expanded_size();
     m_saved_expanded_height = get_miniplayer_expanded_size();
+
+    // Track the last-applied size configuration separately from the actual window size
+    m_applied_undocked_width = m_saved_normal_width;
+    m_applied_undocked_height = m_saved_normal_height;
+    m_applied_compact_width = m_saved_compact_width;
+    m_applied_compact_height = m_saved_compact_height;
+    m_applied_expanded_size = m_saved_expanded_width;
 
     // Create control window (initially hidden) - layered for smooth per-pixel alpha corners
     m_control_window = CreateWindowEx(
@@ -2039,14 +2058,25 @@ void control_panel::on_settings_changed() {
     int compact_h = get_miniplayer_compact_height();
     int expanded_s = get_miniplayer_expanded_size();
 
-    m_saved_normal_width = undocked_w;
-    m_saved_normal_height = undocked_h;
-    m_saved_compact_width = compact_w;
-    m_saved_compact_height = compact_h;
-    m_saved_expanded_width = expanded_s;
-    m_saved_expanded_height = expanded_s;
+    // Only resize the currently-visible MiniPlayer if its mode-specific size configuration
+    // actually changed (compared against the last-applied config). A settings change unrelated
+    // to size (e.g. Slide Animation or Ticker Speed) must never snap a manually-resized
+    // MiniPlayer back to the configured dimensions, so the comparison uses the applied-config
+    // values, not the window's current (possibly user-dragged) size tracked in m_saved_*.
+    bool size_changed =
+        (undocked_w != m_applied_undocked_width) ||
+        (undocked_h != m_applied_undocked_height) ||
+        (compact_w != m_applied_compact_width) ||
+        (compact_h != m_applied_compact_height) ||
+        (expanded_s != m_applied_expanded_size);
 
-    if (m_visible && m_control_window && m_is_undocked) {
+    m_applied_undocked_width = undocked_w;
+    m_applied_undocked_height = undocked_h;
+    m_applied_compact_width = compact_w;
+    m_applied_compact_height = compact_h;
+    m_applied_expanded_size = expanded_s;
+
+    if (size_changed && m_visible && m_control_window && m_is_undocked) {
         int target_w = undocked_w;
         int target_h = undocked_h;
 
@@ -2058,11 +2088,25 @@ void control_panel::on_settings_changed() {
             target_h = expanded_s;
         }
 
+        // The SetWindowPos triggers WM_SIZE which re-syncs the m_saved_* trackers to the
+        // new dimensions, so a later show uses the updated config size.
         SetWindowPos(m_control_window, NULL, 0, 0, target_w, target_h, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+    } else if (size_changed) {
+        // Not visible (or not undocked): update the saved-size trackers so the next time the
+        // MiniPlayer is shown it uses the newly-configured dimensions instead of a stale size.
+        m_saved_normal_width = undocked_w;
+        m_saved_normal_height = undocked_h;
+        m_saved_compact_width = compact_w;
+        m_saved_compact_height = compact_h;
+        m_saved_expanded_width = expanded_s;
+        m_saved_expanded_height = expanded_s;
     }
 
     // Trigger repaint if visible
     if (m_visible && m_control_window) {
+        // Force the track title ticker to re-evaluate (fonts / sizes may have changed
+        // after a settings reset), then repaint.
+        m_ticker_title.reset();
         InvalidateRect(m_control_window, nullptr, TRUE);
     }
 }
@@ -2426,10 +2470,20 @@ void control_panel::toggle_compact_mode() {
 }
 
 void control_panel::close_panel_and_focus_foobar() {
-    // Close the MiniPlayer / control panel. Do NOT show or focus the foobar2000
-    // main window - closing the MiniPlayer should leave foobar2000 as-is.
+    // Close the MiniPlayer / control panel, then open the foobar2000 main window
+    // and bring it into focus.
     if (m_visible) {
         hide_control_panel();
+    }
+
+    HWND main_wnd = core_api::get_main_window();
+    if (main_wnd && IsWindow(main_wnd)) {
+        if (IsIconic(main_wnd)) {
+            ShowWindow(main_wnd, SW_RESTORE);
+        } else {
+            ShowWindow(main_wnd, SW_SHOW);
+        }
+        SetForegroundWindow(main_wnd);
     }
 }
 
@@ -2863,6 +2917,8 @@ void control_panel::start_slide_out_animation() {
     KillTimer(m_control_window, UPDATE_TIMER_ID);
     KillTimer(m_control_window, UPDATE_TIMER_ID + 1);
     KillTimer(m_control_window, TIMEOUT_TIMER_ID);
+    KillTimer(m_control_window, TICKER_TIMER_ID);
+    m_ticker_active = false;
     
     m_animating = true;
     m_closing = true;
@@ -2870,6 +2926,117 @@ void control_panel::start_slide_out_animation() {
     
     // Start animation timer
     SetTimer(m_control_window, ANIMATION_TIMER_ID, ANIMATION_DURATION / ANIMATION_STEPS, nullptr);
+}
+
+void control_panel::update_ticker() {
+    if (!m_control_window || !m_visible) {
+        KillTimer(m_control_window, TICKER_TIMER_ID);
+        m_ticker_active = false;
+        return;
+    }
+
+    // Advance the offset in the current direction. Direction is +1 while scrolling
+    // right-to-left (offset grows), -1 while scrolling back (offset shrinks).
+    // Step per tick is chosen to match the Ticker Speed preference:
+    //   Slowest: 0.5px @ 32ms = ~15 px/sec
+    //   Slow:    0.75px @ 24ms = ~30 px/sec
+    //   Fast:    1.0px @ 16ms = ~60 px/sec
+    //   Fastest: 1.5px @ 12ms = ~125 px/sec
+    int speed = get_ticker_speed();
+    float step = 1.0f;
+    switch (speed) {
+        case 1: step = 0.5f; break;   // Slowest
+        case 2: step = 0.75f; break;  // Slow
+        case 4: step = 1.5f; break;   // Fastest
+        default: step = 1.0f; break;  // Fast (3)
+    }
+
+    m_ticker_offset += step * (float)m_ticker_direction;
+
+    // Trigger repaint so the new offset is drawn
+    InvalidateRect(m_control_window, nullptr, FALSE);
+}
+
+// Draws the track title, applying the ticker scroll offset when the text overflows its area.
+// Manages the ticker timer: starts it when the title is too wide, stops it when it fits or the
+// mode/title changes and the ticker is no longer needed.
+void control_panel::update_title_ticker(HDC hdc, const pfc::string8& title, HFONT font, const RECT& rect) {
+    if (!m_control_window) return;
+
+    int area_width = rect.right - rect.left;
+    if (area_width <= 0) {
+        if (m_ticker_active) {
+            KillTimer(m_control_window, TICKER_TIMER_ID);
+            m_ticker_active = false;
+            m_ticker_offset = 0;
+        }
+        return;
+    }
+
+    SelectObject(hdc, font);
+
+    pfc::stringcvt::string_wide_from_utf8 wide_title(title.c_str());
+    SIZE text_size = {};
+    GetTextExtentPoint32W(hdc, wide_title.get_ptr(), (int)wcslen(wide_title.get_ptr()), &text_size);
+
+    bool overflow = text_size.cx > area_width;
+    if (overflow) {
+        // If the title changed since the ticker started, reset the scroll position.
+        if (title != m_ticker_title) {
+            m_ticker_title = title;
+            m_ticker_offset = 0;
+            m_ticker_direction = 1; // start moving right-to-left (offset grows)
+        }
+    } else {
+        // Title fits - no scrolling needed.
+        m_ticker_title = title;
+        m_ticker_offset = 0;
+        m_ticker_direction = 1;
+    }
+
+    // Clamp offset to 0..(textWidth - areaWidth). Reverse direction at the ends so the
+    // text scrolls right-to-left and then back.
+    int max_offset = text_size.cx - area_width;
+    if (max_offset < 0) max_offset = 0;
+    if (m_ticker_offset < 0.0f) { m_ticker_offset = 0.0f; m_ticker_direction = 1; }
+    if (m_ticker_offset > (float)max_offset) { m_ticker_offset = (float)max_offset; m_ticker_direction = -1; }
+
+    // Manage the ticker timer: only run while overflowing, the ticker is enabled, and the
+    // title is long enough (>= 25 chars). Short titles never tick - they are ellipsis-truncated.
+    bool want_ticker = overflow && (get_ticker_speed() != 0) && !is_short_title(title);
+    if (want_ticker) {
+        // Ticker speed (px/sec): Slowest=15, Slow=30, Fast=60, Fastest=125
+        int speed = get_ticker_speed();
+        UINT interval;
+        switch (speed) {
+            case 1: interval = 32; break; // ~15 px/sec
+            case 2: interval = 24; break; // ~30 px/sec
+            case 4: interval = 12; break; // ~125 px/sec
+            default: interval = 16; break; // Fast (3) - ~60 px/sec
+        }
+        // SetTimer updates the interval even if the timer is already running, so a speed
+        // change takes effect immediately.
+        SetTimer(m_control_window, TICKER_TIMER_ID, interval, nullptr);
+        m_ticker_active = true;
+    } else if (m_ticker_active) {
+        KillTimer(m_control_window, TICKER_TIMER_ID);
+        m_ticker_active = false;
+    }
+
+    // Draw the title. If it overflows, the ticker is enabled, and the title is long enough
+    // (>= 25 chars), scroll it horizontally within the clipping rect; otherwise draw it
+    // normally left-aligned (ellipsis-truncated when overflow).
+    SetBkMode(hdc, TRANSPARENT);
+    if (overflow && get_ticker_speed() != 0 && !is_short_title(title)) {
+        // Vertically center the text within the rect (ExtTextOut uses top-left origin).
+        int text_y = rect.top + ((rect.bottom - rect.top - text_size.cy) / 2);
+        int rounded_offset = (int)(m_ticker_offset + 0.5f);
+        RECT text_clip = rect;
+        ExtTextOutW(hdc, rect.left - rounded_offset, text_y, ETO_CLIPPED, &text_clip, wide_title.get_ptr(), (UINT)wcslen(wide_title.get_ptr()), nullptr);
+    } else {
+        RECT fit_rect = rect;
+        DrawText(hdc, wide_title.get_ptr(), -1, &fit_rect, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+    }
 }
 
 void control_panel::update_animation() {
@@ -2930,7 +3097,9 @@ void control_panel::slide_to_side() {
     m_sliding_to_side = true;
     m_slide_animation_step = 0;
     
-    SetTimer(m_control_window, SLIDE_TIMER_ID, SLIDE_ANIMATION_DURATION / SLIDE_ANIMATION_STEPS, nullptr);
+    int slide_interval = get_slide_duration() / SLIDE_ANIMATION_STEPS;
+    if (slide_interval < 1) slide_interval = 1;
+    SetTimer(m_control_window, SLIDE_TIMER_ID, slide_interval, nullptr);
 }
 
 void control_panel::slide_back_from_side() {
@@ -2950,7 +3119,9 @@ void control_panel::slide_back_from_side() {
     m_sliding_to_side = false;
     m_slide_animation_step = 0;
     
-    SetTimer(m_control_window, SLIDE_TIMER_ID, SLIDE_ANIMATION_DURATION / SLIDE_ANIMATION_STEPS, nullptr);
+    int slide_interval = get_slide_duration() / SLIDE_ANIMATION_STEPS;
+    if (slide_interval < 1) slide_interval = 1;
+    SetTimer(m_control_window, SLIDE_TIMER_ID, slide_interval, nullptr);
 }
 
 void control_panel::update_slide_animation() {
@@ -4308,6 +4479,10 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                 // Roll animation timer
                 if (panel) panel->update_roll_animation();
                 return 0;
+            } else if (wparam == TICKER_TIMER_ID) {
+                // Track title ticker animation timer
+                if (panel) panel->update_ticker();
+                return 0;
             } else if (wparam == UPDATE_TIMER_ID + 1) {
                 // Delayed update after track change
                 KillTimer(hwnd, UPDATE_TIMER_ID + 1);
@@ -4938,38 +5113,43 @@ void control_panel::paint_control_panel(HDC hdc) {
         if (play_icon_size > 32) play_icon_size = 32;
     }
 
-    // Draw Previous button
+    // Draw Previous button (enlarged on hover)
     int prev_x = center_x - button_spacing;
-    draw_previous_icon(hdc, prev_x, button_y, icon_size);
+    int prev_size = (m_hovered_button == BTN_PREV) ? (int)(icon_size * HOVER_ZOOM_FACTOR) : icon_size;
+    draw_previous_icon(hdc, prev_x, button_y, prev_size);
 
-    // Draw Play/Pause button (Larger)
+    // Draw Play/Pause button (Larger) - enlarged on hover
+    int play_size = (m_hovered_button == BTN_PLAYPAUSE) ? (int)(play_icon_size * HOVER_ZOOM_FACTOR) : play_icon_size;
     if (m_is_undocked && !m_is_artwork_expanded) {
         if (m_is_playing && !m_is_paused) {
-            draw_pause_icon_with_opacity(hdc, center_x, button_y, play_icon_size, m_button_opacity);
+            draw_pause_icon_with_opacity(hdc, center_x, button_y, play_size, m_button_opacity);
         } else {
-            draw_play_icon_with_opacity(hdc, center_x, button_y, play_icon_size, m_button_opacity);
+            draw_play_icon_with_opacity(hdc, center_x, button_y, play_size, m_button_opacity);
         }
     } else {
         if (m_is_playing && !m_is_paused) {
-            draw_pause_icon(hdc, center_x, button_y, play_icon_size);
+            draw_pause_icon(hdc, center_x, button_y, play_size);
         } else {
-            draw_play_icon(hdc, center_x, button_y, play_icon_size);
+            draw_play_icon(hdc, center_x, button_y, play_size);
         }
     }
 
-    // Draw Next button
+    // Draw Next button (enlarged on hover)
     int next_x = center_x + button_spacing;
-    draw_next_icon(hdc, next_x, button_y, icon_size);
+    int next_size = (m_hovered_button == BTN_NEXT) ? (int)(icon_size * HOVER_ZOOM_FACTOR) : icon_size;
+    draw_next_icon(hdc, next_x, button_y, next_size);
     
     // Draw Shuffle and Repeat ONLY in undocked mode
     if (m_is_undocked) {
-        // Draw Shuffle button (left of Previous)
+        // Draw Shuffle button (left of Previous) - enlarged on hover
         int shuffle_x = center_x - button_spacing * 2;
-        draw_shuffle_icon(hdc, shuffle_x, button_y, icon_size);
+        int shuffle_size = (m_hovered_button == BTN_SHUFFLE) ? (int)(icon_size * HOVER_ZOOM_FACTOR) : icon_size;
+        draw_shuffle_icon(hdc, shuffle_x, button_y, shuffle_size);
         
-        // Draw Repeat button (right of Next)
+        // Draw Repeat button (right of Next) - enlarged on hover
         int repeat_x = center_x + button_spacing * 2;
-        draw_repeat_icon(hdc, repeat_x, button_y, icon_size);
+        int repeat_size = (m_hovered_button == BTN_REPEAT) ? (int)(icon_size * HOVER_ZOOM_FACTOR) : icon_size;
+        draw_repeat_icon(hdc, repeat_x, button_y, repeat_size);
     }
 
     // Draw Close button in upper right corner and Collapse triangle in bottom right corner
@@ -5164,15 +5344,13 @@ void control_panel::draw_track_info(HDC hdc, const RECT& client_rect, int art_si
         HFONT old_font = (HFONT)SelectObject(hdc, title_font_to_use);
         
         RECT title_rect = {text_left, 20, text_right, 45};
-        pfc::stringcvt::string_wide_from_utf8 wide_title(m_current_title.c_str());
-        DrawText(hdc, wide_title.get_ptr(), -1, &title_rect, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+        // Track title with ticker animation (right-to-left and back) for long titles
+        update_title_ticker(hdc, m_current_title, title_font_to_use, title_rect);
         
         // Draw artist using smaller, normal font
         HFONT artist_font_to_use = m_artist_font ? m_artist_font : CreateFont(get_dpi_scaled_font_height(11), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
                                                                               DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                                                                               DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
-        
-        
         SelectObject(hdc, artist_font_to_use);
         
         RECT artist_rect = {text_left, 50, text_right, 70};
@@ -5196,14 +5374,13 @@ void control_panel::draw_track_info(HDC hdc, const RECT& client_rect, int art_si
         HFONT old_font = (HFONT)SelectObject(hdc, font_to_use);
         
         RECT title_rect = {text_left, 20, text_right, 45};
-        pfc::stringcvt::string_wide_from_utf8 wide_title(m_current_title.c_str());
-        DrawText(hdc, wide_title.get_ptr(), -1, &title_rect, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+        // Track title with ticker animation (right-to-left and back) for long titles
+        update_title_ticker(hdc, m_current_title, font_to_use, title_rect);
         
         // Draw artist using custom or default font
         HFONT artist_font_to_use = m_artist_font ? m_artist_font : CreateFont(get_dpi_scaled_font_height(11), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
                                                                               DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                                                                               DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
-        
         
         SelectObject(hdc, artist_font_to_use);
         
@@ -5292,8 +5469,8 @@ void control_panel::paint_compact_mode(HDC hdc, const RECT& rect) {
     if (!m_compact_controls_visible) {
         int title_bottom = margin + (int)(window_height * 0.36);
         RECT title_rect = {text_left, margin, text_right, title_bottom};
-        pfc::stringcvt::string_wide_from_utf8 wide_title(m_current_title.c_str());
-        DrawText(hdc, wide_title.get_ptr(), -1, &title_rect, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+        // Track title with ticker animation (right-to-left and back) for long titles
+        update_title_ticker(hdc, m_current_title, title_font, title_rect);
         
         SelectObject(hdc, artist_font);
         
@@ -5327,8 +5504,8 @@ void control_panel::paint_compact_mode(HDC hdc, const RECT& rect) {
     int progress_fill_width = (int)(progress_bar_width * progress_ratio);
     if (progress_fill_width > 0) {
         RECT progress_fill_rect = {progress_bar_left, progress_bar_y, progress_bar_left + progress_fill_width, progress_bar_y + progress_bar_height};
-        // Orange accent fill to match the volume OSD slider track
-        HBRUSH progress_fill_brush = CreateSolidBrush(RGB(255, 140, 0));
+        // User-configurable accent color (Progress Accent preference)
+        HBRUSH progress_fill_brush = CreateSolidBrush(get_compact_progress_color());
         FillRect(hdc, &progress_fill_rect, progress_fill_brush);
         DeleteObject(progress_fill_brush);
     }
@@ -5532,48 +5709,53 @@ void control_panel::draw_control_overlay(HDC hdc, int window_width, int window_h
         int overlay_top = window_height - overlay_height;
         int center_y = overlay_top + (overlay_height / 2); // Perfectly centered vertically
         
-        // Previous button
+        // Previous button (enlarged on hover)
         int prev_x = center_x - button_spacing;
         int prev_y = center_y;
+        int prev_size = (m_hovered_button == BTN_PREV) ? (int)(button_size * HOVER_ZOOM_FACTOR) : button_size;
         if (m_is_undocked && !m_is_artwork_expanded) {
-            draw_previous_icon_with_opacity(hdc, prev_x, prev_y, button_size, m_button_opacity);
+            draw_previous_icon_with_opacity(hdc, prev_x, prev_y, prev_size, m_button_opacity);
         } else {
-            draw_previous_icon(hdc, prev_x, prev_y, button_size);
+            draw_previous_icon(hdc, prev_x, prev_y, prev_size);
         }
         
-        // Play/Pause button
+        // Play/Pause button (enlarged on hover)
         int play_x = center_x;
         int play_y = center_y;
+        int play_size = (m_hovered_button == BTN_PLAYPAUSE) ? (int)(play_button_size * HOVER_ZOOM_FACTOR) : play_button_size;
         if (m_is_undocked && !m_is_artwork_expanded) {
             if (m_is_playing && !m_is_paused) {
-                draw_pause_icon_with_opacity(hdc, play_x, play_y, play_button_size, m_button_opacity);
+                draw_pause_icon_with_opacity(hdc, play_x, play_y, play_size, m_button_opacity);
             } else {
-                draw_play_icon_with_opacity(hdc, play_x, play_y, play_button_size, m_button_opacity);
+                draw_play_icon_with_opacity(hdc, play_x, play_y, play_size, m_button_opacity);
             }
         } else {
             if (m_is_playing && !m_is_paused) {
-                draw_pause_icon(hdc, play_x, play_y, play_button_size);
+                draw_pause_icon(hdc, play_x, play_y, play_size);
             } else {
-                draw_play_icon(hdc, play_x, play_y, play_button_size);
+                draw_play_icon(hdc, play_x, play_y, play_size);
             }
         }
         
-        // Next button
+        // Next button (enlarged on hover)
         int next_x = center_x + button_spacing;
         int next_y = center_y;
+        int next_size = (m_hovered_button == BTN_NEXT) ? (int)(button_size * HOVER_ZOOM_FACTOR) : button_size;
         if (m_is_undocked && !m_is_artwork_expanded) {
-            draw_next_icon_with_opacity(hdc, next_x, next_y, button_size, m_button_opacity);
+            draw_next_icon_with_opacity(hdc, next_x, next_y, next_size, m_button_opacity);
         } else {
-            draw_next_icon(hdc, next_x, next_y, button_size);
+            draw_next_icon(hdc, next_x, next_y, next_size);
         }
         
-        // Shuffle button (left of Previous)
+        // Shuffle button (left of Previous) - enlarged on hover
         int shuffle_x = center_x - button_spacing * 2;
-        draw_shuffle_icon(hdc, shuffle_x, center_y, button_size);
+        int shuffle_size = (m_hovered_button == BTN_SHUFFLE) ? (int)(button_size * HOVER_ZOOM_FACTOR) : button_size;
+        draw_shuffle_icon(hdc, shuffle_x, center_y, shuffle_size);
         
-        // Repeat button (right of Next)
+        // Repeat button (right of Next) - enlarged on hover
         int repeat_x = center_x + button_spacing * 2;
-        draw_repeat_icon(hdc, repeat_x, center_y, button_size);
+        int repeat_size = (m_hovered_button == BTN_REPEAT) ? (int)(button_size * HOVER_ZOOM_FACTOR) : button_size;
+        draw_repeat_icon(hdc, repeat_x, center_y, repeat_size);
 
 
         // Close button in upper right corner
@@ -5677,24 +5859,29 @@ void control_panel::draw_compact_control_overlay(HDC hdc, int window_width, int 
         DeleteObject(overlay_brush);
     }
 
-    // Draw control buttons
+    // Draw control buttons (all enlarged on hover)
     // Shuffle button
-    draw_shuffle_icon(hdc, shuffle_x, center_y_line, button_size);
+    int shuffle_size = (m_hovered_button == BTN_SHUFFLE) ? (int)(button_size * HOVER_ZOOM_FACTOR) : button_size;
+    draw_shuffle_icon(hdc, shuffle_x, center_y_line, shuffle_size);
     
     // Previous button
-    draw_previous_icon(hdc, prev_x, center_y_line, button_size);
+    int prev_size = (m_hovered_button == BTN_PREV) ? (int)(button_size * HOVER_ZOOM_FACTOR) : button_size;
+    draw_previous_icon(hdc, prev_x, center_y_line, prev_size);
     
     // Play/Pause button
+    int play_size = (m_hovered_button == BTN_PLAYPAUSE) ? (int)(play_button_size * HOVER_ZOOM_FACTOR) : play_button_size;
     if (m_is_playing && !m_is_paused) {
-        draw_pause_icon(hdc, play_x, center_y_line, play_button_size);
+        draw_pause_icon(hdc, play_x, center_y_line, play_size);
     } else {
-        draw_play_icon(hdc, play_x, center_y_line, play_button_size);
+        draw_play_icon(hdc, play_x, center_y_line, play_size);
     }
     // Next button
-    draw_next_icon(hdc, next_x, center_y_line, button_size);
+    int next_size = (m_hovered_button == BTN_NEXT) ? (int)(button_size * HOVER_ZOOM_FACTOR) : button_size;
+    draw_next_icon(hdc, next_x, center_y_line, next_size);
     
     // Repeat button
-    draw_repeat_icon(hdc, repeat_x, center_y_line, button_size);
+    int repeat_size = (m_hovered_button == BTN_REPEAT) ? (int)(button_size * HOVER_ZOOM_FACTOR) : button_size;
+    draw_repeat_icon(hdc, repeat_x, center_y_line, repeat_size);
 }
 
 void control_panel::start_roll_animation(bool to_compact) {
