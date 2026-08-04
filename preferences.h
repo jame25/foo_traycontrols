@@ -18,6 +18,7 @@ bool get_show_cover_art(); // true=Yes, false=No
 bool get_cover_margin(); // true=Yes, false=No
 int get_cover_style(); // 0=Square, 1=Rounded
 int get_background_style(); // 0=Solid, 1=Artwork Colors, 2=Blurred Artwork
+int get_miniplayer_border_style(); // 0=Square, 1=Rounded
 bool get_show_volume_feedback(); // true=Enabled, false=Disabled
 
 // MiniPlayer mode size functions
@@ -31,6 +32,9 @@ int get_miniplayer_expanded_size();
 pfc::string8 get_line1_format();
 pfc::string8 get_line2_format();
 void format_display_lines(pfc::string8& line1_out, pfc::string8& line2_out);
+
+// Opens the Preferences dialog at this component's page (General tab is shown first)
+void show_preferences_page();
 
 
 
