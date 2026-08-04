@@ -19,7 +19,10 @@ bool get_cover_margin(); // true=Yes, false=No
 int get_cover_style(); // 0=Square, 1=Rounded
 int get_background_style(); // 0=Solid, 1=Artwork Colors, 2=Blurred Artwork
 int get_miniplayer_border_style(); // 0=Square, 1=Rounded
+int get_ticker_speed(); // 0=Off, 1=Slowest, 2=Slow, 3=Fast, 4=Fastest
 bool get_show_volume_feedback(); // true=Enabled, false=Disabled
+COLORREF get_compact_progress_color(); // Compact MiniPlayer track progress bar fill color
+COLORREF get_volume_osd_color();       // Volume OSD bar fill color
 
 // MiniPlayer mode size functions
 int get_miniplayer_undocked_width();
