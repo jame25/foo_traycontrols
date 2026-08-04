@@ -3,10 +3,15 @@
 #include "tray_manager.h"
 #include "control_panel.h"
 #include <uxtheme.h>
+#include <cstdlib>
 #pragma comment(lib, "uxtheme.lib")
 
 // External declaration from main.cpp
 extern HINSTANCE g_hIns;
+
+// When "Disable MiniPlayer" is checked, the slide-to-side options have nothing to act on,
+// so grey them out to avoid confusion.
+static void update_slide_controls_state(HWND hwnd, bool miniplayer_disabled);
 
 // Configuration variables - stored in foobar2000's config system
 static cfg_int cfg_always_minimize_to_tray(GUID{0x12345679, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0);
@@ -21,10 +26,16 @@ static cfg_int cfg_use_rounded_corners(GUID{0x12345690, 0x9abc, 0xdef0, {0x12, 0
 static cfg_int cfg_theme_mode(GUID{0x12345691, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0); // 0=Auto, 1=Force Dark, 2=Force Light
 static cfg_int cfg_show_cover_art(GUID{0x12345695, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 1); // 1=Yes, 0=No
 static cfg_int cfg_cover_margin(GUID{0x12345696, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 1); // 1=Yes, 0=No
-static cfg_int cfg_cover_style(GUID{0x12345697, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0); // 0=Square, 1=Rounded
+static cfg_int cfg_cover_style(GUID{0x12345697, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 1); // 0=Square, 1=Rounded
 static cfg_int cfg_background_style(GUID{0x12345698, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0); // 0=Solid, 1=Artwork Colors, 2=Blurred Artwork
 static cfg_int cfg_show_volume_feedback(GUID{0x12345699, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 1); // 1=Yes, 0=No
-static cfg_int cfg_miniplayer_border_style(GUID{0x1234569A, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 1); // 0=Square, 1=Rounded (Default Rounded)
+static cfg_int cfg_miniplayer_border_style(GUID{0x1234568B, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 1); // 0=Square, 1=Rounded (Default Rounded)
+static cfg_int cfg_ticker_speed(GUID{0x1234568C, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 2); // 0=Off, 1=Slowest, 2=Slow, 3=Fast, 4=Fastest
+
+// Accent colors (default: vibrant orange, matching the previous hard-coded fills)
+static cfg_int cfg_compact_progress_color(GUID{0x1234568E, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, RGB(255, 140, 0)); // Compact MiniPlayer track progress fill
+static cfg_int cfg_volume_osd_color(GUID{0x123456A4, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, RGB(255, 140, 0)); // Volume OSD bar fill
+static cfg_string cfg_color_picker_custom(GUID{0x123456D6, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, ""); // 16 custom slots for ChooseColor
 
 // MiniPlayer mode size configuration
 static cfg_int cfg_miniplayer_undocked_width(GUID{0x123456D1, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 400);
@@ -193,7 +204,7 @@ static cfg_struct_t<LOGFONT> cfg_timer_font(GUID{0x123456D0, 0x9abc, 0xdef0, {0x
     wcscpy_s(lf.lfFaceName, L"Microsoft YaHei UI");
     return lf;
 }());
-static cfg_int cfg_timer_use_custom_font(GUID{0x123456D1, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0);
+static cfg_int cfg_timer_use_custom_font(GUID{0x1234568D, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0);
 
 // Access functions for the configuration
 bool get_always_minimize_to_tray() {
@@ -256,7 +267,7 @@ bool get_cover_margin() {
 
 int get_cover_style() {
     int style = cfg_cover_style;
-    if (style < 0 || style > 1) style = 0;
+    if (style < 0 || style > 1) style = 1;
     return style;
 }
 
@@ -272,8 +283,85 @@ int get_miniplayer_border_style() {
     return style;
 }
 
+int get_ticker_speed() { // 0=Off, 1=Slowest, 2=Slow, 3=Fast, 4=Fastest
+    int speed = cfg_ticker_speed;
+    if (speed < 0 || speed > 4) speed = 2;
+    return speed;
+}
+
+COLORREF get_compact_progress_color() {
+    return (COLORREF)cfg_compact_progress_color.get_value();
+}
+
+COLORREF get_volume_osd_color() {
+    return (COLORREF)cfg_volume_osd_color.get_value();
+}
+
 bool get_show_volume_feedback() {
     return cfg_show_volume_feedback != 0;
+}
+
+// Enable/disable the volume OSD color swatch button based on the "Show volume OSD" checkbox
+static void update_volume_color_button_state(HWND hwnd) {
+    if (!hwnd) return;
+    bool osd_enabled = IsDlgButtonChecked(hwnd, IDC_SHOW_VOLUME_FEEDBACK) == BST_CHECKED;
+    EnableWindow(GetDlgItem(hwnd, IDC_VOLUME_OSD_COLOR_BTN), osd_enabled ? TRUE : FALSE);
+}
+
+// Bring the color picker to the foreground (same pattern as foo_nowbar)
+static UINT_PTR CALLBACK ColorPickerHookProc(HWND hdlg, UINT uiMsg, WPARAM wParam, LPARAM lParam) {
+    if (uiMsg == WM_INITDIALOG) {
+        SetWindowPos(hdlg, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+        SetForegroundWindow(hdlg);
+        SetWindowPos(hdlg, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+    }
+    return 0;
+}
+
+// Show the Windows color picker dialog. The 16 custom color slots persist across sessions
+// via cfg_color_picker_custom.
+static bool show_color_picker(HWND hwnd, COLORREF& color) {
+    static COLORREF custom_colors[16] = {0};
+    static bool loaded = false;
+
+    if (!loaded) {
+        loaded = true;
+        pfc::string8 stored = cfg_color_picker_custom.get();
+        if (!stored.is_empty()) {
+            const char* p = stored.c_str();
+            for (int i = 0; i < 16 && *p; i++) {
+                char* end;
+                unsigned long val = strtoul(p, &end, 16);
+                custom_colors[i] = (COLORREF)val;
+                p = end;
+                if (*p == ',') p++;
+            }
+        }
+    }
+
+    CHOOSECOLOR cc = {};
+    cc.lStructSize = sizeof(cc);
+    cc.hwndOwner = hwnd;
+    cc.rgbResult = color;
+    cc.lpCustColors = custom_colors;
+    cc.Flags = CC_FULLOPEN | CC_RGBINIT | CC_ENABLEHOOK;
+    cc.lpfnHook = ColorPickerHookProc;
+    bool ok = ChooseColor(&cc) != 0;
+
+    {
+        pfc::string8 buf;
+        for (int i = 0; i < 16; i++) {
+            if (i > 0) buf += ",";
+            buf += pfc::format_hex(custom_colors[i], 6);
+        }
+        cfg_color_picker_custom = buf;
+    }
+
+    if (ok) {
+        color = cc.rgbResult;
+        return true;
+    }
+    return false;
 }
 
 pfc::string8 get_line1_format() {
@@ -628,7 +716,7 @@ INT_PTR CALLBACK tray_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, LP
         CheckDlgButton(hwnd, IDC_SHOW_POPUP_NOTIFICATION, cfg_show_popup_notification ? BST_CHECKED : BST_UNCHECKED);
         CheckDlgButton(hwnd, IDC_DISABLE_MINIPLAYER, cfg_disable_miniplayer ? BST_CHECKED : BST_UNCHECKED);
         CheckDlgButton(hwnd, IDC_DISABLE_SLIDE_TO_SIDE, cfg_disable_slide_to_side ? BST_CHECKED : BST_UNCHECKED);
-        CheckDlgButton(hwnd, IDC_ALWAYS_SLIDE_TO_SIDE, cfg_always_slide_to_side ? BST_CHECKED : BST_UNCHECKED);
+        update_slide_controls_state(hwnd, cfg_disable_miniplayer != 0);
 
         // Initialize appearance tab comboboxes
         HWND hThemeCombo = GetDlgItem(hwnd, IDC_THEME_MODE_COMBO);
@@ -659,11 +747,22 @@ INT_PTR CALLBACK tray_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, LP
         SendMessage(hBgStyleCombo, CB_SETCURSEL, cfg_background_style, 0);
 
         HWND hMiniPlayerBorderCombo = GetDlgItem(hwnd, IDC_MINIPLAYER_BORDER_COMBO);
+        SendMessage(hMiniPlayerBorderCombo, CB_RESETCONTENT, 0, 0);
         SendMessage(hMiniPlayerBorderCombo, CB_ADDSTRING, 0, (LPARAM)L"Square");
         SendMessage(hMiniPlayerBorderCombo, CB_ADDSTRING, 0, (LPARAM)L"Rounded");
         SendMessage(hMiniPlayerBorderCombo, CB_SETCURSEL, cfg_miniplayer_border_style, 0);
 
+        HWND hTickerSpeedCombo = GetDlgItem(hwnd, IDC_TICKER_SPEED_COMBO);
+        SendMessage(hTickerSpeedCombo, CB_RESETCONTENT, 0, 0);
+        SendMessage(hTickerSpeedCombo, CB_ADDSTRING, 0, (LPARAM)L"Off");
+        SendMessage(hTickerSpeedCombo, CB_ADDSTRING, 0, (LPARAM)L"Slowest");
+        SendMessage(hTickerSpeedCombo, CB_ADDSTRING, 0, (LPARAM)L"Slow");
+        SendMessage(hTickerSpeedCombo, CB_ADDSTRING, 0, (LPARAM)L"Fast");
+        SendMessage(hTickerSpeedCombo, CB_ADDSTRING, 0, (LPARAM)L"Fastest");
+        SendMessage(hTickerSpeedCombo, CB_SETCURSEL, cfg_ticker_speed, 0);
+
         CheckDlgButton(hwnd, IDC_SHOW_VOLUME_FEEDBACK, cfg_show_volume_feedback ? BST_CHECKED : BST_UNCHECKED);
+        update_volume_color_button_state(hwnd);
 
         // Initialize display format edit fields
         uSetDlgItemText(hwnd, IDC_LINE1_FORMAT_EDIT, cfg_line1_format);
@@ -746,10 +845,37 @@ INT_PTR CALLBACK tray_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, LP
         case IDC_SHOW_POPUP_NOTIFICATION:
         case IDC_DISABLE_MINIPLAYER:
         case IDC_DISABLE_SLIDE_TO_SIDE:
-        case IDC_ALWAYS_SLIDE_TO_SIDE:
         case IDC_SHOW_VOLUME_FEEDBACK:
             if (HIWORD(wp) == BN_CLICKED) {
+                if (LOWORD(wp) == IDC_DISABLE_MINIPLAYER) {
+                    update_slide_controls_state(hwnd, IsDlgButtonChecked(hwnd, IDC_DISABLE_MINIPLAYER) == BST_CHECKED);
+                }
+                if (LOWORD(wp) == IDC_SHOW_VOLUME_FEEDBACK) {
+                    update_volume_color_button_state(hwnd);
+                }
                 p_this->on_changed();
+            }
+            break;
+
+        case IDC_PROGRESS_ACCENT_BTN:
+            if (HIWORD(wp) == BN_CLICKED) {
+                COLORREF color = get_compact_progress_color();
+                if (show_color_picker(hwnd, color)) {
+                    cfg_compact_progress_color = color;
+                    InvalidateRect(GetDlgItem(hwnd, IDC_PROGRESS_ACCENT_BTN), nullptr, TRUE);
+                    p_this->on_changed();
+                }
+            }
+            break;
+
+        case IDC_VOLUME_OSD_COLOR_BTN:
+            if (HIWORD(wp) == BN_CLICKED) {
+                COLORREF color = get_volume_osd_color();
+                if (show_color_picker(hwnd, color)) {
+                    cfg_volume_osd_color = color;
+                    InvalidateRect(GetDlgItem(hwnd, IDC_VOLUME_OSD_COLOR_BTN), nullptr, TRUE);
+                    p_this->on_changed();
+                }
             }
             break;
 
@@ -905,6 +1031,7 @@ INT_PTR CALLBACK tray_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, LP
         case IDC_COVER_MARGIN_COMBO:
         case IDC_COVER_STYLE_COMBO:
         case IDC_MINIPLAYER_BORDER_COMBO:
+        case IDC_TICKER_SPEED_COMBO:
             if (HIWORD(wp) == CBN_SELCHANGE) {
                 p_this->on_changed();
             }
@@ -1004,6 +1131,23 @@ INT_PTR CALLBACK tray_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, LP
         }
         break;
         
+    case WM_DRAWITEM:
+        {
+            DRAWITEMSTRUCT* dis = reinterpret_cast<DRAWITEMSTRUCT*>(lp);
+            if (dis->CtlID == IDC_PROGRESS_ACCENT_BTN || dis->CtlID == IDC_VOLUME_OSD_COLOR_BTN) {
+                COLORREF color = (dis->CtlID == IDC_PROGRESS_ACCENT_BTN) ? get_compact_progress_color() : get_volume_osd_color();
+                if (dis->itemState & ODS_DISABLED) {
+                    color = RGB(200, 200, 200); // Grey swatch when disabled
+                }
+                HBRUSH hBrush = CreateSolidBrush(color);
+                FillRect(dis->hDC, &dis->rcItem, hBrush);
+                DeleteObject(hBrush);
+                FrameRect(dis->hDC, &dis->rcItem, (HBRUSH)GetStockObject(BLACK_BRUSH));
+                return TRUE;
+            }
+        }
+        break;
+        
     // Note: WM_CTLCOLORSTATIC removed - shadow effect may be a foobar2000 framework issue
         
     case WM_DESTROY:
@@ -1012,6 +1156,15 @@ INT_PTR CALLBACK tray_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, LP
     }
     
     return FALSE;
+}
+
+// When "Disable MiniPlayer" is checked, the slide-to-side options have nothing to act on,
+// so grey them out to avoid confusion.
+static void update_slide_controls_state(HWND hwnd, bool miniplayer_disabled) {
+    if (!hwnd) return;
+    EnableWindow(GetDlgItem(hwnd, IDC_DISABLE_SLIDE_TO_SIDE), miniplayer_disabled ? FALSE : TRUE);
+    EnableWindow(GetDlgItem(hwnd, IDC_SLIDE_DURATION_LABEL), miniplayer_disabled ? FALSE : TRUE);
+    EnableWindow(GetDlgItem(hwnd, IDC_SLIDE_DURATION_COMBO), miniplayer_disabled ? FALSE : TRUE);
 }
 
 void tray_preferences::on_changed() {
@@ -1044,7 +1197,6 @@ void tray_preferences::apply_settings() {
         cfg_show_popup_notification = (IsDlgButtonChecked(m_hwnd, IDC_SHOW_POPUP_NOTIFICATION) == BST_CHECKED) ? 1 : 0;
         cfg_disable_miniplayer = (IsDlgButtonChecked(m_hwnd, IDC_DISABLE_MINIPLAYER) == BST_CHECKED) ? 1 : 0;
         cfg_disable_slide_to_side = (IsDlgButtonChecked(m_hwnd, IDC_DISABLE_SLIDE_TO_SIDE) == BST_CHECKED) ? 1 : 0;
-        cfg_always_slide_to_side = (IsDlgButtonChecked(m_hwnd, IDC_ALWAYS_SLIDE_TO_SIDE) == BST_CHECKED) ? 1 : 0;
         cfg_popup_position = (int)SendMessage(GetDlgItem(m_hwnd, IDC_POPUP_POSITION_COMBO), CB_GETCURSEL, 0, 0);
 
         // Convert duration combo index to milliseconds
@@ -1070,6 +1222,7 @@ void tray_preferences::apply_settings() {
         cfg_cover_style = (int)SendMessage(GetDlgItem(m_hwnd, IDC_COVER_STYLE_COMBO), CB_GETCURSEL, 0, 0);
         cfg_background_style = (int)SendMessage(GetDlgItem(m_hwnd, IDC_BACKGROUND_STYLE_COMBO), CB_GETCURSEL, 0, 0);
         cfg_miniplayer_border_style = (int)SendMessage(GetDlgItem(m_hwnd, IDC_MINIPLAYER_BORDER_COMBO), CB_GETCURSEL, 0, 0);
+        cfg_ticker_speed = (int)SendMessage(GetDlgItem(m_hwnd, IDC_TICKER_SPEED_COMBO), CB_GETCURSEL, 0, 0);
         cfg_show_volume_feedback = (IsDlgButtonChecked(m_hwnd, IDC_SHOW_VOLUME_FEEDBACK) == BST_CHECKED) ? 1 : 0;
 
         // Save display format strings
@@ -1116,9 +1269,11 @@ void tray_preferences::reset_settings() {
         cfg_theme_mode = 0;               // Default: Auto
         cfg_show_cover_art = 1;           // Default: Yes (1)
         cfg_cover_margin = 1;             // Default: Yes (1)
-        cfg_cover_style = 0;              // Default: Square (0)
+        cfg_cover_style = 1;              // Default: Rounded (1)
         cfg_background_style = 0;         // Default: Solid (0)
         cfg_show_volume_feedback = 1;     // Default: Yes (1)
+        cfg_compact_progress_color = RGB(255, 140, 0); // Default: orange
+        cfg_volume_osd_color = RGB(255, 140, 0);       // Default: orange
         cfg_line1_format = "%title%";     // Default: title
         cfg_line2_format = "%artist%";    // Default: artist
 
@@ -1134,17 +1289,22 @@ void tray_preferences::reset_settings() {
         CheckDlgButton(m_hwnd, IDC_SHOW_POPUP_NOTIFICATION, BST_CHECKED);
         CheckDlgButton(m_hwnd, IDC_DISABLE_MINIPLAYER, BST_UNCHECKED);
         CheckDlgButton(m_hwnd, IDC_DISABLE_SLIDE_TO_SIDE, BST_UNCHECKED);
-        CheckDlgButton(m_hwnd, IDC_ALWAYS_SLIDE_TO_SIDE, BST_CHECKED);
+        update_slide_controls_state(m_hwnd, false);
         SendMessage(GetDlgItem(m_hwnd, IDC_POPUP_POSITION_COMBO), CB_SETCURSEL, 0, 0);        // Top Left
         SendMessage(GetDlgItem(m_hwnd, IDC_POPUP_DURATION_COMBO), CB_SETCURSEL, 2, 0);        // 3 seconds (index 2)
         SendMessage(GetDlgItem(m_hwnd, IDC_SLIDE_DURATION_COMBO), CB_SETCURSEL, 1, 0);        // Fast 200ms (index 1)
         SendMessage(GetDlgItem(m_hwnd, IDC_THEME_MODE_COMBO), CB_SETCURSEL, 0, 0);            // Auto
         SendMessage(GetDlgItem(m_hwnd, IDC_COVER_ARTWORK_COMBO), CB_SETCURSEL, 0, 0);         // Yes
         SendMessage(GetDlgItem(m_hwnd, IDC_COVER_MARGIN_COMBO), CB_SETCURSEL, 0, 0);          // Yes
-        SendMessage(GetDlgItem(m_hwnd, IDC_COVER_STYLE_COMBO), CB_SETCURSEL, 0, 0);           // Square
+        SendMessage(GetDlgItem(m_hwnd, IDC_COVER_STYLE_COMBO), CB_SETCURSEL, 1, 0);           // Rounded
         SendMessage(GetDlgItem(m_hwnd, IDC_BACKGROUND_STYLE_COMBO), CB_SETCURSEL, 0, 0);      // Solid
         SendMessage(GetDlgItem(m_hwnd, IDC_MINIPLAYER_BORDER_COMBO), CB_SETCURSEL, 1, 0);     // Rounded (index 1)
+        SendMessage(GetDlgItem(m_hwnd, IDC_TICKER_SPEED_COMBO), CB_SETCURSEL, 2, 0);           // Slow (index 2)
         CheckDlgButton(m_hwnd, IDC_SHOW_VOLUME_FEEDBACK, BST_CHECKED);
+        update_volume_color_button_state(m_hwnd);
+        // Repaint the color swatch buttons with the reset colors
+        InvalidateRect(GetDlgItem(m_hwnd, IDC_PROGRESS_ACCENT_BTN), nullptr, TRUE);
+        InvalidateRect(GetDlgItem(m_hwnd, IDC_VOLUME_OSD_COLOR_BTN), nullptr, TRUE);
         uSetDlgItemText(m_hwnd, IDC_LINE1_FORMAT_EDIT, "%title%");
         uSetDlgItemText(m_hwnd, IDC_LINE2_FORMAT_EDIT, "%artist%");
 
@@ -1608,8 +1768,7 @@ void tray_preferences::switch_tab(int tab) {
         // Slide-to-Side options
         IDC_DISABLE_SLIDE_TO_SIDE,
         IDC_SLIDE_DURATION_LABEL,
-        IDC_SLIDE_DURATION_COMBO,
-        IDC_ALWAYS_SLIDE_TO_SIDE
+        IDC_SLIDE_DURATION_COMBO
     };
     
     // Appearance tab controls
@@ -1626,7 +1785,12 @@ void tray_preferences::switch_tab(int tab) {
         IDC_BACKGROUND_STYLE_COMBO,
         IDC_MINIPLAYER_BORDER_LABEL,
         IDC_MINIPLAYER_BORDER_COMBO,
-        IDC_SHOW_VOLUME_FEEDBACK
+        IDC_TICKER_SPEED_LABEL,
+        IDC_TICKER_SPEED_COMBO,
+        IDC_PROGRESS_ACCENT_LABEL,
+        IDC_PROGRESS_ACCENT_BTN,
+        IDC_SHOW_VOLUME_FEEDBACK,
+        IDC_VOLUME_OSD_COLOR_BTN
     };
 
     // MiniPlayer tab controls
