@@ -23,6 +23,23 @@ static inline float slider_to_db(float slider_pos) {
     return static_cast<float>(volume);
 }
 
+// Add rounded rectangle with smooth arcs to GDI+ GraphicsPath
+static void add_rounded_rect_to_path(Gdiplus::GraphicsPath& path, float x, float y, float width, float height, float radius) {
+    float diameter = radius * 2.0f;
+    if (diameter > width) diameter = width;
+    if (diameter > height) diameter = height;
+    if (diameter <= 0.0f) {
+        path.AddRectangle(Gdiplus::RectF(x, y, width, height));
+        return;
+    }
+
+    path.AddArc(x, y, diameter, diameter, 180.0f, 90.0f);
+    path.AddArc(x + width - diameter, y, diameter, diameter, 270.0f, 90.0f);
+    path.AddArc(x + width - diameter, y + height - diameter, diameter, diameter, 0.0f, 90.0f);
+    path.AddArc(x, y + height - diameter, diameter, diameter, 90.0f, 90.0f);
+    path.CloseFigure();
+}
+
 volume_popup* volume_popup::s_instance = nullptr;
 extern HINSTANCE g_hIns;
 
@@ -91,8 +108,6 @@ void volume_popup::create_window() {
         0, 0, POPUP_WIDTH, POPUP_HEIGHT,
         nullptr, nullptr, g_hIns, this
     );
-    // Initialize layered window with alpha
-    SetLayeredWindowAttributes(m_window, 0, 255, LWA_ALPHA);
 }
 
 void volume_popup::show_at(int x, int y) {
@@ -100,6 +115,9 @@ void volume_popup::show_at(int x, int y) {
 
     m_is_feedback_mode = false;
     KillTimer(m_window, FEEDBACK_TIMER_ID);
+
+    // Clear custom window region from feedback mode
+    SetWindowRgn(m_window, nullptr, TRUE);
 
     // Get current volume
     try {
@@ -154,6 +172,9 @@ void volume_popup::show_feedback() {
     int w = FEEDBACK_WIDTH;
     int h = FEEDBACK_HEIGHT;
 
+    // Clear custom window region so GDI+ anti-aliased edges are preserved
+    SetWindowRgn(m_window, nullptr, TRUE);
+
     // Get cursor position
     POINT pt = {};
     GetCursorPos(&pt);
@@ -196,7 +217,32 @@ void volume_popup::hide() {
 void volume_popup::update_volume_from_point(POINT pt) {
     RECT rc;
     GetClientRect(m_window, &rc);
-    
+
+    // In feedback OSD mode, the slider track runs from FEEDBACK_TRACK_X to the text area.
+    if (m_is_feedback_mode) {
+        int track_left = FEEDBACK_TRACK_X;
+        int track_right = rc.right - FEEDBACK_TEXT_W - 12;
+        int track_width = track_right - track_left;
+
+        if (track_width <= 0) return;
+
+        int x = pt.x;
+        if (x < track_left) x = track_left;
+        if (x > track_right) x = track_right;
+
+        float ratio = (float)(x - track_left) / (float)track_width;
+        float new_vol = slider_to_db(ratio);
+
+        try {
+            auto playback = playback_control::get();
+            playback->set_volume(new_vol);
+            m_current_volume_db = new_vol;
+        } catch (...) {}
+
+        InvalidateRect(m_window, nullptr, TRUE);
+        return;
+    }
+
     int track_left = SLIDER_MARGIN_X;
     int track_right = rc.right - SLIDER_MARGIN_X;
     int track_width = track_right - track_left;
@@ -228,7 +274,10 @@ void volume_popup::paint(HDC hdc) {
     RECT rc;
     GetClientRect(m_window, &rc);
     
-    // Allow for antialiasing if using GDI+ in future, but standard GDI here
+    // Fill background with colorkey for transparency
+    HBRUSH colorkey_brush = CreateSolidBrush(RGB(255, 0, 255));
+    FillRect(hdc, &rc, colorkey_brush);
+    DeleteObject(colorkey_brush);
     
     // 1. Draw Bubble Shape (Rounded Rect with Arrow)
     // Background color: White like screenshot
@@ -298,7 +347,7 @@ void volume_popup::paint(HDC hdc) {
     
     RECT fill_rect = { track_left, track_rect.top, track_left + fill_width, track_rect.bottom };
     
-    HBRUSH fill_brush = CreateSolidBrush(RGB(100, 100, 100)); // Darker gray fill
+    HBRUSH fill_brush = CreateSolidBrush(RGB(255, 140, 0)); // Orange fill
     FillRect(hdc, &fill_rect, fill_brush);
     DeleteObject(fill_brush);
     
@@ -358,10 +407,25 @@ void volume_popup::paint_feedback(HDC hdc) {
 
     if (w <= 0 || h <= 0) return;
 
-    // Double buffer memory DC
-    HDC mem_dc = CreateCompatibleDC(hdc);
-    HBITMAP mem_bmp = CreateCompatibleBitmap(hdc, w, h);
+    // Create 32-bit ARGB DIBSection for true per-pixel alpha blending
+    BITMAPINFO bmi = {};
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = w;
+    bmi.bmiHeader.biHeight = -h; // Top-down DIB
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+
+    void* pvBits = nullptr;
+    HDC hdcScreen = GetDC(nullptr);
+    HDC mem_dc = CreateCompatibleDC(hdcScreen);
+    HBITMAP mem_bmp = CreateDIBSection(mem_dc, &bmi, DIB_RGB_COLORS, &pvBits, nullptr, 0);
     HBITMAP old_bmp = (HBITMAP)SelectObject(mem_dc, mem_bmp);
+
+    // Initialize memory bits to 0 (100% transparent ARGB 0x00000000)
+    if (pvBits) {
+        memset(pvBits, 0, w * h * 4);
+    }
 
     // Dark mode check
     bool is_dark = false;
@@ -384,90 +448,97 @@ void volume_popup::paint_feedback(HDC hdc) {
     COLORREF border_color = is_dark ? RGB(60, 60, 64) : RGB(218, 218, 222);
     COLORREF icon_color = is_dark ? RGB(220, 220, 225) : RGB(40, 40, 45);
     COLORREF track_bg_color = is_dark ? RGB(65, 65, 70) : RGB(190, 190, 195);
-    COLORREF track_fill_color = is_dark ? RGB(0, 168, 181) : RGB(0, 150, 165); // Teal accent matching screenshot!
+    COLORREF track_fill_color = is_dark ? RGB(255, 140, 0) : RGB(255, 120, 0); // Vibrant orange accent
     COLORREF text_color = is_dark ? RGB(240, 240, 245) : RGB(30, 30, 35);
 
-    // 1. Draw Pill Card Background
-    HBRUSH bg_brush = CreateSolidBrush(bg_color);
-    HPEN border_pen = CreatePen(PS_SOLID, 1, border_color);
-    HBRUSH old_brush = (HBRUSH)SelectObject(mem_dc, bg_brush);
-    HPEN old_pen = (HPEN)SelectObject(mem_dc, border_pen);
+    // Initialize GDI+ Graphics
+    Gdiplus::Graphics g(mem_dc);
+    g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+    g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
 
-    int corner_radius = get_use_rounded_corners() ? 12 : 6;
-    RoundRect(mem_dc, 0, 0, w, h, corner_radius * 2, corner_radius * 2);
+    // 1. Draw Pill Card Background & Border with GDI+ Anti-Aliasing
+    float stroke = 1.0f;
+    float pad = stroke * 0.5f;
+    float radius = get_use_rounded_corners() ? 12.0f : 6.0f;
 
-    SelectObject(mem_dc, old_pen);
-    SelectObject(mem_dc, old_brush);
-    DeleteObject(bg_brush);
-    DeleteObject(border_pen);
+    Gdiplus::GraphicsPath card_path;
+    add_rounded_rect_to_path(card_path, pad, pad, (float)w - stroke, (float)h - stroke, radius);
+
+    Gdiplus::SolidBrush bg_brush(Gdiplus::Color(255, GetRValue(bg_color), GetGValue(bg_color), GetBValue(bg_color)));
+    Gdiplus::Pen border_pen(Gdiplus::Color(255, GetRValue(border_color), GetGValue(border_color), GetBValue(border_color)), stroke);
+
+    g.FillPath(&bg_brush, &card_path);
+    g.DrawPath(&border_pen, &card_path);
 
     // Volume ratio 0.0 to 1.0
     float vol_pct = db_to_slider(m_current_volume_db);
     int vol_int = (int)std::round(vol_pct * 100.0f);
 
-
-    // 2. Draw Speaker Vector Icon (GDI+ smooth anti-aliased Material Design icon)
-    int icon_size = 20;
-    int icon_x = 14;
+    // 2. Draw Speaker Vector Icon
+    int icon_size = FEEDBACK_ICON_SIZE;
+    int icon_x = FEEDBACK_ICON_X;
     int icon_y = (h - icon_size) / 2;
 
-    Gdiplus::Graphics g(mem_dc);
-    g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
     Gdiplus::Color gdiplus_icon_color(GetRValue(icon_color), GetGValue(icon_color), GetBValue(icon_color));
     draw_speaker_icon(g, icon_x, icon_y, icon_size, vol_pct, gdiplus_icon_color);
 
+    // 3. Draw Slider Track Bar & Orange Accent Fill with GDI+ Anti-Aliasing
+    float track_x = FEEDBACK_TRACK_X;
+    float text_w = FEEDBACK_TEXT_W;
+    float track_w = (float)w - track_x - text_w - 12.0f;
+    float track_h = 6.0f;
+    float track_y = ((float)h - track_h) * 0.5f;
 
-    // 3. Draw Slider Track
-    int track_x = 44;
-    int text_w = 38;
-    int track_w = w - track_x - text_w - 12;
-    int track_h = 6;
-    int track_y = (h - track_h) / 2;
+    if (track_w > 0.0f) {
+        // Track background capsule
+        Gdiplus::GraphicsPath track_path;
+        add_rounded_rect_to_path(track_path, track_x, track_y, track_w, track_h, track_h * 0.5f);
 
-    if (track_w > 0) {
-        RECT track_rc = { track_x, track_y, track_x + track_w, track_y + track_h };
-        HBRUSH track_bg = CreateSolidBrush(track_bg_color);
-        HPEN null_pen = (HPEN)GetStockObject(NULL_PEN);
-        old_brush = (HBRUSH)SelectObject(mem_dc, track_bg);
-        old_pen = (HPEN)SelectObject(mem_dc, null_pen);
-        RoundRect(mem_dc, track_rc.left, track_rc.top, track_rc.right, track_rc.bottom, 6, 6);
-        SelectObject(mem_dc, old_brush);
-        DeleteObject(track_bg);
+        Gdiplus::SolidBrush track_bg_brush(Gdiplus::Color(255, GetRValue(track_bg_color), GetGValue(track_bg_color), GetBValue(track_bg_color)));
+        g.FillPath(&track_bg_brush, &track_path);
 
-        // Draw Filled Accent Bar
-        int fill_w = (int)(track_w * vol_pct);
-        if (fill_w < 6 && vol_pct > 0.0f) fill_w = 6;
+        // Filled Orange Accent Bar capsule
+        float fill_w = track_w * vol_pct;
+        if (fill_w < track_h && vol_pct > 0.0f) fill_w = track_h;
         if (fill_w > track_w) fill_w = track_w;
 
-        if (fill_w > 0) {
-            RECT fill_rc = { track_x, track_y, track_x + fill_w, track_y + track_h };
-            HBRUSH fill_brush = CreateSolidBrush(track_fill_color);
-            old_brush = (HBRUSH)SelectObject(mem_dc, fill_brush);
-            RoundRect(mem_dc, fill_rc.left, fill_rc.top, fill_rc.right, fill_rc.bottom, 6, 6);
-            SelectObject(mem_dc, old_brush);
-            DeleteObject(fill_brush);
+        if (fill_w > 0.0f) {
+            Gdiplus::GraphicsPath fill_path;
+            add_rounded_rect_to_path(fill_path, track_x, track_y, fill_w, track_h, track_h * 0.5f);
+
+            Gdiplus::SolidBrush track_fill_brush(Gdiplus::Color(255, GetRValue(track_fill_color), GetGValue(track_fill_color), GetBValue(track_fill_color)));
+            g.FillPath(&track_fill_brush, &fill_path);
         }
-        SelectObject(mem_dc, old_pen);
     }
 
-    // 4. Draw Numerical Volume Display
-    HFONT hFont = CreateFontW(-14, 0, 0, 0, FW_MEDIUM, FALSE, FALSE, FALSE,
-        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
-    HFONT old_font = (HFONT)SelectObject(mem_dc, hFont);
-    SetBkMode(mem_dc, TRANSPARENT);
-    SetTextColor(mem_dc, text_color);
+    // 4. Draw Numerical Volume Display (GDI+ Anti-Aliased Text)
+    g.SetTextRenderingHint(Gdiplus::TextRenderingHintAntiAliasGridFit);
+    Gdiplus::Font font(L"Segoe UI", 10.5f, Gdiplus::FontStyleRegular, Gdiplus::UnitPoint);
+    Gdiplus::SolidBrush text_brush(Gdiplus::Color(255, GetRValue(text_color), GetGValue(text_color), GetBValue(text_color)));
+    Gdiplus::StringFormat format;
+    format.SetAlignment(Gdiplus::StringAlignmentFar);
+    format.SetLineAlignment(Gdiplus::StringAlignmentCenter);
 
     std::wstring vol_str = std::to_wstring(vol_int);
-    RECT text_rc = { w - text_w - 12, 0, w - 12, h };
-    DrawTextW(mem_dc, vol_str.c_str(), (int)vol_str.length(), &text_rc, DT_SINGLELINE | DT_VCENTER | DT_RIGHT);
+    Gdiplus::RectF text_rect((float)w - text_w - 12.0f, 0.0f, text_w, (float)h);
+    g.DrawString(vol_str.c_str(), (int)vol_str.length(), &font, text_rect, &format, &text_brush);
 
-    SelectObject(mem_dc, old_font);
-    DeleteObject(hFont);
+    // Update Layered Window with AC_SRC_ALPHA for hardware per-pixel alpha composition
+    RECT win_rect;
+    GetWindowRect(m_window, &win_rect);
+    POINT ptDst = { win_rect.left, win_rect.top };
+    SIZE size = { w, h };
+    POINT ptSrc = { 0, 0 };
 
-    // BitBlt to target DC
-    BitBlt(hdc, 0, 0, w, h, mem_dc, 0, 0, SRCCOPY);
+    BLENDFUNCTION blend = {};
+    blend.BlendOp = AC_SRC_OVER;
+    blend.BlendFlags = 0;
+    blend.SourceConstantAlpha = 255;
+    blend.AlphaFormat = AC_SRC_ALPHA;
 
+    UpdateLayeredWindow(m_window, hdcScreen, &ptDst, &size, mem_dc, &ptSrc, 0, &blend, ULW_ALPHA);
+
+    ReleaseDC(nullptr, hdcScreen);
     SelectObject(mem_dc, old_bmp);
     DeleteObject(mem_bmp);
     DeleteDC(mem_dc);
@@ -507,9 +578,19 @@ LRESULT CALLBACK volume_popup::window_proc(HWND hwnd, UINT msg, WPARAM wparam, L
 
         case WM_LBUTTONDOWN:
             {
+                POINT pt = { (short)LOWORD(lparam), (short)HIWORD(lparam) };
+                // Feedback OSD: clicking the speaker/mute icon toggles mute without starting a drag.
+                if (pThis->m_is_feedback_mode && pt.x < FEEDBACK_TRACK_X) {
+                    try {
+                        auto playback = playback_control::get();
+                        playback->volume_mute_toggle();
+                        pThis->m_current_volume_db = playback->get_volume();
+                    } catch (...) {}
+                    InvalidateRect(hwnd, nullptr, TRUE);
+                    return 0;
+                }
                 pThis->m_is_dragging = true;
                 SetCapture(hwnd);
-                POINT pt = { (short)LOWORD(lparam), (short)HIWORD(lparam) };
                 pThis->update_volume_from_point(pt);
                 return 0;
             }
