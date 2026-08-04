@@ -5335,7 +5335,8 @@ void control_panel::paint_compact_mode(HDC hdc, const RECT& rect) {
     int progress_fill_width = (int)(progress_bar_width * progress_ratio);
     if (progress_fill_width > 0) {
         RECT progress_fill_rect = {progress_bar_left, progress_bar_y, progress_bar_left + progress_fill_width, progress_bar_y + progress_bar_height};
-        HBRUSH progress_fill_brush = CreateSolidBrush(m_progress_fill_color);
+        // Orange accent fill to match the volume OSD slider track
+        HBRUSH progress_fill_brush = CreateSolidBrush(RGB(255, 140, 0));
         FillRect(hdc, &progress_fill_rect, progress_fill_brush);
         DeleteObject(progress_fill_brush);
     }
