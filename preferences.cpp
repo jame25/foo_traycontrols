@@ -24,6 +24,7 @@ static cfg_int cfg_cover_margin(GUID{0x12345696, 0x9abc, 0xdef0, {0x12, 0x34, 0x
 static cfg_int cfg_cover_style(GUID{0x12345697, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0); // 0=Square, 1=Rounded
 static cfg_int cfg_background_style(GUID{0x12345698, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0); // 0=Solid, 1=Artwork Colors, 2=Blurred Artwork
 static cfg_int cfg_show_volume_feedback(GUID{0x12345699, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 1); // 1=Yes, 0=No
+static cfg_int cfg_miniplayer_border_style(GUID{0x1234569A, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 1); // 0=Square, 1=Rounded (Default Rounded)
 
 // MiniPlayer mode size configuration
 static cfg_int cfg_miniplayer_undocked_width(GUID{0x123456D1, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 400);
@@ -265,6 +266,12 @@ int get_background_style() {
     return style;
 }
 
+int get_miniplayer_border_style() {
+    int style = cfg_miniplayer_border_style;
+    if (style < 0 || style > 1) style = 1;
+    return style;
+}
+
 bool get_show_volume_feedback() {
     return cfg_show_volume_feedback != 0;
 }
@@ -491,6 +498,11 @@ LOGFONT get_default_font(bool is_artist, int size) {
 static const GUID guid_preferences_page_tray = 
 { 0x12345678, 0x9abc, 0xdef0, { 0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0 } };
 
+// Opens the Preferences dialog at this component's page (General tab is shown first)
+void show_preferences_page() {
+    ui_control::get()->show_preferences(guid_preferences_page_tray);
+}
+
 //=============================================================================
 // tray_preferences - preferences page instance implementation
 //=============================================================================
@@ -617,7 +629,6 @@ INT_PTR CALLBACK tray_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, LP
         CheckDlgButton(hwnd, IDC_DISABLE_MINIPLAYER, cfg_disable_miniplayer ? BST_CHECKED : BST_UNCHECKED);
         CheckDlgButton(hwnd, IDC_DISABLE_SLIDE_TO_SIDE, cfg_disable_slide_to_side ? BST_CHECKED : BST_UNCHECKED);
         CheckDlgButton(hwnd, IDC_ALWAYS_SLIDE_TO_SIDE, cfg_always_slide_to_side ? BST_CHECKED : BST_UNCHECKED);
-        CheckDlgButton(hwnd, IDC_USE_ROUNDED_CORNERS, cfg_use_rounded_corners ? BST_CHECKED : BST_UNCHECKED);
 
         // Initialize appearance tab comboboxes
         HWND hThemeCombo = GetDlgItem(hwnd, IDC_THEME_MODE_COMBO);
@@ -646,6 +657,11 @@ INT_PTR CALLBACK tray_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, LP
         SendMessage(hBgStyleCombo, CB_ADDSTRING, 0, (LPARAM)L"Artwork Colors");
         SendMessage(hBgStyleCombo, CB_ADDSTRING, 0, (LPARAM)L"Blurred Artwork");
         SendMessage(hBgStyleCombo, CB_SETCURSEL, cfg_background_style, 0);
+
+        HWND hMiniPlayerBorderCombo = GetDlgItem(hwnd, IDC_MINIPLAYER_BORDER_COMBO);
+        SendMessage(hMiniPlayerBorderCombo, CB_ADDSTRING, 0, (LPARAM)L"Square");
+        SendMessage(hMiniPlayerBorderCombo, CB_ADDSTRING, 0, (LPARAM)L"Rounded");
+        SendMessage(hMiniPlayerBorderCombo, CB_SETCURSEL, cfg_miniplayer_border_style, 0);
 
         CheckDlgButton(hwnd, IDC_SHOW_VOLUME_FEEDBACK, cfg_show_volume_feedback ? BST_CHECKED : BST_UNCHECKED);
 
@@ -731,7 +747,6 @@ INT_PTR CALLBACK tray_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, LP
         case IDC_DISABLE_MINIPLAYER:
         case IDC_DISABLE_SLIDE_TO_SIDE:
         case IDC_ALWAYS_SLIDE_TO_SIDE:
-        case IDC_USE_ROUNDED_CORNERS:
         case IDC_SHOW_VOLUME_FEEDBACK:
             if (HIWORD(wp) == BN_CLICKED) {
                 p_this->on_changed();
@@ -889,6 +904,7 @@ INT_PTR CALLBACK tray_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, LP
         case IDC_COVER_ARTWORK_COMBO:
         case IDC_COVER_MARGIN_COMBO:
         case IDC_COVER_STYLE_COMBO:
+        case IDC_MINIPLAYER_BORDER_COMBO:
             if (HIWORD(wp) == CBN_SELCHANGE) {
                 p_this->on_changed();
             }
@@ -1029,7 +1045,6 @@ void tray_preferences::apply_settings() {
         cfg_disable_miniplayer = (IsDlgButtonChecked(m_hwnd, IDC_DISABLE_MINIPLAYER) == BST_CHECKED) ? 1 : 0;
         cfg_disable_slide_to_side = (IsDlgButtonChecked(m_hwnd, IDC_DISABLE_SLIDE_TO_SIDE) == BST_CHECKED) ? 1 : 0;
         cfg_always_slide_to_side = (IsDlgButtonChecked(m_hwnd, IDC_ALWAYS_SLIDE_TO_SIDE) == BST_CHECKED) ? 1 : 0;
-        cfg_use_rounded_corners = (IsDlgButtonChecked(m_hwnd, IDC_USE_ROUNDED_CORNERS) == BST_CHECKED) ? 1 : 0;
         cfg_popup_position = (int)SendMessage(GetDlgItem(m_hwnd, IDC_POPUP_POSITION_COMBO), CB_GETCURSEL, 0, 0);
 
         // Convert duration combo index to milliseconds
@@ -1054,6 +1069,7 @@ void tray_preferences::apply_settings() {
         cfg_cover_margin = (cover_margin_sel == 0) ? 1 : 0;
         cfg_cover_style = (int)SendMessage(GetDlgItem(m_hwnd, IDC_COVER_STYLE_COMBO), CB_GETCURSEL, 0, 0);
         cfg_background_style = (int)SendMessage(GetDlgItem(m_hwnd, IDC_BACKGROUND_STYLE_COMBO), CB_GETCURSEL, 0, 0);
+        cfg_miniplayer_border_style = (int)SendMessage(GetDlgItem(m_hwnd, IDC_MINIPLAYER_BORDER_COMBO), CB_GETCURSEL, 0, 0);
         cfg_show_volume_feedback = (IsDlgButtonChecked(m_hwnd, IDC_SHOW_VOLUME_FEEDBACK) == BST_CHECKED) ? 1 : 0;
 
         // Save display format strings
@@ -1097,7 +1113,6 @@ void tray_preferences::reset_settings() {
         cfg_disable_slide_to_side = 0;    // Default: OFF
         cfg_slide_duration = 200;         // Default: 200ms (Fast)
         cfg_always_slide_to_side = 1;     // Default: ON
-        cfg_use_rounded_corners = 1;      // Default: ON
         cfg_theme_mode = 0;               // Default: Auto
         cfg_show_cover_art = 1;           // Default: Yes (1)
         cfg_cover_margin = 1;             // Default: Yes (1)
@@ -1120,7 +1135,6 @@ void tray_preferences::reset_settings() {
         CheckDlgButton(m_hwnd, IDC_DISABLE_MINIPLAYER, BST_UNCHECKED);
         CheckDlgButton(m_hwnd, IDC_DISABLE_SLIDE_TO_SIDE, BST_UNCHECKED);
         CheckDlgButton(m_hwnd, IDC_ALWAYS_SLIDE_TO_SIDE, BST_CHECKED);
-        CheckDlgButton(m_hwnd, IDC_USE_ROUNDED_CORNERS, BST_CHECKED);
         SendMessage(GetDlgItem(m_hwnd, IDC_POPUP_POSITION_COMBO), CB_SETCURSEL, 0, 0);        // Top Left
         SendMessage(GetDlgItem(m_hwnd, IDC_POPUP_DURATION_COMBO), CB_SETCURSEL, 2, 0);        // 3 seconds (index 2)
         SendMessage(GetDlgItem(m_hwnd, IDC_SLIDE_DURATION_COMBO), CB_SETCURSEL, 1, 0);        // Fast 200ms (index 1)
@@ -1129,6 +1143,7 @@ void tray_preferences::reset_settings() {
         SendMessage(GetDlgItem(m_hwnd, IDC_COVER_MARGIN_COMBO), CB_SETCURSEL, 0, 0);          // Yes
         SendMessage(GetDlgItem(m_hwnd, IDC_COVER_STYLE_COMBO), CB_SETCURSEL, 0, 0);           // Square
         SendMessage(GetDlgItem(m_hwnd, IDC_BACKGROUND_STYLE_COMBO), CB_SETCURSEL, 0, 0);      // Solid
+        SendMessage(GetDlgItem(m_hwnd, IDC_MINIPLAYER_BORDER_COMBO), CB_SETCURSEL, 1, 0);     // Rounded (index 1)
         CheckDlgButton(m_hwnd, IDC_SHOW_VOLUME_FEEDBACK, BST_CHECKED);
         uSetDlgItemText(m_hwnd, IDC_LINE1_FORMAT_EDIT, "%title%");
         uSetDlgItemText(m_hwnd, IDC_LINE2_FORMAT_EDIT, "%artist%");
@@ -1594,9 +1609,7 @@ void tray_preferences::switch_tab(int tab) {
         IDC_DISABLE_SLIDE_TO_SIDE,
         IDC_SLIDE_DURATION_LABEL,
         IDC_SLIDE_DURATION_COMBO,
-        IDC_ALWAYS_SLIDE_TO_SIDE,
-        // Window style options
-        IDC_USE_ROUNDED_CORNERS
+        IDC_ALWAYS_SLIDE_TO_SIDE
     };
     
     // Appearance tab controls
@@ -1611,6 +1624,8 @@ void tray_preferences::switch_tab(int tab) {
         IDC_COVER_STYLE_COMBO,
         IDC_BACKGROUND_STYLE_LABEL,
         IDC_BACKGROUND_STYLE_COMBO,
+        IDC_MINIPLAYER_BORDER_LABEL,
+        IDC_MINIPLAYER_BORDER_COMBO,
         IDC_SHOW_VOLUME_FEEDBACK
     };
 
