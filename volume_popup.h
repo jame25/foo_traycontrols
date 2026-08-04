@@ -48,6 +48,10 @@ private:
     // Feedback OSD visual constants
     static const int FEEDBACK_WIDTH = 220;
     static const int FEEDBACK_HEIGHT = 44;
+    static const int FEEDBACK_ICON_X = 14;
+    static const int FEEDBACK_ICON_SIZE = 20;
+    static const int FEEDBACK_TRACK_X = 44; // Slider track left edge
+    static const int FEEDBACK_TEXT_W = 38;  // Right-side numeric text width
 
     void create_window();
     void register_class();
