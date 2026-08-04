@@ -67,6 +67,9 @@ private:
     static const int BTN_CLOSE = 1007;
     static const int BTN_SHUFFLE = 1008;
     static const int BTN_REPEAT = 1009;
+
+    // Hover zoom: buttons render 15% larger while hovered, matching foo_nowbar's button effect.
+    static constexpr float HOVER_ZOOM_FACTOR = 1.15f;
     
     // Timer for updating time display
     static const UINT UPDATE_TIMER_ID = 4001;
@@ -139,7 +142,15 @@ private:
     int m_saved_compact_width; // Remember compact mode width when resized
     int m_saved_compact_height; // Remember compact mode height when resized
     bool m_was_compact_before_expanded; // Remember if we were in compact mode before entering expanded mode
-    
+
+    // Last-applied size configuration (distinct from m_saved_* which track the actual window
+    // size). Used by on_settings_changed() to detect when a size setting actually changed,
+    // so unrelated settings changes never snap a manually-resized MiniPlayer back to config size.
+    int m_applied_undocked_width;
+    int m_applied_undocked_height;
+    int m_applied_compact_width;
+    int m_applied_compact_height;
+    int m_applied_expanded_size;
     // Compact mode hover control overlay
     bool m_compact_controls_visible;
     DWORD m_last_compact_mouse_time;
@@ -152,6 +163,15 @@ private:
     DWORD m_roll_animation_start_time;
     static const int ROLL_ANIMATION_STEPS = 15;
     static const int ROLL_ANIMATION_DURATION = 250; // ms
+    
+    // Track title ticker animation state (right-to-left and back)
+    float m_ticker_offset;    // Current horizontal pixel offset (fractional for sub-pixel smoothness)
+    int m_ticker_direction;   // +1 = moving left (right-to-left), -1 = moving right (back)
+    bool m_ticker_active;     // Whether the ticker timer is running
+    pfc::string8 m_ticker_title; // Title currently being scrolled (to detect title changes)
+    void update_ticker();     // Advances the ticker and invalidates the window
+    void update_title_ticker(HDC hdc, const pfc::string8& title, HFONT font, const RECT& rect); // Draws scrolling title and manages ticker state
+    static bool is_short_title(const pfc::string8& title) { return title.length() > 0 && title.length() < 25; }
     
     
     // Album art
@@ -228,6 +248,7 @@ private:
     static const UINT SLIDE_TIMER_ID = 4010;
     static const UINT ARTWORK_POLL_TIMER_ID = 4020;
     static const UINT ARTWORK_POLL_INTERVAL = 200; // ms - poll foo_artwork for results
+    static const UINT TICKER_TIMER_ID = 4030;      // Track title ticker animation timer
     static const int SLIDE_ANIMATION_STEPS = 15;
     static const int SLIDE_ANIMATION_DURATION = 200; // ms
     void update_slide_animation();
