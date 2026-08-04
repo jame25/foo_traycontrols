@@ -24,6 +24,7 @@ const UINT IDM_RESTORE = 1005;
 const UINT IDM_UPDATE_TOOLTIP = 1006;
 const UINT IDM_EXIT = 1007;
 const UINT IDM_TOGGLE_MINIPLAYER = 1008;
+const UINT IDM_SETTINGS = 1009;
 
 // Static instance
 tray_manager* tray_manager::s_instance = nullptr;
@@ -182,14 +183,14 @@ bool tray_manager::create_tray_window() {
     
     RegisterClassEx(&wcex);
     
-    // Create hidden window
+    // Create hidden window (WS_POPUP without WS_VISIBLE gives a top-level handle for Shell_NotifyIconGetRect)
     m_tray_window = CreateWindowEx(
         0,
         L"TrayControlsWindow",
         L"Tray Controls",
-        0,
+        WS_POPUP,
         0, 0, 0, 0,
-        HWND_MESSAGE,  // Message-only window
+        nullptr,
         nullptr,
         g_hIns,
         nullptr);
@@ -378,6 +379,12 @@ BOOL CALLBACK tray_manager::find_window_callback(HWND hwnd, LPARAM lparam) {
 
 void tray_manager::minimize_to_tray() {
     if (m_main_window && m_initialized) {
+        // Hide control panel if visible (same suppression as restore_from_tray)
+        auto& panel = control_panel::get_instance();
+        if (panel.get_control_window() && IsWindowVisible(panel.get_control_window())) {
+            panel.hide_control_panel_immediate();
+        }
+
         ShowWindow(m_main_window, SW_HIDE);
         // Tray icon is already added, just update tooltip if needed
         m_was_visible = false;
@@ -419,10 +426,9 @@ void tray_manager::show_context_menu(int x, int y) {
     bool miniplayer_visible = panel.get_control_window() && IsWindowVisible(panel.get_control_window()) &&
                               (panel.is_undocked() || panel.is_artwork_expanded() || panel.is_compact_mode());
     AppendMenu(menu, MF_STRING, IDM_TOGGLE_MINIPLAYER, miniplayer_visible ? L"Close MiniPlayer" : L"Open MiniPlayer");
-    
-    // Show appropriate menu item based on foobar2000 window visibility
-    bool is_visible = IsWindowVisible(m_main_window);
-    AppendMenu(menu, MF_STRING, IDM_RESTORE, is_visible ? L"Hide foobar2000" : L"Show foobar2000");
+    AppendMenu(menu, MF_SEPARATOR, 0, nullptr);
+    AppendMenu(menu, MF_STRING, IDM_SETTINGS, L"Settings");
+    AppendMenu(menu, MF_SEPARATOR, 0, nullptr);
     AppendMenu(menu, MF_STRING, IDM_EXIT, L"Exit");
     
     // Ensure the menu appears in front
@@ -463,6 +469,10 @@ void tray_manager::handle_menu_command(int cmd) {
         }
         break;
         
+    case IDM_SETTINGS:
+        show_preferences_page();
+        break;
+
     case IDM_EXIT:
         if (m_main_window) {
             PostMessage(m_main_window, WM_CLOSE, 0, 0);
@@ -616,7 +626,12 @@ LRESULT CALLBACK tray_manager::tray_window_proc(HWND hwnd, UINT msg, WPARAM wpar
                 // Cancel pending single-click timer and set flag to ignore the trailing WM_LBUTTONUP from the second click
                 KillTimer(hwnd, TRAY_SINGLE_CLICK_TIMER_ID);
                 s_instance->m_ignore_next_lbuttonup = true;
-                s_instance->restore_from_tray();
+                // Toggle foobar2000 main window visibility on double-click
+                if (s_instance->m_main_window && IsWindowVisible(s_instance->m_main_window)) {
+                    s_instance->minimize_to_tray();
+                } else {
+                    s_instance->restore_from_tray();
+                }
                 return 0;
                 
             }
@@ -640,12 +655,24 @@ bool tray_manager::is_cursor_over_tray_icon() {
     nii.hWnd = m_nid.hWnd;
     nii.uID = m_nid.uID;
 
-    RECT icon_rect;
-    if (FAILED(Shell_NotifyIconGetRect(&nii, &icon_rect))) return false;
+    RECT icon_rect = {};
+    HRESULT hr = Shell_NotifyIconGetRect(&nii, &icon_rect);
+    if (SUCCEEDED(hr)) {
+        // Add padding to icon bounds for DPI / cursor rounding tolerances
+        InflateRect(&icon_rect, 4, 4);
 
-    // Check if cursor is within this icon's bounds
-    return (cursor_pos.x >= icon_rect.left && cursor_pos.x <= icon_rect.right &&
-            cursor_pos.y >= icon_rect.top && cursor_pos.y <= icon_rect.bottom);
+        if (cursor_pos.x >= icon_rect.left && cursor_pos.x <= icon_rect.right &&
+            cursor_pos.y >= icon_rect.top && cursor_pos.y <= icon_rect.bottom) {
+            return true;
+        }
+    }
+
+    // NOTE: No broad notification-area fallback here. Accepting the whole tray
+    // (ToolbarWindow32 / TrayNotifyWnd / SysPager / Shell_TrayWnd) would make the
+    // volume OSD trigger when scrolling over OTHER tray icons or empty tray space.
+    // Only THIS app's exact icon rectangle (via Shell_NotifyIconGetRect) qualifies.
+
+    return false;
 }
 
 // Low-level mouse hook for wheel volume control over tray icon
@@ -693,8 +720,8 @@ LRESULT CALLBACK tray_manager::low_level_mouse_proc(int nCode, WPARAM wParam, LP
 
 
 
-            // Don't consume the message - let other apps handle it too
-            // return 1; // Uncomment to consume the message
+            // Consume the message so system volume or other windows (e.g. Explorer) do not process the scroll
+            return 1;
         }
     }
 
