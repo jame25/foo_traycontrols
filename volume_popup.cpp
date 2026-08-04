@@ -347,7 +347,7 @@ void volume_popup::paint(HDC hdc) {
     
     RECT fill_rect = { track_left, track_rect.top, track_left + fill_width, track_rect.bottom };
     
-    HBRUSH fill_brush = CreateSolidBrush(RGB(255, 140, 0)); // Orange fill
+    HBRUSH fill_brush = CreateSolidBrush(get_volume_osd_color()); // User-configurable accent color
     FillRect(hdc, &fill_rect, fill_brush);
     DeleteObject(fill_brush);
     
@@ -448,7 +448,7 @@ void volume_popup::paint_feedback(HDC hdc) {
     COLORREF border_color = is_dark ? RGB(60, 60, 64) : RGB(218, 218, 222);
     COLORREF icon_color = is_dark ? RGB(220, 220, 225) : RGB(40, 40, 45);
     COLORREF track_bg_color = is_dark ? RGB(65, 65, 70) : RGB(190, 190, 195);
-    COLORREF track_fill_color = is_dark ? RGB(255, 140, 0) : RGB(255, 120, 0); // Vibrant orange accent
+    COLORREF track_fill_color = get_volume_osd_color(); // User-configurable accent color
     COLORREF text_color = is_dark ? RGB(240, 240, 245) : RGB(30, 30, 35);
 
     // Initialize GDI+ Graphics
