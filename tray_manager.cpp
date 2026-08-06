@@ -48,6 +48,7 @@ tray_manager::tray_manager()
     , m_was_minimized(false)
     , m_processing_minimize(false)
     , m_ignore_next_lbuttonup(false)
+    , m_last_dblclk_time(0)
     , m_original_wndproc(nullptr)
 {
     memset(&m_nid, 0, sizeof(m_nid));
@@ -416,6 +417,11 @@ void tray_manager::show_context_menu(int x, int y) {
     HMENU menu = CreatePopupMenu();
     if (!menu) return;
     
+    // Show/Hide foobar2000 main window menu item
+    bool main_window_visible = m_main_window && IsWindowVisible(m_main_window);
+    AppendMenu(menu, MF_STRING, IDM_RESTORE, main_window_visible ? L"Hide foobar2000" : L"Show foobar2000");
+    AppendMenu(menu, MF_SEPARATOR, 0, nullptr);
+
     // Show MiniPlayer toggle menu item
     auto& panel = control_panel::get_instance();
     bool miniplayer_visible = panel.get_control_window() && IsWindowVisible(panel.get_control_window()) &&
@@ -607,6 +613,11 @@ LRESULT CALLBACK tray_manager::tray_window_proc(HWND hwnd, UINT msg, WPARAM wpar
                 return 0;
                 
             case WM_LBUTTONUP:
+            case NIN_SELECT:
+            case NIN_KEYSELECT:
+                if (s_instance->m_last_dblclk_time != 0 && (GetTickCount() - s_instance->m_last_dblclk_time) < 400) {
+                    return 0; // Suppress trailing single-click messages following double-click (Windows 11 Shell)
+                }
                 if (s_instance->m_ignore_next_lbuttonup) {
                     s_instance->m_ignore_next_lbuttonup = false;
                     return 0;
@@ -619,11 +630,14 @@ LRESULT CALLBACK tray_manager::tray_window_proc(HWND hwnd, UINT msg, WPARAM wpar
                 // Cancel pending single-click timer and set flag to ignore the trailing WM_LBUTTONUP from the second click
                 KillTimer(hwnd, TRAY_SINGLE_CLICK_TIMER_ID);
                 s_instance->m_ignore_next_lbuttonup = true;
-                // Toggle foobar2000 main window visibility on double-click
-                if (s_instance->m_main_window && IsWindowVisible(s_instance->m_main_window)) {
-                    s_instance->minimize_to_tray();
-                } else {
-                    s_instance->restore_from_tray();
+                s_instance->m_last_dblclk_time = GetTickCount();
+                // Toggle foobar2000 main window visibility on double-click IF enabled in Preferences
+                if (get_double_click_actions()) {
+                    if (s_instance->m_main_window && IsWindowVisible(s_instance->m_main_window)) {
+                        s_instance->minimize_to_tray();
+                    } else {
+                        s_instance->restore_from_tray();
+                    }
                 }
                 return 0;
                 
