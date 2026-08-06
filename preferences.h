@@ -5,6 +5,7 @@
 
 // Configuration access functions
 bool get_always_minimize_to_tray();
+bool get_double_click_actions();
 bool get_show_popup_notification();
 int get_popup_position();
 bool get_disable_miniplayer();
@@ -21,6 +22,7 @@ int get_background_style(); // 0=Solid, 1=Artwork Colors, 2=Blurred Artwork
 int get_miniplayer_border_style(); // 0=Square, 1=Rounded
 int get_ticker_speed(); // 0=Off, 1=Slowest, 2=Slow, 3=Fast, 4=Fastest
 bool get_show_volume_feedback(); // true=Enabled, false=Disabled
+bool get_hover_circles_enabled(); // true=Show (default), false=Hide
 COLORREF get_compact_progress_color(); // Compact MiniPlayer track progress bar fill color
 COLORREF get_volume_osd_color();       // Volume OSD bar fill color
 
@@ -94,7 +96,7 @@ private:
     preferences_page_callback::ptr m_callback;
     bool m_has_changes;
     fb2k::CCoreDarkModeHooks m_darkMode;
-    int m_current_tab; // 0 = General, 1 = Appearance, 2 = MiniPlayer, 3 = Fonts
+    int m_current_tab; // 0 = General, 1 = Appearance, 2 = Icons, 3 = MiniPlayer, 4 = Fonts
     
 public:
     tray_preferences(preferences_page_callback::ptr callback);
