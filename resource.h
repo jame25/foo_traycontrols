@@ -99,6 +99,14 @@
 #define IDC_PROGRESS_ACCENT_BTN      298
 #define IDC_VOLUME_OSD_COLOR_BTN     299
 
+// Icons tab options
+#define IDC_HOVER_CIRCLES_LABEL      330
+#define IDC_HOVER_CIRCLES_COMBO      331
+
+// Double-click actions (General tab)
+#define IDC_DOUBLE_CLICK_ACTIONS     332
+#define IDC_STATIC_DBLCLICK_HELP     333
+
 // Preview button for popup notifications
 #define IDC_PREVIEW_POPUP_BTN        285
 
