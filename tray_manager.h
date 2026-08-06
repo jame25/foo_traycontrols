@@ -41,6 +41,7 @@ private:
     bool m_was_minimized;
     bool m_processing_minimize;
     bool m_ignore_next_lbuttonup;
+    DWORD m_last_dblclk_time;
     WNDPROC m_original_wndproc;
     // Mouse hook removed - was causing conflicts with artwork downloading
     
