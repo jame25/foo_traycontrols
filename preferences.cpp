@@ -15,6 +15,7 @@ static void update_slide_controls_state(HWND hwnd, bool miniplayer_disabled);
 
 // Configuration variables - stored in foobar2000's config system
 static cfg_int cfg_always_minimize_to_tray(GUID{0x12345679, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0);
+static cfg_int cfg_double_click_actions(GUID{0x123456D7, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0); // 0=Disabled (default), 1=Enabled
 static cfg_int cfg_show_popup_notification(GUID{0x12345681, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 1);
 static cfg_int cfg_popup_position(GUID{0x12345685, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0); // 0=Top Left, 1=Middle Left, 2=Bottom Left, 3=Top Right, 4=Middle Right, 5=Bottom Right
 static cfg_int cfg_disable_miniplayer(GUID{0x12345686, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0);
@@ -29,6 +30,7 @@ static cfg_int cfg_cover_margin(GUID{0x12345696, 0x9abc, 0xdef0, {0x12, 0x34, 0x
 static cfg_int cfg_cover_style(GUID{0x12345697, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 1); // 0=Square, 1=Rounded
 static cfg_int cfg_background_style(GUID{0x12345698, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0); // 0=Solid, 1=Artwork Colors, 2=Blurred Artwork
 static cfg_int cfg_show_volume_feedback(GUID{0x12345699, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 1); // 1=Yes, 0=No
+static cfg_int cfg_hover_circles(GUID{0x1234568F, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 1); // 1=Show (default), 0=Hide
 static cfg_int cfg_miniplayer_border_style(GUID{0x1234568B, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 1); // 0=Square, 1=Rounded (Default Rounded)
 static cfg_int cfg_ticker_speed(GUID{0x1234568C, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 2); // 0=Off, 1=Slowest, 2=Slow, 3=Fast, 4=Fastest
 
@@ -211,6 +213,10 @@ bool get_always_minimize_to_tray() {
     return cfg_always_minimize_to_tray != 0;
 }
 
+bool get_double_click_actions() {
+    return cfg_double_click_actions != 0;
+}
+
 // Mouse wheel volume control removed - was causing system conflicts
 
 bool get_show_popup_notification() {
@@ -295,6 +301,10 @@ COLORREF get_compact_progress_color() {
 
 COLORREF get_volume_osd_color() {
     return (COLORREF)cfg_volume_osd_color.get_value();
+}
+
+bool get_hover_circles_enabled() {
+    return cfg_hover_circles != 0;
 }
 
 bool get_show_volume_feedback() {
@@ -713,6 +723,7 @@ INT_PTR CALLBACK tray_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, LP
 
         // Initialize general checkboxes
         CheckDlgButton(hwnd, IDC_ALWAYS_MINIMIZE_TO_TRAY, cfg_always_minimize_to_tray ? BST_CHECKED : BST_UNCHECKED);
+        CheckDlgButton(hwnd, IDC_DOUBLE_CLICK_ACTIONS, cfg_double_click_actions ? BST_CHECKED : BST_UNCHECKED);
         CheckDlgButton(hwnd, IDC_SHOW_POPUP_NOTIFICATION, cfg_show_popup_notification ? BST_CHECKED : BST_UNCHECKED);
         CheckDlgButton(hwnd, IDC_DISABLE_MINIPLAYER, cfg_disable_miniplayer ? BST_CHECKED : BST_UNCHECKED);
         CheckDlgButton(hwnd, IDC_DISABLE_SLIDE_TO_SIDE, cfg_disable_slide_to_side ? BST_CHECKED : BST_UNCHECKED);
@@ -760,6 +771,13 @@ INT_PTR CALLBACK tray_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, LP
         SendMessage(hTickerSpeedCombo, CB_ADDSTRING, 0, (LPARAM)L"Fast");
         SendMessage(hTickerSpeedCombo, CB_ADDSTRING, 0, (LPARAM)L"Fastest");
         SendMessage(hTickerSpeedCombo, CB_SETCURSEL, cfg_ticker_speed, 0);
+
+        // Initialize icons tab comboboxes
+        HWND hHoverCirclesCombo = GetDlgItem(hwnd, IDC_HOVER_CIRCLES_COMBO);
+        SendMessage(hHoverCirclesCombo, CB_RESETCONTENT, 0, 0);
+        SendMessage(hHoverCirclesCombo, CB_ADDSTRING, 0, (LPARAM)L"Show");
+        SendMessage(hHoverCirclesCombo, CB_ADDSTRING, 0, (LPARAM)L"Hide");
+        SendMessage(hHoverCirclesCombo, CB_SETCURSEL, (cfg_hover_circles != 0) ? 0 : 1, 0);
 
         CheckDlgButton(hwnd, IDC_SHOW_VOLUME_FEEDBACK, cfg_show_volume_feedback ? BST_CHECKED : BST_UNCHECKED);
         update_volume_color_button_state(hwnd);
@@ -842,6 +860,7 @@ INT_PTR CALLBACK tray_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, LP
     case WM_COMMAND:
         switch (LOWORD(wp)) {
         case IDC_ALWAYS_MINIMIZE_TO_TRAY:
+        case IDC_DOUBLE_CLICK_ACTIONS:
         case IDC_SHOW_POPUP_NOTIFICATION:
         case IDC_DISABLE_MINIPLAYER:
         case IDC_DISABLE_SLIDE_TO_SIDE:
@@ -1032,6 +1051,7 @@ INT_PTR CALLBACK tray_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, LP
         case IDC_COVER_STYLE_COMBO:
         case IDC_MINIPLAYER_BORDER_COMBO:
         case IDC_TICKER_SPEED_COMBO:
+        case IDC_HOVER_CIRCLES_COMBO:
             if (HIWORD(wp) == CBN_SELCHANGE) {
                 p_this->on_changed();
             }
@@ -1176,6 +1196,7 @@ bool tray_preferences::has_changed() {
     if (!m_hwnd) return false;
     
     int current_minimize_to_tray = (IsDlgButtonChecked(m_hwnd, IDC_ALWAYS_MINIMIZE_TO_TRAY) == BST_CHECKED) ? 1 : 0;
+    int current_double_click = (IsDlgButtonChecked(m_hwnd, IDC_DOUBLE_CLICK_ACTIONS) == BST_CHECKED) ? 1 : 0;
     int current_show_popup = (IsDlgButtonChecked(m_hwnd, IDC_SHOW_POPUP_NOTIFICATION) == BST_CHECKED) ? 1 : 0;
     int current_disable_miniplayer = (IsDlgButtonChecked(m_hwnd, IDC_DISABLE_MINIPLAYER) == BST_CHECKED) ? 1 : 0;
     int current_disable_slide = (IsDlgButtonChecked(m_hwnd, IDC_DISABLE_SLIDE_TO_SIDE) == BST_CHECKED) ? 1 : 0;
@@ -1183,6 +1204,7 @@ bool tray_preferences::has_changed() {
     int current_show_volume_feedback = (IsDlgButtonChecked(m_hwnd, IDC_SHOW_VOLUME_FEEDBACK) == BST_CHECKED) ? 1 : 0;
     
     return (current_minimize_to_tray != cfg_always_minimize_to_tray) || 
+           (current_double_click != cfg_double_click_actions) ||
            (current_show_popup != cfg_show_popup_notification) ||
            (current_disable_miniplayer != cfg_disable_miniplayer) ||
            (current_disable_slide != cfg_disable_slide_to_side) ||
@@ -1194,6 +1216,7 @@ bool tray_preferences::has_changed() {
 void tray_preferences::apply_settings() {
     if (m_hwnd) {
         cfg_always_minimize_to_tray = (IsDlgButtonChecked(m_hwnd, IDC_ALWAYS_MINIMIZE_TO_TRAY) == BST_CHECKED) ? 1 : 0;
+        cfg_double_click_actions = (IsDlgButtonChecked(m_hwnd, IDC_DOUBLE_CLICK_ACTIONS) == BST_CHECKED) ? 1 : 0;
         cfg_show_popup_notification = (IsDlgButtonChecked(m_hwnd, IDC_SHOW_POPUP_NOTIFICATION) == BST_CHECKED) ? 1 : 0;
         cfg_disable_miniplayer = (IsDlgButtonChecked(m_hwnd, IDC_DISABLE_MINIPLAYER) == BST_CHECKED) ? 1 : 0;
         cfg_disable_slide_to_side = (IsDlgButtonChecked(m_hwnd, IDC_DISABLE_SLIDE_TO_SIDE) == BST_CHECKED) ? 1 : 0;
@@ -1223,6 +1246,8 @@ void tray_preferences::apply_settings() {
         cfg_background_style = (int)SendMessage(GetDlgItem(m_hwnd, IDC_BACKGROUND_STYLE_COMBO), CB_GETCURSEL, 0, 0);
         cfg_miniplayer_border_style = (int)SendMessage(GetDlgItem(m_hwnd, IDC_MINIPLAYER_BORDER_COMBO), CB_GETCURSEL, 0, 0);
         cfg_ticker_speed = (int)SendMessage(GetDlgItem(m_hwnd, IDC_TICKER_SPEED_COMBO), CB_GETCURSEL, 0, 0);
+        int hover_circles_sel = (int)SendMessage(GetDlgItem(m_hwnd, IDC_HOVER_CIRCLES_COMBO), CB_GETCURSEL, 0, 0);
+        cfg_hover_circles = (hover_circles_sel == 0) ? 1 : 0;
         cfg_show_volume_feedback = (IsDlgButtonChecked(m_hwnd, IDC_SHOW_VOLUME_FEEDBACK) == BST_CHECKED) ? 1 : 0;
 
         // Save display format strings
@@ -1259,6 +1284,7 @@ void tray_preferences::reset_settings() {
     if (m_hwnd) {
         // Reset config variables to factory defaults
         cfg_always_minimize_to_tray = 0;  // Default: OFF
+        cfg_double_click_actions = 0;     // Default: OFF
         cfg_show_popup_notification = 1;  // Default: ON
         cfg_popup_position = 0;           // Default: Top Left
         cfg_disable_miniplayer = 0;       // Default: OFF
@@ -1271,6 +1297,7 @@ void tray_preferences::reset_settings() {
         cfg_cover_margin = 1;             // Default: Yes (1)
         cfg_cover_style = 1;              // Default: Rounded (1)
         cfg_background_style = 0;         // Default: Solid (0)
+        cfg_hover_circles = 1;            // Default: Show (1)
         cfg_show_volume_feedback = 1;     // Default: Yes (1)
         cfg_compact_progress_color = RGB(255, 140, 0); // Default: orange
         cfg_volume_osd_color = RGB(255, 140, 0);       // Default: orange
@@ -1286,6 +1313,7 @@ void tray_preferences::reset_settings() {
 
         // Update UI controls to reflect defaults
         CheckDlgButton(m_hwnd, IDC_ALWAYS_MINIMIZE_TO_TRAY, BST_UNCHECKED);
+        CheckDlgButton(m_hwnd, IDC_DOUBLE_CLICK_ACTIONS, BST_UNCHECKED);
         CheckDlgButton(m_hwnd, IDC_SHOW_POPUP_NOTIFICATION, BST_CHECKED);
         CheckDlgButton(m_hwnd, IDC_DISABLE_MINIPLAYER, BST_UNCHECKED);
         CheckDlgButton(m_hwnd, IDC_DISABLE_SLIDE_TO_SIDE, BST_UNCHECKED);
@@ -1300,6 +1328,7 @@ void tray_preferences::reset_settings() {
         SendMessage(GetDlgItem(m_hwnd, IDC_BACKGROUND_STYLE_COMBO), CB_SETCURSEL, 0, 0);      // Solid
         SendMessage(GetDlgItem(m_hwnd, IDC_MINIPLAYER_BORDER_COMBO), CB_SETCURSEL, 1, 0);     // Rounded (index 1)
         SendMessage(GetDlgItem(m_hwnd, IDC_TICKER_SPEED_COMBO), CB_SETCURSEL, 2, 0);           // Slow (index 2)
+        SendMessage(GetDlgItem(m_hwnd, IDC_HOVER_CIRCLES_COMBO), CB_SETCURSEL, 0, 0);          // Show (index 0)
         CheckDlgButton(m_hwnd, IDC_SHOW_VOLUME_FEEDBACK, BST_CHECKED);
         update_volume_color_button_state(m_hwnd);
         // Repaint the color swatch buttons with the reset colors
@@ -1720,7 +1749,7 @@ void tray_preferences::init_tab_control() {
     HWND hTab = GetDlgItem(m_hwnd, IDC_TAB_CONTROL);
     if (!hTab) return;
     
-    // Add tabs: General (0), Appearance (1), MiniPlayer (2), Fonts (3)
+    // Add tabs: General (0), Appearance (1), Icons (2), MiniPlayer (3), Fonts (4)
     TCITEM tie = {};
     tie.mask = TCIF_TEXT;
     
@@ -1730,11 +1759,14 @@ void tray_preferences::init_tab_control() {
     tie.pszText = const_cast<LPWSTR>(L"Appearance");
     TabCtrl_InsertItem(hTab, 1, &tie);
 
-    tie.pszText = const_cast<LPWSTR>(L"MiniPlayer");
+    tie.pszText = const_cast<LPWSTR>(L"Icons");
     TabCtrl_InsertItem(hTab, 2, &tie);
+
+    tie.pszText = const_cast<LPWSTR>(L"MiniPlayer");
+    TabCtrl_InsertItem(hTab, 3, &tie);
     
     tie.pszText = const_cast<LPWSTR>(L"Fonts");
-    TabCtrl_InsertItem(hTab, 3, &tie);
+    TabCtrl_InsertItem(hTab, 4, &tie);
     
     // Select first tab
     TabCtrl_SetCurSel(hTab, 0);
@@ -1757,6 +1789,8 @@ void tray_preferences::switch_tab(int tab) {
         IDC_ALWAYS_MINIMIZE_TO_TRAY,
         IDC_STATIC_MINIMIZE_HELP,
         IDC_STATIC_WHEEL_HELP,
+        IDC_DOUBLE_CLICK_ACTIONS,
+        IDC_STATIC_DBLCLICK_HELP,
         IDC_SHOW_POPUP_NOTIFICATION,
         IDC_PREVIEW_POPUP_BTN,
         IDC_POPUP_POSITION_LABEL,
@@ -1791,6 +1825,12 @@ void tray_preferences::switch_tab(int tab) {
         IDC_PROGRESS_ACCENT_BTN,
         IDC_SHOW_VOLUME_FEEDBACK,
         IDC_VOLUME_OSD_COLOR_BTN
+    };
+
+    // Icons tab controls
+    int icons_controls[] = {
+        IDC_HOVER_CIRCLES_LABEL,
+        IDC_HOVER_CIRCLES_COMBO
     };
 
     // MiniPlayer tab controls
@@ -1873,15 +1913,22 @@ void tray_preferences::switch_tab(int tab) {
         if (hCtrl) ShowWindow(hCtrl, show_appearance);
     }
 
+    // Show/hide Icons controls
+    int show_icons = (tab == 2) ? SW_SHOW : SW_HIDE;
+    for (int id : icons_controls) {
+        HWND hCtrl = GetDlgItem(m_hwnd, id);
+        if (hCtrl) ShowWindow(hCtrl, show_icons);
+    }
+
     // Show/hide MiniPlayer controls
-    int show_miniplayer = (tab == 2) ? SW_SHOW : SW_HIDE;
+    int show_miniplayer = (tab == 3) ? SW_SHOW : SW_HIDE;
     for (int id : miniplayer_controls) {
         HWND hCtrl = GetDlgItem(m_hwnd, id);
         if (hCtrl) ShowWindow(hCtrl, show_miniplayer);
     }
     
     // Show/hide Fonts controls
-    int show_fonts = (tab == 3) ? SW_SHOW : SW_HIDE;
+    int show_fonts = (tab == 4) ? SW_SHOW : SW_HIDE;
     for (int id : fonts_controls) {
         HWND hCtrl = GetDlgItem(m_hwnd, id);
         if (hCtrl) ShowWindow(hCtrl, show_fonts);
