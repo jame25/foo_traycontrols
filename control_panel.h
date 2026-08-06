@@ -68,13 +68,14 @@ private:
     static const int BTN_SHUFFLE = 1008;
     static const int BTN_REPEAT = 1009;
 
-    // Hover zoom: buttons render 15% larger while hovered, matching foo_nowbar's button effect.
-    static constexpr float HOVER_ZOOM_FACTOR = 1.15f;
+    // Hover zoom: buttons render 30% larger while hovered for a pronounced visual effect.
+    static constexpr float HOVER_ZOOM_FACTOR = 1.30f;
     
     // Timer for updating time display
     static const UINT UPDATE_TIMER_ID = 4001;
     static const UINT ANIMATION_TIMER_ID = 4003;
     static const UINT BUTTON_FADE_TIMER_ID = 9001;
+    static const UINT MOUSE_POLL_TIMER_ID = 9005;
     
     // Current track info
     pfc::string8 m_current_artist;
@@ -171,7 +172,7 @@ private:
     pfc::string8 m_ticker_title; // Title currently being scrolled (to detect title changes)
     void update_ticker();     // Advances the ticker and invalidates the window
     void update_title_ticker(HDC hdc, const pfc::string8& title, HFONT font, const RECT& rect); // Draws scrolling title and manages ticker state
-    static bool is_short_title(const pfc::string8& title) { return title.length() > 0 && title.length() < 25; }
+    static bool is_short_title(const pfc::string8& title) { return title.length() > 0 && title.length() < 30; }
     
     
     // Album art
@@ -180,6 +181,7 @@ private:
     HBITMAP m_cover_art_bitmap_original; // Full resolution original for expanded view
     int m_original_art_width;
     int m_original_art_height;
+    metadb_handle_ptr m_last_loaded_track; // Cache for current loaded artwork track
 
     // Online artwork dedup cache (avoid re-requesting same artist/title)
     pfc::string8 m_last_stream_artist;
@@ -205,6 +207,7 @@ private:
     bool detect_foobar_dark_mode(); // Detects foobar2000 main window theme
 
     // Vector icon drawing
+    void draw_hover_circle(HDC hdc, int x, int y, int size);
     void draw_play_icon(HDC hdc, int x, int y, int size);
     void draw_pause_icon(HDC hdc, int x, int y, int size);
     void draw_previous_icon(HDC hdc, int x, int y, int size);
