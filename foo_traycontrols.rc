@@ -33,22 +33,24 @@ BEGIN
     LTEXT           "Line 2:", IDC_LINE2_FORMAT_LABEL, 20, 56, 28, 12
     EDITTEXT        IDC_LINE2_FORMAT_EDIT, 52, 54, 224, 14, ES_AUTOHSCROLL
 
-    CONTROL         "Always minimize to system tray", IDC_ALWAYS_MINIMIZE_TO_TRAY, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 15, 90, 200, 10
-    CONTROL         "When enabled, clicking minimize sends foobar2000 directly to the system tray.", IDC_STATIC_MINIMIZE_HELP, "Static", SS_LEFT | SS_NOPREFIX, 15, 105, 270, 8
-    CONTROL         "Mouse wheel over tray icon adjusts volume.", IDC_STATIC_WHEEL_HELP, "Static", SS_LEFT | SS_NOPREFIX, 15, 117, 270, 8
-    CONTROL         "Show popup notification on track change", IDC_SHOW_POPUP_NOTIFICATION, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 15, 135, 145, 10
-    PUSHBUTTON      "Preview", IDC_PREVIEW_POPUP_BTN, 163, 133, 42, 13, WS_TABSTOP
-    LTEXT           "Position:", IDC_POPUP_POSITION_LABEL, 15, 153, 35, 10
-    COMBOBOX        IDC_POPUP_POSITION_COMBO, 55, 151, 80, 120, CBS_DROPDOWNLIST | CBS_HASSTRINGS | WS_VSCROLL | WS_TABSTOP
-    LTEXT           "Duration:", IDC_POPUP_DURATION_LABEL, 145, 153, 35, 10
-    COMBOBOX        IDC_POPUP_DURATION_COMBO, 185, 151, 60, 100, CBS_DROPDOWNLIST | CBS_HASSTRINGS | WS_VSCROLL | WS_TABSTOP
-    CONTROL         "Disable MiniPlayer", IDC_DISABLE_MINIPLAYER, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 15, 175, 200, 10
-    CONTROL         "When enabled, prevents the control panel from being undocked (dragged).", IDC_STATIC_MINIPLAYER_HELP, "Static", SS_LEFT | SS_NOPREFIX, 15, 190, 270, 8
+    CONTROL         "Always minimize to system tray", IDC_ALWAYS_MINIMIZE_TO_TRAY, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 15, 84, 200, 10
+    CONTROL         "When enabled, clicking minimize sends foobar2000 directly to the system tray.", IDC_STATIC_MINIMIZE_HELP, "Static", SS_LEFT | SS_NOPREFIX, 15, 96, 270, 8
+    CONTROL         "Mouse wheel over tray icon adjusts volume.", IDC_STATIC_WHEEL_HELP, "Static", SS_LEFT | SS_NOPREFIX, 15, 107, 270, 8
+    CONTROL         "Double-click Actions", IDC_DOUBLE_CLICK_ACTIONS, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 15, 123, 200, 10
+    CONTROL         "Opens / Closes Foobar2000 main window with double-click on the tray icon.", IDC_STATIC_DBLCLICK_HELP, "Static", SS_LEFT | SS_NOPREFIX, 15, 135, 270, 8
+    CONTROL         "Show popup notification on track change", IDC_SHOW_POPUP_NOTIFICATION, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 15, 152, 145, 10
+    PUSHBUTTON      "Preview", IDC_PREVIEW_POPUP_BTN, 163, 150, 42, 13, WS_TABSTOP
+    LTEXT           "Position:", IDC_POPUP_POSITION_LABEL, 15, 170, 35, 10
+    COMBOBOX        IDC_POPUP_POSITION_COMBO, 55, 168, 80, 120, CBS_DROPDOWNLIST | CBS_HASSTRINGS | WS_VSCROLL | WS_TABSTOP
+    LTEXT           "Duration:", IDC_POPUP_DURATION_LABEL, 145, 170, 35, 10
+    COMBOBOX        IDC_POPUP_DURATION_COMBO, 185, 168, 60, 100, CBS_DROPDOWNLIST | CBS_HASSTRINGS | WS_VSCROLL | WS_TABSTOP
+    CONTROL         "Disable MiniPlayer", IDC_DISABLE_MINIPLAYER, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 15, 189, 200, 10
+    CONTROL         "When enabled, prevents the control panel from being undocked (dragged).", IDC_STATIC_MINIPLAYER_HELP, "Static", SS_LEFT | SS_NOPREFIX, 15, 201, 270, 8
 
     // Slide-to-Side Options
-    CONTROL         "Disable Slide-to-Side", IDC_DISABLE_SLIDE_TO_SIDE, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 15, 205, 100, 10
-    LTEXT           "Slide Animation:", IDC_SLIDE_DURATION_LABEL, 15, 222, 65, 10
-    COMBOBOX        IDC_SLIDE_DURATION_COMBO, 85, 220, 80, 100, CBS_DROPDOWNLIST | CBS_HASSTRINGS | WS_VSCROLL | WS_TABSTOP
+    CONTROL         "Disable Slide-to-Side", IDC_DISABLE_SLIDE_TO_SIDE, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 15, 216, 100, 10
+    LTEXT           "Slide Animation:", IDC_SLIDE_DURATION_LABEL, 15, 232, 65, 10
+    COMBOBOX        IDC_SLIDE_DURATION_COMBO, 85, 230, 80, 100, CBS_DROPDOWNLIST | CBS_HASSTRINGS | WS_VSCROLL | WS_TABSTOP
 
     // === Appearance Tab Controls (hidden initially) ===
     LTEXT           "Theme Mode:", IDC_THEME_MODE_LABEL, 15, 32, 85, 12
@@ -77,6 +79,10 @@ BEGIN
 
     CONTROL         "Show volume OSD", IDC_SHOW_VOLUME_FEEDBACK, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 15, 195, 85, 10
     PUSHBUTTON      "", IDC_VOLUME_OSD_COLOR_BTN, 105, 193, 20, 14, BS_OWNERDRAW | WS_TABSTOP
+
+    // === Icons Tab Controls (hidden initially) ===
+    LTEXT           "Hover Circles:", IDC_HOVER_CIRCLES_LABEL, 15, 32, 85, 12
+    COMBOBOX        IDC_HOVER_CIRCLES_COMBO, 105, 30, 110, 100, CBS_DROPDOWNLIST | CBS_HASSTRINGS | WS_VSCROLL | WS_TABSTOP
 
 
     // === MiniPlayer Tab Controls (hidden initially) ===
