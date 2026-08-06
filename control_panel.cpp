@@ -842,13 +842,18 @@ void control_panel::load_cover_art() {
 
             bool metadata_changed = (artist != m_last_stream_artist || title != m_last_stream_title);
 
-            // Metadata has changed (new track playing)
-            if (metadata_changed) {
-                m_last_stream_artist = artist;
-                m_last_stream_title = title;
-                clear_pending_online_artwork();
-                cleanup_cover_art();
+            // Fast path: If artwork is already loaded and cached for this exact track, return immediately!
+            if (!metadata_changed && track == m_last_loaded_track && m_cover_art_bitmap != nullptr) {
+                return;
             }
+
+            // Metadata has changed (new track playing)
+            m_last_loaded_track = track;
+            m_last_stream_artist = artist;
+            m_last_stream_title = title;
+            clear_pending_online_artwork();
+            cleanup_cover_art();
+            m_last_loaded_track = track;
 
             // 1. Try local/embedded artwork first for current track
             try {
@@ -862,8 +867,8 @@ void control_panel::load_cover_art() {
                         auto data = extractor->query(album_art_ids::cover_front, fb2k::noAbort);
                         if (data.is_valid() && data->get_size() > 0) {
                             cleanup_cover_art();
+                            m_last_loaded_track = track;
                             m_cover_art_bitmap = convert_album_art_to_bitmap(data);
-                            m_cover_art_bitmap_large = convert_album_art_to_bitmap_large(data);
                             m_cover_art_bitmap_original = convert_album_art_to_bitmap_original(data);
                             m_online_artwork_pending = false;
                             if (m_control_window) InvalidateRect(m_control_window, nullptr, FALSE);
@@ -880,6 +885,7 @@ void control_panel::load_cover_art() {
                     HBITMAP current_online = get_current_online_artwork();
                     if (current_online) {
                         cleanup_cover_art();
+                        m_last_loaded_track = track;
                         m_cover_art_bitmap = current_online;
                         m_cover_art_bitmap_large = nullptr;
                         m_cover_art_bitmap_original = nullptr;
@@ -931,6 +937,7 @@ void control_panel::cleanup_cover_art() {
     m_original_art_width = 0;
     m_original_art_height = 0;
     m_artwork_from_bridge = false;
+    m_last_loaded_track = nullptr;
 }
 
 HBITMAP control_panel::convert_album_art_to_bitmap(album_art_data_ptr art_data) {
@@ -1177,11 +1184,12 @@ HBITMAP control_panel::convert_album_art_to_bitmap_original(album_art_data_ptr a
 }
 
 
-// Forward declaration for helper
-void draw_hover_circle(HDC hdc, int x, int y, int size);
-
 // Vector-drawn icon implementations - Material Design Style
 void control_panel::draw_play_icon(HDC hdc, int x, int y, int size) {
+    if (m_hovered_button == BTN_PLAYPAUSE) {
+        draw_hover_circle(hdc, x, y, size);
+    }
+
     Gdiplus::Graphics graphics(hdc);
     graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
     graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf); // For precision
@@ -1215,6 +1223,10 @@ void control_panel::draw_play_icon(HDC hdc, int x, int y, int size) {
 }
 
 void control_panel::draw_pause_icon(HDC hdc, int x, int y, int size) {
+    if (m_hovered_button == BTN_PLAYPAUSE) {
+        draw_hover_circle(hdc, x, y, size);
+    }
+
     Gdiplus::Graphics graphics(hdc);
     graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
     graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
@@ -1247,23 +1259,33 @@ void control_panel::draw_pause_icon(HDC hdc, int x, int y, int size) {
 }
 
 // Helper for drawing hover circles behind buttons
-// Helper for drawing hover circles behind buttons
-void draw_hover_circle(HDC hdc, int x, int y, int size) {
-    int radius = size * 3 / 4; 
-    // GDI+ hover circle
+void control_panel::draw_hover_circle(HDC hdc, int x, int y, int size) {
+    if (!get_hover_circles_enabled()) return;
+
+    // Verify mouse cursor is still inside this control panel window
+    if (m_control_window) {
+        POINT cursor_pos;
+        GetCursorPos(&cursor_pos);
+        HWND wnd_under_cursor = WindowFromPoint(cursor_pos);
+        if (wnd_under_cursor != m_control_window && !IsChild(m_control_window, wnd_under_cursor)) {
+            m_hovered_button = 0;
+            return;
+        }
+    }
+
+    int radius = size / 2 + 4; 
     Gdiplus::Graphics graphics(hdc);
     graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
     graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
     
-    Gdiplus::SolidBrush brush(Gdiplus::Color(255, 60, 60, 60)); // Lighter than background
+    Gdiplus::SolidBrush brush(Gdiplus::Color(45, GetRValue(m_icon_color), GetGValue(m_icon_color), GetBValue(m_icon_color)));
     graphics.FillEllipse(&brush, x - radius, y - radius, radius * 2, radius * 2);
 }
 
 void control_panel::draw_previous_icon(HDC hdc, int x, int y, int size) {
-    // Hover highlight removed per user request
-    // if (m_hovered_button == BTN_PREV) {
-    //     draw_hover_circle(hdc, x, y, size);
-    // }
+    if (m_hovered_button == BTN_PREV) {
+        draw_hover_circle(hdc, x, y, size);
+    }
     
     Gdiplus::Graphics graphics(hdc);
     graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
@@ -1292,10 +1314,9 @@ void control_panel::draw_previous_icon(HDC hdc, int x, int y, int size) {
 }
 
 void control_panel::draw_next_icon(HDC hdc, int x, int y, int size) {
-    // Hover highlight removed per user request
-    // if (m_hovered_button == BTN_NEXT) {
-    //     draw_hover_circle(hdc, x, y, size);
-    // }
+    if (m_hovered_button == BTN_NEXT) {
+        draw_hover_circle(hdc, x, y, size);
+    }
     
     Gdiplus::Graphics graphics(hdc);
     graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
@@ -1324,10 +1345,9 @@ void control_panel::draw_next_icon(HDC hdc, int x, int y, int size) {
 
 
 void control_panel::draw_shuffle_icon(HDC hdc, int x, int y, int size) {
-    // Hover highlight removed per user request
-    // if (m_hovered_button == BTN_SHUFFLE) {
-    //     draw_hover_circle(hdc, x, y, size);
-    // }
+    if (m_hovered_button == BTN_SHUFFLE) {
+        draw_hover_circle(hdc, x, y, size);
+    }
     
     // Material Design Shuffle icon from SVG
     // Active: use full icon color, Inactive: use dimmed version
@@ -1399,10 +1419,9 @@ void control_panel::draw_shuffle_icon(HDC hdc, int x, int y, int size) {
 }
 
 void control_panel::draw_repeat_icon(HDC hdc, int x, int y, int size) {
-    // Hover highlight removed per user request
-    // if (m_hovered_button == BTN_REPEAT) {
-    //     draw_hover_circle(hdc, x, y, size);
-    // }
+    if (m_hovered_button == BTN_REPEAT) {
+        draw_hover_circle(hdc, x, y, size);
+    }
     
     bool is_active = (m_repeat_mode > 0);
     // Active: use full icon color, Inactive: use dimmed version
@@ -1800,6 +1819,10 @@ void control_panel::draw_close_icon_with_opacity(HDC hdc, int x, int y, int size
 
 // Opacity-based icon drawing for button fade effect
 void control_panel::draw_play_icon_with_opacity(HDC hdc, int x, int y, int size, int opacity) {
+    if (m_hovered_button == BTN_PLAYPAUSE) {
+        draw_hover_circle(hdc, x, y, size);
+    }
+
     Gdiplus::Graphics graphics(hdc);
     graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
     graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
@@ -1841,6 +1864,10 @@ void control_panel::draw_play_icon_with_opacity(HDC hdc, int x, int y, int size,
 }
 
 void control_panel::draw_pause_icon_with_opacity(HDC hdc, int x, int y, int size, int opacity) {
+    if (m_hovered_button == BTN_PLAYPAUSE) {
+        draw_hover_circle(hdc, x, y, size);
+    }
+
     Gdiplus::Graphics graphics(hdc);
     graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
     graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
@@ -1879,11 +1906,10 @@ void control_panel::draw_pause_icon_with_opacity(HDC hdc, int x, int y, int size
 }
 
 void control_panel::draw_previous_icon_with_opacity(HDC hdc, int x, int y, int size, int opacity) {
-    // Hover highlight removed per user request
-    // if (m_hovered_button == BTN_PREV) {
-    //     draw_hover_circle(hdc, x, y, size);
-    // }
-    
+    if (m_hovered_button == BTN_PREV) {
+        draw_hover_circle(hdc, x, y, size);
+    }
+
     Gdiplus::Graphics graphics(hdc);
     graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
     graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
@@ -1912,10 +1938,9 @@ void control_panel::draw_previous_icon_with_opacity(HDC hdc, int x, int y, int s
 }
 
 void control_panel::draw_next_icon_with_opacity(HDC hdc, int x, int y, int size, int opacity) {
-    // Hover highlight removed per user request
-    // if (m_hovered_button == BTN_NEXT) {
-    //     draw_hover_circle(hdc, x, y, size);
-    // }
+    if (m_hovered_button == BTN_NEXT) {
+        draw_hover_circle(hdc, x, y, size);
+    }
     
     Gdiplus::Graphics graphics(hdc);
     graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
@@ -3424,8 +3449,8 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
 
                     // Then check for control button clicks in bottom overlay area
                     if (panel->m_overlay_visible && pt.y >= window_height - overlay_height) {
-
                         int button_size = 24;
+                        int play_button_size = 38;
                         int button_spacing = 60;
 
                         if (window_width < 360) {
@@ -3435,41 +3460,46 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                             button_size = (window_width * 8) / 100;
                             if (button_size < 16) button_size = 16;
                             if (button_size > 24) button_size = 24;
+
+                            play_button_size = (window_width * 13) / 100;
+                            if (play_button_size < 26) play_button_size = 26;
+                            if (play_button_size > 38) play_button_size = 38;
                         }
 
                         int center_x = window_width / 2;
                         int overlay_top = window_height - overlay_height;
-                        int center_y = overlay_top + (overlay_height / 2) + (overlay_height * 28 / 100);
+                        int center_y = overlay_top + (overlay_height / 2);
 
-                        int prev_x = center_x - button_spacing;
-                        int click_area_size = button_size + 8;
-                        int click_center_y = center_y;
-                        
                         int shuffle_x = center_x - button_spacing * 2;
-                        if (abs(pt.x - shuffle_x) <= click_area_size/2 && abs(pt.y - click_center_y) <= overlay_height/2) {
+                        int prev_x = center_x - button_spacing;
+                        int play_x = center_x;
+                        int next_x = center_x + button_spacing;
+                        int repeat_x = center_x + button_spacing * 2;
+
+                        int click_radius = button_size / 2 + 6;
+                        int play_click_radius = play_button_size / 2 + 6;
+                        
+                        if (abs(pt.x - shuffle_x) <= click_radius && abs(pt.y - center_y) <= click_radius) {
                             panel->handle_button_click(BTN_SHUFFLE);
                             return 0;
                         }
                         
-                        if (abs(pt.x - prev_x) <= click_area_size/2 && abs(pt.y - click_center_y) <= overlay_height/2) {
+                        if (abs(pt.x - prev_x) <= click_radius && abs(pt.y - center_y) <= click_radius) {
                             panel->handle_button_click(BTN_PREV);
                             return 0;
                         }
 
-                        int play_x = center_x;
-                        if (abs(pt.x - play_x) <= click_area_size/2 && abs(pt.y - click_center_y) <= overlay_height/2) {
+                        if (abs(pt.x - play_x) <= play_click_radius && abs(pt.y - center_y) <= play_click_radius) {
                             panel->handle_button_click(BTN_PLAYPAUSE);
                             return 0;
                         }
 
-                        int next_x = center_x + button_spacing;
-                        if (abs(pt.x - next_x) <= click_area_size/2 && abs(pt.y - click_center_y) <= overlay_height/2) {
+                        if (abs(pt.x - next_x) <= click_radius && abs(pt.y - center_y) <= click_radius) {
                             panel->handle_button_click(BTN_NEXT);
                             return 0;
                         }
                         
-                        int repeat_x = center_x + button_spacing * 2;
-                        if (abs(pt.x - repeat_x) <= click_area_size/2 && abs(pt.y - click_center_y) <= overlay_height/2) {
+                        if (abs(pt.x - repeat_x) <= click_radius && abs(pt.y - center_y) <= click_radius) {
                             panel->handle_button_click(BTN_REPEAT);
                             return 0;
                         }
@@ -3811,12 +3841,13 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                 // Track mouse in window for collapse triangle visibility
                 if (!panel->m_mouse_in_window) {
                     panel->m_mouse_in_window = true;
-                    // Re-enable mouse tracking so WM_MOUSELEAVE fires when mouse leaves
+                    // Re-enable mouse tracking so WM_MOUSELEAVE and WM_NCMOUSELEAVE fire when mouse leaves
                     TRACKMOUSEEVENT tme = {0};
                     tme.cbSize = sizeof(TRACKMOUSEEVENT);
-                    tme.dwFlags = TME_LEAVE;
+                    tme.dwFlags = TME_LEAVE | TME_NONCLIENT;
                     tme.hwndTrack = hwnd;
                     TrackMouseEvent(&tme);
+                    SetTimer(hwnd, MOUSE_POLL_TIMER_ID, 50, nullptr);
                     // Use FALSE to prevent flickering
                     InvalidateRect(hwnd, nullptr, FALSE);
                 }
@@ -3872,17 +3903,43 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                     int window_height = client_rect.bottom - client_rect.top;
                     int window_width = client_rect.right - client_rect.left;
                     int overlay_height = 70;
+                    int overlay_top = window_height - overlay_height;
                     
-                    if (pt.y >= window_height - overlay_height) {
+                    if (pt.y >= overlay_top) {
                         int button_spacing = 60;
+                        int button_size = 24;
+                        int play_button_size = 38;
+
+                        if (window_width < 360) {
+                            button_spacing = (window_width * 16) / 100;
+                            if (button_spacing < 32) button_spacing = 32;
+
+                            button_size = (window_width * 8) / 100;
+                            if (button_size < 16) button_size = 16;
+                            if (button_size > 24) button_size = 24;
+
+                            play_button_size = (window_width * 13) / 100;
+                            if (play_button_size < 26) play_button_size = 26;
+                            if (play_button_size > 38) play_button_size = 38;
+                        }
+
                         int center_x = window_width / 2;
+                        int center_y = overlay_top + (overlay_height / 2);
+
+                        int shuffle_x = center_x - button_spacing * 2;
+                        int prev_x = center_x - button_spacing;
+                        int play_x = center_x;
+                        int next_x = center_x + button_spacing;
+                        int repeat_x = center_x + button_spacing * 2;
+
+                        int click_radius = button_size / 2 + 6;
+                        int play_click_radius = play_button_size / 2 + 6;
                         
-                        int button_radius = 20; 
-                        if (abs(pt.x - (center_x - button_spacing * 2)) <= button_radius) hovered_btn = BTN_SHUFFLE;
-                        else if (abs(pt.x - (center_x - button_spacing)) <= button_radius) hovered_btn = BTN_PREV;
-                        else if (abs(pt.x - center_x) <= button_radius) hovered_btn = BTN_PLAYPAUSE;
-                        else if (abs(pt.x - (center_x + button_spacing)) <= button_radius) hovered_btn = BTN_NEXT;
-                        else if (abs(pt.x - (center_x + button_spacing * 2)) <= button_radius) hovered_btn = BTN_REPEAT;
+                        if (abs(pt.x - shuffle_x) <= click_radius && abs(pt.y - center_y) <= click_radius) hovered_btn = BTN_SHUFFLE;
+                        else if (abs(pt.x - prev_x) <= click_radius && abs(pt.y - center_y) <= click_radius) hovered_btn = BTN_PREV;
+                        else if (abs(pt.x - play_x) <= play_click_radius && abs(pt.y - center_y) <= play_click_radius) hovered_btn = BTN_PLAYPAUSE;
+                        else if (abs(pt.x - next_x) <= click_radius && abs(pt.y - center_y) <= click_radius) hovered_btn = BTN_NEXT;
+                        else if (abs(pt.x - repeat_x) <= click_radius && abs(pt.y - center_y) <= click_radius) hovered_btn = BTN_REPEAT;
                     }
                 }
                 // Compact mode logic
@@ -3969,6 +4026,9 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                 // Update hover state
                 if (panel->m_hovered_button != hovered_btn) {
                     panel->m_hovered_button = hovered_btn;
+                    if (hovered_btn != 0) {
+                        SetTimer(hwnd, MOUSE_POLL_TIMER_ID, 50, nullptr);
+                    }
                     // Fully redraw to ensure background circles are drawn/erased
                     // Use FALSE for bErase (3rd arg) to prevent flickering in double-buffered modes (like expanded artwork)
                     InvalidateRect(hwnd, nullptr, FALSE); 
@@ -3978,36 +4038,49 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
             
         case WM_NCMOUSEMOVE:
             // Track mouse movement in non-client area (caption/draggable area)
-            // This fires when WM_NCHITTEST returns HTCAPTION
-            if (panel && panel->m_is_undocked && !panel->m_is_artwork_expanded && !panel->m_is_compact_mode) {
-                // Mouse is in the window's draggable area - show collapse triangle
-                if (!panel->m_mouse_in_window) {
-                    panel->m_mouse_in_window = true;
-                    // Set up mouse leave tracking for non-client area
-                    TRACKMOUSEEVENT tme = {0};
-                    tme.cbSize = sizeof(TRACKMOUSEEVENT);
-                    tme.dwFlags = TME_LEAVE | TME_NONCLIENT;
-                    tme.hwndTrack = hwnd;
-                    TrackMouseEvent(&tme);
+            // This fires when WM_NCHITTEST returns HTCAPTION (mouse moved off client buttons onto background)
+            if (panel) {
+                if (panel->m_hovered_button != 0) {
+                    panel->m_hovered_button = 0;
                     InvalidateRect(hwnd, nullptr, FALSE);
+                }
+                if (panel->m_is_undocked && !panel->m_is_artwork_expanded && !panel->m_is_compact_mode) {
+                    SetTimer(hwnd, MOUSE_POLL_TIMER_ID, 50, nullptr);
+                    // Mouse is in the window's draggable area - show collapse triangle
+                    if (!panel->m_mouse_in_window) {
+                        panel->m_mouse_in_window = true;
+                        // Set up mouse leave tracking for non-client area
+                        TRACKMOUSEEVENT tme = {0};
+                        tme.cbSize = sizeof(TRACKMOUSEEVENT);
+                        tme.dwFlags = TME_LEAVE | TME_NONCLIENT;
+                        tme.hwndTrack = hwnd;
+                        TrackMouseEvent(&tme);
+                        InvalidateRect(hwnd, nullptr, FALSE);
+                    }
                 }
             }
             break;
             
         case WM_NCMOUSELEAVE:
-            // WM_NCMOUSELEAVE fires when:
-            // 1. Mouse moves from non-client (caption) to client (buttons) area - don't hide triangle
-            // 2. Mouse leaves the window entirely - hide the triangle
-            if (panel && panel->m_is_undocked && !panel->m_is_artwork_expanded && !panel->m_is_compact_mode) {
-                // Check if mouse is actually outside our window
+            // WM_NCMOUSELEAVE fires when mouse leaves the non-client area or leaves window entirely
+            if (panel) {
                 POINT cursor_pos;
                 GetCursorPos(&cursor_pos);
                 HWND window_under_cursor = WindowFromPoint(cursor_pos);
                 
-                // Only hide if mouse is NOT over our window (or a child of it)
+                // Only clear/hide if mouse is NOT over our window (or a child of it)
                 if (window_under_cursor != hwnd && !IsChild(hwnd, window_under_cursor)) {
+                    KillTimer(hwnd, MOUSE_POLL_TIMER_ID);
+                    bool need_repaint = false;
+                    if (panel->m_hovered_button != 0) {
+                        panel->m_hovered_button = 0;
+                        need_repaint = true;
+                    }
                     if (panel->m_mouse_in_window) {
                         panel->m_mouse_in_window = false;
+                        need_repaint = true;
+                    }
+                    if (need_repaint) {
                         InvalidateRect(hwnd, nullptr, FALSE);
                     }
                 }
@@ -4015,47 +4088,39 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
             break;
             
         case WM_MOUSELEAVE:
-            // Hide overlay immediately when mouse leaves the window (no fade animation)
-            if (panel && panel->m_is_artwork_expanded && panel->m_overlay_visible) {
-                KillTimer(hwnd, OVERLAY_TIMER_ID);
-                KillTimer(hwnd, FADE_TIMER_ID);
-                panel->m_overlay_visible = false;
-                panel->m_overlay_opacity = 0;
-                InvalidateRect(hwnd, nullptr, FALSE);
-            }
-            
-            // Clear hover state on leave
-            if (panel && panel->m_hovered_button != 0) {
-                panel->m_hovered_button = 0;
-                InvalidateRect(hwnd, nullptr, FALSE);
-            }
-                
-            if (panel && !panel->m_is_artwork_expanded && (panel->m_undocked_overlay_visible || panel->m_compact_controls_visible)) {
-                // Hide undocked artwork overlay and compact control overlay when mouse leaves the window
-                bool needs_repaint = false;
+            // Mouse left client window area - immediately clear all hover & corner overlay states
+            if (panel) {
+                KillTimer(hwnd, MOUSE_POLL_TIMER_ID);
+                bool need_repaint = false;
+                if (panel->m_hovered_button != 0) {
+                    panel->m_hovered_button = 0;
+                    need_repaint = true;
+                }
+                if (panel->m_mouse_in_window) {
+                    panel->m_mouse_in_window = false;
+                    need_repaint = true;
+                }
+                if (panel->m_is_artwork_expanded && panel->m_overlay_visible) {
+                    KillTimer(hwnd, OVERLAY_TIMER_ID);
+                    KillTimer(hwnd, FADE_TIMER_ID);
+                    panel->m_overlay_visible = false;
+                    panel->m_overlay_opacity = 0;
+                    need_repaint = true;
+                }
                 if (panel->m_undocked_overlay_visible) {
                     panel->m_undocked_overlay_visible = false;
                     panel->m_undocked_overlay_opacity = 0;
                     KillTimer(hwnd, OVERLAY_TIMER_ID + 1);
                     KillTimer(hwnd, FADE_TIMER_ID + 1);
-                    needs_repaint = true;
+                    need_repaint = true;
                 }
                 if (panel->m_compact_controls_visible) {
                     panel->m_compact_controls_visible = false;
-                    needs_repaint = true;
+                    need_repaint = true;
                 }
-                if (needs_repaint) {
-                    InvalidateRect(hwnd, nullptr, TRUE);
+                if (need_repaint) {
+                    InvalidateRect(hwnd, nullptr, FALSE);
                 }
-            }
-            
-            // Buttons no longer fade away - they stay visible in undocked mode
-            // Removed automatic fade behavior per user request
-
-            // Hide collapse triangle when mouse leaves the window
-            if (panel && panel->m_is_undocked && !panel->m_is_artwork_expanded && panel->m_mouse_in_window) {
-                panel->m_mouse_in_window = false;
-                InvalidateRect(hwnd, nullptr, TRUE);
             }
             break;
             
@@ -4497,6 +4562,28 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                 // Poll foo_artwork to mirror active artwork shown in main display window
                 if (panel) {
                     panel->load_cover_art();
+                }
+                return 0;
+            } else if (wparam == MOUSE_POLL_TIMER_ID) {
+                if (panel) {
+                    POINT pt;
+                    GetCursorPos(&pt);
+                    HWND wnd_under = WindowFromPoint(pt);
+                    if (wnd_under != hwnd && !IsChild(hwnd, wnd_under)) {
+                        KillTimer(hwnd, MOUSE_POLL_TIMER_ID);
+                        bool need_repaint = false;
+                        if (panel->m_hovered_button != 0) {
+                            panel->m_hovered_button = 0;
+                            need_repaint = true;
+                        }
+                        if (panel->m_mouse_in_window) {
+                            panel->m_mouse_in_window = false;
+                            need_repaint = true;
+                        }
+                        if (need_repaint) {
+                            InvalidateRect(hwnd, nullptr, FALSE);
+                        }
+                    }
                 }
                 return 0;
             } else if (wparam == TIMEOUT_TIMER_ID) {
@@ -5097,20 +5184,18 @@ void control_panel::paint_control_panel(HDC hdc) {
 
     int button_spacing = (m_is_undocked) ? 40 : 60;
     int icon_size = 24; // Size for shuffle, repeat, prev, next
-    int play_icon_size = 38; // Larger size for the central play button (white circle)
+    int play_icon_size = 36; // Play/Pause button size (reduced by 5% from 38px to 36px)
 
-    // Dynamically scale button sizes and spacing for smaller undocked window widths (e.g. Small Undocked Mode)
-    if (m_is_undocked && window_width < 360) {
+    // Dynamically scale button sizes and spacing for extremely narrow undocked window widths (< 280px)
+    if (m_is_undocked && window_width < 280) {
         button_spacing = (button_area_width * 16) / 100;
-        if (button_spacing < 26) button_spacing = 26;
+        if (button_spacing < 24) button_spacing = 24;
 
         icon_size = (button_area_width * 9) / 100;
         if (icon_size < 16) icon_size = 16;
-        if (icon_size > 22) icon_size = 22;
 
         play_icon_size = (button_area_width * 14) / 100;
         if (play_icon_size < 24) play_icon_size = 24;
-        if (play_icon_size > 32) play_icon_size = 32;
     }
 
     // Draw Previous button (enlarged on hover)
@@ -5118,8 +5203,9 @@ void control_panel::paint_control_panel(HDC hdc) {
     int prev_size = (m_hovered_button == BTN_PREV) ? (int)(icon_size * HOVER_ZOOM_FACTOR) : icon_size;
     draw_previous_icon(hdc, prev_x, button_y, prev_size);
 
-    // Draw Play/Pause button (Larger) - enlarged on hover
-    int play_size = (m_hovered_button == BTN_PLAYPAUSE) ? (int)(play_icon_size * HOVER_ZOOM_FACTOR) : play_icon_size;
+    // Draw Play/Pause button (Larger) - enlarged on hover (15% zoom factor)
+    float play_zoom_factor = HOVER_ZOOM_FACTOR - 0.15f;
+    int play_size = (m_hovered_button == BTN_PLAYPAUSE) ? (int)(play_icon_size * play_zoom_factor) : play_icon_size;
     if (m_is_undocked && !m_is_artwork_expanded) {
         if (m_is_playing && !m_is_paused) {
             draw_pause_icon_with_opacity(hdc, center_x, button_y, play_size, m_button_opacity);
@@ -5153,7 +5239,7 @@ void control_panel::paint_control_panel(HDC hdc) {
     }
 
     // Draw Close button in upper right corner and Collapse triangle in bottom right corner
-    if (m_is_undocked && !m_is_artwork_expanded) {
+    if (m_is_undocked && !m_is_artwork_expanded && m_mouse_in_window) {
         POINT cursor_pos;
         GetCursorPos(&cursor_pos);
         RECT window_rect;
@@ -5163,11 +5249,12 @@ void control_panel::paint_control_panel(HDC hdc) {
         bool cursor_in_window = (cursor_pos.x >= window_rect.left && cursor_pos.x < window_rect.right &&
                                  cursor_pos.y >= window_rect.top && cursor_pos.y < window_rect.bottom);
         
-        // Also exclude artwork area
-        if (cursor_in_window) {
+        if (!cursor_in_window) {
+            m_mouse_in_window = false;
+        } else {
+            // Also exclude artwork area
             POINT client_pt = cursor_pos;
             ScreenToClient(m_control_window, &client_pt);
-            // Check if over artwork
             int art_size = (80 < (window_width - 30) ? 80 : (window_width - 30));
             art_size = (art_size < (window_height - 30) ? art_size : (window_height - 30));
             if (client_pt.x >= 15 && client_pt.x < 15 + art_size && 
@@ -5719,10 +5806,11 @@ void control_panel::draw_control_overlay(HDC hdc, int window_width, int window_h
             draw_previous_icon(hdc, prev_x, prev_y, prev_size);
         }
         
-        // Play/Pause button (enlarged on hover)
+        // Play/Pause button (enlarged on hover - 15% zoom factor)
         int play_x = center_x;
         int play_y = center_y;
-        int play_size = (m_hovered_button == BTN_PLAYPAUSE) ? (int)(play_button_size * HOVER_ZOOM_FACTOR) : play_button_size;
+        float play_zoom_factor = HOVER_ZOOM_FACTOR - 0.15f;
+        int play_size = (m_hovered_button == BTN_PLAYPAUSE) ? (int)(play_button_size * play_zoom_factor) : play_button_size;
         if (m_is_undocked && !m_is_artwork_expanded) {
             if (m_is_playing && !m_is_paused) {
                 draw_pause_icon_with_opacity(hdc, play_x, play_y, play_size, m_button_opacity);
@@ -5831,7 +5919,7 @@ void control_panel::draw_compact_control_overlay(HDC hdc, int window_width, int 
     int overlay_bottom = window_height - 18; // Leave minimal space for progress bar and time
 
     int button_size = 24; 
-    int play_button_size = 36;
+    int play_button_size = 34; // Play/Pause button size (reduced by 5% from 36px to 34px)
     int button_spacing = 10;
     
     int total_buttons_width = (4 * button_size) + play_button_size + (4 * button_spacing);
@@ -5868,8 +5956,9 @@ void control_panel::draw_compact_control_overlay(HDC hdc, int window_width, int 
     int prev_size = (m_hovered_button == BTN_PREV) ? (int)(button_size * HOVER_ZOOM_FACTOR) : button_size;
     draw_previous_icon(hdc, prev_x, center_y_line, prev_size);
     
-    // Play/Pause button
-    int play_size = (m_hovered_button == BTN_PLAYPAUSE) ? (int)(play_button_size * HOVER_ZOOM_FACTOR) : play_button_size;
+    // Play/Pause button (15% zoom factor)
+    float play_zoom_factor = HOVER_ZOOM_FACTOR - 0.15f;
+    int play_size = (m_hovered_button == BTN_PLAYPAUSE) ? (int)(play_button_size * play_zoom_factor) : play_button_size;
     if (m_is_playing && !m_is_paused) {
         draw_pause_icon(hdc, play_x, center_y_line, play_size);
     } else {
