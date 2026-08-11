@@ -122,6 +122,9 @@ control_panel::control_panel()
     , m_ticker_offset(0)
     , m_ticker_direction(1)
     , m_ticker_active(false)
+    , m_artist_ticker_offset(0)
+    , m_artist_ticker_direction(1)
+    , m_artist_ticker_active(false)
     , m_cover_art_bitmap(nullptr)
     , m_cover_art_bitmap_large(nullptr)
     , m_cover_art_bitmap_original(nullptr)
@@ -373,6 +376,7 @@ void control_panel::hide_control_panel_immediate() {
     KillTimer(m_control_window, SLIDE_TIMER_ID);
     KillTimer(m_control_window, TICKER_TIMER_ID);
     m_ticker_active = false;
+    m_artist_ticker_active = false;
     
     // Reset slide-to-side state so panel reopens at original position
     if (m_is_slid_to_side && m_pre_slide_x != 0) {
@@ -427,6 +431,7 @@ void control_panel::hide_and_remember_miniplayer() {
     KillTimer(m_control_window, TIMEOUT_TIMER_ID);
     KillTimer(m_control_window, TICKER_TIMER_ID);
     m_ticker_active = false;
+    m_artist_ticker_active = false;
     ShowWindow(m_control_window, SW_HIDE);
     m_visible = false;
 }
@@ -1184,42 +1189,220 @@ HBITMAP control_panel::convert_album_art_to_bitmap_original(album_art_data_ptr a
 }
 
 
+// Alternate icon helper methods (Style 2: Outline style, Style 3: Material solid filled style)
+void control_panel::draw_alternate_play_icon(HDC hdc, int x, int y, int size, COLORREF color) {
+    Gdiplus::Graphics graphics(hdc);
+    graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+    graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
+
+    float scale = size / 24.0f;
+    float cx = (float)x;
+    float cy = (float)y;
+
+    Gdiplus::Matrix oldMatrix;
+    graphics.GetTransform(&oldMatrix);
+
+    Gdiplus::Matrix matrix;
+    matrix.Translate(cx - 12.0f * scale, cy - 12.0f * scale);
+    matrix.Scale(scale, scale);
+    graphics.SetTransform(&matrix);
+
+    Gdiplus::SolidBrush brush(Gdiplus::Color(255, GetRValue(color), GetGValue(color), GetBValue(color)));
+    Gdiplus::GraphicsPath path;
+
+    // Outer triangle
+    path.StartFigure();
+    path.AddLine(8.0f, 19.0f, 8.0f, 5.0f);
+    path.AddLine(8.0f, 5.0f, 19.0f, 12.0f);
+    path.AddLine(19.0f, 12.0f, 8.0f, 19.0f);
+    path.CloseFigure();
+
+    // Inner triangle cutout
+    path.StartFigure();
+    path.AddLine(10.0f, 15.35f, 10.0f, 8.65f);
+    path.AddLine(10.0f, 8.65f, 15.25f, 12.0f);
+    path.AddLine(15.25f, 12.0f, 10.0f, 15.35f);
+    path.CloseFigure();
+
+    path.SetFillMode(Gdiplus::FillModeWinding);
+    graphics.FillPath(&brush, &path);
+    graphics.SetTransform(&oldMatrix);
+}
+
+void control_panel::draw_alternate_pause_icon(HDC hdc, int x, int y, int size, COLORREF color) {
+    Gdiplus::Graphics graphics(hdc);
+    graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+    graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
+
+    float scale = size / 24.0f;
+    float cx = (float)x;
+    float cy = (float)y;
+
+    Gdiplus::Matrix oldMatrix;
+    graphics.GetTransform(&oldMatrix);
+
+    Gdiplus::Matrix matrix;
+    matrix.Translate(cx - 12.0f * scale, cy - 12.0f * scale);
+    matrix.Scale(scale, scale);
+    graphics.SetTransform(&matrix);
+
+    Gdiplus::SolidBrush brush(Gdiplus::Color(255, GetRValue(color), GetGValue(color), GetBValue(color)));
+    Gdiplus::GraphicsPath path;
+
+    // Left bar outer
+    path.StartFigure();
+    path.AddLine(5.0f, 19.0f, 5.0f, 5.0f);
+    path.AddLine(5.0f, 5.0f, 11.0f, 5.0f);
+    path.AddLine(11.0f, 5.0f, 11.0f, 19.0f);
+    path.AddLine(11.0f, 19.0f, 5.0f, 19.0f);
+    path.CloseFigure();
+
+    // Left bar inner hole
+    path.StartFigure();
+    path.AddLine(7.0f, 17.0f, 9.0f, 17.0f);
+    path.AddLine(9.0f, 17.0f, 9.0f, 7.0f);
+    path.AddLine(9.0f, 7.0f, 7.0f, 7.0f);
+    path.AddLine(7.0f, 7.0f, 7.0f, 17.0f);
+    path.CloseFigure();
+
+    // Right bar outer
+    path.StartFigure();
+    path.AddLine(13.0f, 19.0f, 13.0f, 5.0f);
+    path.AddLine(13.0f, 5.0f, 19.0f, 5.0f);
+    path.AddLine(19.0f, 5.0f, 19.0f, 19.0f);
+    path.AddLine(19.0f, 19.0f, 13.0f, 19.0f);
+    path.CloseFigure();
+
+    // Right bar inner hole
+    path.StartFigure();
+    path.AddLine(15.0f, 17.0f, 17.0f, 17.0f);
+    path.AddLine(17.0f, 17.0f, 17.0f, 7.0f);
+    path.AddLine(17.0f, 7.0f, 15.0f, 7.0f);
+    path.AddLine(15.0f, 7.0f, 15.0f, 17.0f);
+    path.CloseFigure();
+
+    path.SetFillMode(Gdiplus::FillModeWinding);
+    graphics.FillPath(&brush, &path);
+    graphics.SetTransform(&oldMatrix);
+}
+
+void control_panel::draw_style3_play_icon(HDC hdc, int x, int y, int size, COLORREF color) {
+    Gdiplus::Graphics graphics(hdc);
+    graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+    graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
+
+    float scale = size / 24.0f;
+    float cx = (float)x;
+    float cy = (float)y;
+
+    Gdiplus::Matrix oldMatrix;
+    graphics.GetTransform(&oldMatrix);
+
+    Gdiplus::Matrix matrix;
+    matrix.Translate(cx - 12.0f * scale, cy - 12.0f * scale);
+    matrix.Scale(scale, scale);
+    graphics.SetTransform(&matrix);
+
+    Gdiplus::SolidBrush brush(Gdiplus::Color(255, GetRValue(color), GetGValue(color), GetBValue(color)));
+    Gdiplus::GraphicsPath path;
+
+    // Solid triangle (no inner cutout)
+    path.StartFigure();
+    path.AddLine(8.0f, 19.0f, 8.0f, 5.0f);
+    path.AddLine(8.0f, 5.0f, 19.0f, 12.0f);
+    path.AddLine(19.0f, 12.0f, 8.0f, 19.0f);
+    path.CloseFigure();
+
+    path.SetFillMode(Gdiplus::FillModeWinding);
+    graphics.FillPath(&brush, &path);
+    graphics.SetTransform(&oldMatrix);
+}
+
+void control_panel::draw_style3_pause_icon(HDC hdc, int x, int y, int size, COLORREF color) {
+    Gdiplus::Graphics graphics(hdc);
+    graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+    graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
+
+    float scale = size / 24.0f;
+    float cx = (float)x;
+    float cy = (float)y;
+
+    Gdiplus::Matrix oldMatrix;
+    graphics.GetTransform(&oldMatrix);
+
+    Gdiplus::Matrix matrix;
+    matrix.Translate(cx - 12.0f * scale, cy - 12.0f * scale);
+    matrix.Scale(scale, scale);
+    graphics.SetTransform(&matrix);
+
+    Gdiplus::SolidBrush brush(Gdiplus::Color(255, GetRValue(color), GetGValue(color), GetBValue(color)));
+    Gdiplus::GraphicsPath path;
+
+    // Left bar solid
+    path.StartFigure();
+    path.AddLine(5.875f, 19.45f, 5.875f, 4.55f);
+    path.AddLine(5.875f, 4.55f, 10.125f, 4.55f);
+    path.AddLine(10.125f, 4.55f, 10.125f, 19.45f);
+    path.CloseFigure();
+
+    // Right bar solid
+    path.StartFigure();
+    path.AddLine(14.425f, 19.45f, 14.425f, 4.55f);
+    path.AddLine(14.425f, 4.55f, 18.675f, 4.55f);
+    path.AddLine(18.675f, 4.55f, 18.675f, 19.45f);
+    path.CloseFigure();
+
+    path.SetFillMode(Gdiplus::FillModeWinding);
+    graphics.FillPath(&brush, &path);
+    graphics.SetTransform(&oldMatrix);
+}
+
 // Vector-drawn icon implementations - Material Design Style
 void control_panel::draw_play_icon(HDC hdc, int x, int y, int size) {
     if (m_hovered_button == BTN_PLAYPAUSE) {
         draw_hover_circle(hdc, x, y, size);
     }
 
-    Gdiplus::Graphics graphics(hdc);
-    graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
-    graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf); // For precision
+    int style = get_alternative_icons_style();
 
-    // Determine colors: In Undocked + light mode, use black circle with white icon
-    COLORREF circle_color = m_icon_color;
-    COLORREF icon_color = m_bg_color;
-    if (m_is_undocked && !m_is_dark_mode) {
-        circle_color = RGB(0, 0, 0);       // Black circle
-        icon_color = RGB(255, 255, 255);   // White icon
+    if (style == 1) {
+        // Style 2: Outline style (no background circle)
+        COLORREF icon_color = (m_is_undocked && !m_is_dark_mode) ? RGB(0, 0, 0) : m_icon_color;
+        draw_alternate_play_icon(hdc, x, y, size, icon_color);
+    } else if (style == 2) {
+        // Style 3: Solid filled style (no background circle)
+        COLORREF icon_color = (m_is_undocked && !m_is_dark_mode) ? RGB(0, 0, 0) : m_icon_color;
+        draw_style3_play_icon(hdc, x, y, size, icon_color);
+    } else {
+        // Style 1 (Default): Background circle + contrasting icon symbol inside
+        Gdiplus::Graphics graphics(hdc);
+        graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+        graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
+
+        COLORREF circle_color = m_icon_color;
+        COLORREF icon_color = m_bg_color;
+        if (m_is_undocked && !m_is_dark_mode) {
+            circle_color = RGB(0, 0, 0);       // Black circle
+            icon_color = RGB(255, 255, 255);   // White icon
+        }
+
+        int radius = size / 2;
+        Gdiplus::SolidBrush bg_brush(Gdiplus::Color(255, GetRValue(circle_color), GetGValue(circle_color), GetBValue(circle_color)));
+        graphics.FillEllipse(&bg_brush, x - radius, y - radius, size, size);
+
+        int icon_height = size * 4 / 10;
+        int half_icon = icon_height / 2;
+        int icon_width = icon_height; 
+        int center_offset_x = icon_width / 8;
+        
+        Gdiplus::Point triangle[3];
+        triangle[0] = Gdiplus::Point(x - icon_width/2 + center_offset_x, y - half_icon);
+        triangle[1] = Gdiplus::Point(x - icon_width/2 + center_offset_x, y + half_icon);
+        triangle[2] = Gdiplus::Point(x + icon_width/2 + center_offset_x, y);
+        
+        Gdiplus::SolidBrush icon_brush(Gdiplus::Color(255, GetRValue(icon_color), GetGValue(icon_color), GetBValue(icon_color)));
+        graphics.FillPolygon(&icon_brush, triangle, 3);
     }
-
-    // Draw circle background
-    int radius = size / 2;
-    Gdiplus::SolidBrush bg_brush(Gdiplus::Color(255, GetRValue(circle_color), GetGValue(circle_color), GetBValue(circle_color)));
-    graphics.FillEllipse(&bg_brush, x - radius, y - radius, size, size); // size is diameter
-
-    // Draw triangle icon inside
-    int icon_height = size * 4 / 10;
-    int half_icon = icon_height / 2;
-    int icon_width = icon_height; 
-    int center_offset_x = icon_width / 8;
-    
-    Gdiplus::Point triangle[3];
-    triangle[0] = Gdiplus::Point(x - icon_width/2 + center_offset_x, y - half_icon);
-    triangle[1] = Gdiplus::Point(x - icon_width/2 + center_offset_x, y + half_icon);
-    triangle[2] = Gdiplus::Point(x + icon_width/2 + center_offset_x, y);
-    
-    Gdiplus::SolidBrush icon_brush(Gdiplus::Color(255, GetRValue(icon_color), GetGValue(icon_color), GetBValue(icon_color)));
-    graphics.FillPolygon(&icon_brush, triangle, 3);
 }
 
 void control_panel::draw_pause_icon(HDC hdc, int x, int y, int size) {
@@ -1227,35 +1410,45 @@ void control_panel::draw_pause_icon(HDC hdc, int x, int y, int size) {
         draw_hover_circle(hdc, x, y, size);
     }
 
-    Gdiplus::Graphics graphics(hdc);
-    graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
-    graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
+    int style = get_alternative_icons_style();
 
-    // Determine colors: In Undocked + light mode, use black circle with white icon
-    COLORREF circle_color = m_icon_color;
-    COLORREF icon_color = m_bg_color;
-    if (m_is_undocked && !m_is_dark_mode) {
-        circle_color = RGB(0, 0, 0);       // Black circle
-        icon_color = RGB(255, 255, 255);   // White icon
+    if (style == 1) {
+        // Style 2: Outline style (no background circle)
+        COLORREF icon_color = (m_is_undocked && !m_is_dark_mode) ? RGB(0, 0, 0) : m_icon_color;
+        draw_alternate_pause_icon(hdc, x, y, size, icon_color);
+    } else if (style == 2) {
+        // Style 3: Solid filled style (no background circle)
+        COLORREF icon_color = (m_is_undocked && !m_is_dark_mode) ? RGB(0, 0, 0) : m_icon_color;
+        draw_style3_pause_icon(hdc, x, y, size, icon_color);
+    } else {
+        // Style 1 (Default): Background circle + contrasting icon symbol inside
+        Gdiplus::Graphics graphics(hdc);
+        graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+        graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
+
+        COLORREF circle_color = m_icon_color;
+        COLORREF icon_color = m_bg_color;
+        if (m_is_undocked && !m_is_dark_mode) {
+            circle_color = RGB(0, 0, 0);       // Black circle
+            icon_color = RGB(255, 255, 255);   // White icon
+        }
+
+        int radius = size / 2;
+        Gdiplus::SolidBrush bg_brush(Gdiplus::Color(255, GetRValue(circle_color), GetGValue(circle_color), GetBValue(circle_color)));
+        graphics.FillEllipse(&bg_brush, x - radius, y - radius, size, size);
+
+        int icon_height = size * 4 / 10;
+        int half_icon = icon_height / 2;
+        int bar_width = icon_height / 3;
+        int gap = icon_height / 3; 
+        
+        int offset = gap / 2;
+        
+        Gdiplus::SolidBrush icon_brush(Gdiplus::Color(255, GetRValue(icon_color), GetGValue(icon_color), GetBValue(icon_color)));
+        
+        graphics.FillRectangle(&icon_brush, x - offset - bar_width, y - half_icon, bar_width, icon_height);
+        graphics.FillRectangle(&icon_brush, x + offset, y - half_icon, bar_width, icon_height);
     }
-
-    // Draw circle background
-    int radius = size / 2;
-    Gdiplus::SolidBrush bg_brush(Gdiplus::Color(255, GetRValue(circle_color), GetGValue(circle_color), GetBValue(circle_color)));
-    graphics.FillEllipse(&bg_brush, x - radius, y - radius, size, size);
-
-    // Draw bars inside
-    int icon_height = size * 4 / 10;
-    int half_icon = icon_height / 2;
-    int bar_width = icon_height / 3;
-    int gap = icon_height / 3; 
-    
-    int offset = gap / 2;
-    
-    Gdiplus::SolidBrush icon_brush(Gdiplus::Color(255, GetRValue(icon_color), GetGValue(icon_color), GetBValue(icon_color)));
-    
-    graphics.FillRectangle(&icon_brush, x - offset - bar_width, y - half_icon, bar_width, icon_height);
-    graphics.FillRectangle(&icon_brush, x + offset, y - half_icon, bar_width, icon_height);
 }
 
 // Helper for drawing hover circles behind buttons
@@ -1823,6 +2016,19 @@ void control_panel::draw_play_icon_with_opacity(HDC hdc, int x, int y, int size,
         draw_hover_circle(hdc, x, y, size);
     }
 
+    int style = get_alternative_icons_style();
+    if (style == 1) {
+        int val = m_is_dark_mode ? (32 + ((255 - 32) * opacity) / 100) : (32 - (32 * opacity) / 100);
+        COLORREF color = RGB(val, val, val);
+        draw_alternate_play_icon(hdc, x, y, size, color);
+        return;
+    } else if (style == 2) {
+        int val = m_is_dark_mode ? (32 + ((255 - 32) * opacity) / 100) : (32 - (32 * opacity) / 100);
+        COLORREF color = RGB(val, val, val);
+        draw_style3_play_icon(hdc, x, y, size, color);
+        return;
+    }
+
     Gdiplus::Graphics graphics(hdc);
     graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
     graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
@@ -1866,6 +2072,19 @@ void control_panel::draw_play_icon_with_opacity(HDC hdc, int x, int y, int size,
 void control_panel::draw_pause_icon_with_opacity(HDC hdc, int x, int y, int size, int opacity) {
     if (m_hovered_button == BTN_PLAYPAUSE) {
         draw_hover_circle(hdc, x, y, size);
+    }
+
+    int style = get_alternative_icons_style();
+    if (style == 1) {
+        int val = m_is_dark_mode ? (32 + ((255 - 32) * opacity) / 100) : (32 - (32 * opacity) / 100);
+        COLORREF color = RGB(val, val, val);
+        draw_alternate_pause_icon(hdc, x, y, size, color);
+        return;
+    } else if (style == 2) {
+        int val = m_is_dark_mode ? (32 + ((255 - 32) * opacity) / 100) : (32 - (32 * opacity) / 100);
+        COLORREF color = RGB(val, val, val);
+        draw_style3_pause_icon(hdc, x, y, size, color);
+        return;
     }
 
     Gdiplus::Graphics graphics(hdc);
@@ -2076,6 +2295,9 @@ void control_panel::on_settings_changed() {
     // Apply window corner preference
     apply_window_corner_preference();
     
+    // Re-evaluate title & artist format scripts for the currently playing track
+    update_track_info();
+    
     // Reload MiniPlayer mode size configuration
     int undocked_w = get_miniplayer_undocked_width();
     int undocked_h = get_miniplayer_undocked_height();
@@ -2127,11 +2349,13 @@ void control_panel::on_settings_changed() {
         m_saved_expanded_height = expanded_s;
     }
 
-    // Trigger repaint if visible
+    // Force the track title & artist tickers to re-evaluate and repaint if visible
+    m_ticker_title.reset();
+    m_artist_ticker_title.reset();
+    m_ticker_offset = 0;
+    m_artist_ticker_offset = 0;
+
     if (m_visible && m_control_window) {
-        // Force the track title ticker to re-evaluate (fonts / sizes may have changed
-        // after a settings reset), then repaint.
-        m_ticker_title.reset();
         InvalidateRect(m_control_window, nullptr, TRUE);
     }
 }
@@ -2944,6 +3168,7 @@ void control_panel::start_slide_out_animation() {
     KillTimer(m_control_window, TIMEOUT_TIMER_ID);
     KillTimer(m_control_window, TICKER_TIMER_ID);
     m_ticker_active = false;
+    m_artist_ticker_active = false;
     
     m_animating = true;
     m_closing = true;
@@ -2957,6 +3182,7 @@ void control_panel::update_ticker() {
     if (!m_control_window || !m_visible) {
         KillTimer(m_control_window, TICKER_TIMER_ID);
         m_ticker_active = false;
+        m_artist_ticker_active = false;
         return;
     }
 
@@ -2976,61 +3202,20 @@ void control_panel::update_ticker() {
         default: step = 1.0f; break;  // Fast (3)
     }
 
-    m_ticker_offset += step * (float)m_ticker_direction;
+    if (m_ticker_active) {
+        m_ticker_offset += step * (float)m_ticker_direction;
+    }
+    if (m_artist_ticker_active) {
+        m_artist_ticker_offset += step * (float)m_artist_ticker_direction;
+    }
 
     // Trigger repaint so the new offset is drawn
     InvalidateRect(m_control_window, nullptr, FALSE);
 }
 
-// Draws the track title, applying the ticker scroll offset when the text overflows its area.
-// Manages the ticker timer: starts it when the title is too wide, stops it when it fits or the
-// mode/title changes and the ticker is no longer needed.
-void control_panel::update_title_ticker(HDC hdc, const pfc::string8& title, HFONT font, const RECT& rect) {
-    if (!m_control_window) return;
-
-    int area_width = rect.right - rect.left;
-    if (area_width <= 0) {
-        if (m_ticker_active) {
-            KillTimer(m_control_window, TICKER_TIMER_ID);
-            m_ticker_active = false;
-            m_ticker_offset = 0;
-        }
-        return;
-    }
-
-    SelectObject(hdc, font);
-
-    pfc::stringcvt::string_wide_from_utf8 wide_title(title.c_str());
-    SIZE text_size = {};
-    GetTextExtentPoint32W(hdc, wide_title.get_ptr(), (int)wcslen(wide_title.get_ptr()), &text_size);
-
-    bool overflow = text_size.cx > area_width;
-    if (overflow) {
-        // If the title changed since the ticker started, reset the scroll position.
-        if (title != m_ticker_title) {
-            m_ticker_title = title;
-            m_ticker_offset = 0;
-            m_ticker_direction = 1; // start moving right-to-left (offset grows)
-        }
-    } else {
-        // Title fits - no scrolling needed.
-        m_ticker_title = title;
-        m_ticker_offset = 0;
-        m_ticker_direction = 1;
-    }
-
-    // Clamp offset to 0..(textWidth - areaWidth). Reverse direction at the ends so the
-    // text scrolls right-to-left and then back.
-    int max_offset = text_size.cx - area_width;
-    if (max_offset < 0) max_offset = 0;
-    if (m_ticker_offset < 0.0f) { m_ticker_offset = 0.0f; m_ticker_direction = 1; }
-    if (m_ticker_offset > (float)max_offset) { m_ticker_offset = (float)max_offset; m_ticker_direction = -1; }
-
-    // Manage the ticker timer: only run while overflowing, the ticker is enabled, and the
-    // title is long enough (>= 25 chars). Short titles never tick - they are ellipsis-truncated.
-    bool want_ticker = overflow && (get_ticker_speed() != 0) && !is_short_title(title);
+void control_panel::sync_ticker_timer() {
+    bool want_ticker = m_ticker_active || m_artist_ticker_active;
     if (want_ticker) {
-        // Ticker speed (px/sec): Slowest=15, Slow=30, Fast=60, Fastest=125
         int speed = get_ticker_speed();
         UINT interval;
         switch (speed) {
@@ -3039,29 +3224,73 @@ void control_panel::update_title_ticker(HDC hdc, const pfc::string8& title, HFON
             case 4: interval = 12; break; // ~125 px/sec
             default: interval = 16; break; // Fast (3) - ~60 px/sec
         }
-        // SetTimer updates the interval even if the timer is already running, so a speed
-        // change takes effect immediately.
         SetTimer(m_control_window, TICKER_TIMER_ID, interval, nullptr);
-        m_ticker_active = true;
-    } else if (m_ticker_active) {
+    } else {
         KillTimer(m_control_window, TICKER_TIMER_ID);
-        m_ticker_active = false;
+    }
+}
+
+void control_panel::update_text_ticker_internal(HDC hdc, const pfc::string8& text, HFONT font, const RECT& rect,
+                                                 float& offset, int& direction, bool& active, pfc::string8& ticker_text,
+                                                 COLORREF text_color) {
+    if (!m_control_window) return;
+
+    int area_width = rect.right - rect.left;
+    if (area_width <= 0) {
+        active = false;
+        offset = 0;
+        sync_ticker_timer();
+        return;
     }
 
-    // Draw the title. If it overflows, the ticker is enabled, and the title is long enough
-    // (>= 25 chars), scroll it horizontally within the clipping rect; otherwise draw it
-    // normally left-aligned (ellipsis-truncated when overflow).
+    SelectObject(hdc, font);
+    if (text_color != CLR_INVALID) {
+        SetTextColor(hdc, text_color);
+    }
+
+    pfc::stringcvt::string_wide_from_utf8 wide_text(text.c_str());
+    SIZE text_size = {};
+    GetTextExtentPoint32W(hdc, wide_text.get_ptr(), (int)wcslen(wide_text.get_ptr()), &text_size);
+
+    bool overflow = text_size.cx > area_width;
+    if (overflow) {
+        if (text != ticker_text) {
+            ticker_text = text;
+            offset = 0;
+            direction = 1;
+        }
+    } else {
+        ticker_text = text;
+        offset = 0;
+        direction = 1;
+    }
+
+    int max_offset = text_size.cx - area_width;
+    if (max_offset < 0) max_offset = 0;
+    if (offset < 0.0f) { offset = 0.0f; direction = 1; }
+    if (offset > (float)max_offset) { offset = (float)max_offset; direction = -1; }
+
+    active = overflow && (get_ticker_speed() != 0) && !is_short_title(text);
+    sync_ticker_timer();
+
     SetBkMode(hdc, TRANSPARENT);
-    if (overflow && get_ticker_speed() != 0 && !is_short_title(title)) {
-        // Vertically center the text within the rect (ExtTextOut uses top-left origin).
+    if (active) {
         int text_y = rect.top + ((rect.bottom - rect.top - text_size.cy) / 2);
-        int rounded_offset = (int)(m_ticker_offset + 0.5f);
+        int rounded_offset = (int)(offset + 0.5f);
         RECT text_clip = rect;
-        ExtTextOutW(hdc, rect.left - rounded_offset, text_y, ETO_CLIPPED, &text_clip, wide_title.get_ptr(), (UINT)wcslen(wide_title.get_ptr()), nullptr);
+        ExtTextOutW(hdc, rect.left - rounded_offset, text_y, ETO_CLIPPED, &text_clip, wide_text.get_ptr(), (UINT)wcslen(wide_text.get_ptr()), nullptr);
     } else {
         RECT fit_rect = rect;
-        DrawText(hdc, wide_title.get_ptr(), -1, &fit_rect, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+        DrawText(hdc, wide_text.get_ptr(), -1, &fit_rect, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
     }
+}
+
+void control_panel::update_title_ticker(HDC hdc, const pfc::string8& title, HFONT font, const RECT& rect) {
+    update_text_ticker_internal(hdc, title, font, rect, m_ticker_offset, m_ticker_direction, m_ticker_active, m_ticker_title, CLR_INVALID);
+}
+
+void control_panel::update_artist_ticker(HDC hdc, const pfc::string8& artist, HFONT font, const RECT& rect, COLORREF text_color) {
+    update_text_ticker_internal(hdc, artist, font, rect, m_artist_ticker_offset, m_artist_ticker_direction, m_artist_ticker_active, m_artist_ticker_title, text_color);
 }
 
 void control_panel::update_animation() {
@@ -5438,11 +5667,9 @@ void control_panel::draw_track_info(HDC hdc, const RECT& client_rect, int art_si
         HFONT artist_font_to_use = m_artist_font ? m_artist_font : CreateFont(get_dpi_scaled_font_height(11), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
                                                                               DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                                                                               DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
-        SelectObject(hdc, artist_font_to_use);
         
         RECT artist_rect = {text_left, 50, text_right, 70};
-        pfc::stringcvt::string_wide_from_utf8 wide_artist(m_current_artist.c_str());
-        DrawText(hdc, wide_artist.get_ptr(), -1, &artist_rect, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+        update_artist_ticker(hdc, m_current_artist, artist_font_to_use, artist_rect, m_text_dim_color);
         
         // Cleanup fonts (only delete fallback fonts, not our member fonts)
         SelectObject(hdc, old_font);
@@ -5469,11 +5696,8 @@ void control_panel::draw_track_info(HDC hdc, const RECT& client_rect, int art_si
                                                                               DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                                                                               DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
         
-        SelectObject(hdc, artist_font_to_use);
-        
         RECT artist_rect = {text_left, 50, text_right, 70};
-        pfc::stringcvt::string_wide_from_utf8 wide_artist(m_current_artist.c_str());
-        DrawText(hdc, wide_artist.get_ptr(), -1, &artist_rect, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+        update_artist_ticker(hdc, m_current_artist, artist_font_to_use, artist_rect, m_text_dim_color);
         
         // Cleanup fonts (only delete fallback fonts, not our member fonts)
         SelectObject(hdc, old_font);
@@ -5559,22 +5783,44 @@ void control_panel::paint_compact_mode(HDC hdc, const RECT& rect) {
         // Track title with ticker animation (right-to-left and back) for long titles
         update_title_ticker(hdc, m_current_title, title_font, title_rect);
         
-        SelectObject(hdc, artist_font);
-        
-        int artist_top = margin + (int)(window_height * 0.31);
+                        int artist_top = margin + (int)(window_height * 0.31);
         int artist_bottom = margin + (int)(window_height * 0.63);
         RECT artist_rect = {text_left, artist_top, text_right, artist_bottom};
-        pfc::stringcvt::string_wide_from_utf8 wide_artist(m_current_artist.c_str());
-        SetTextColor(hdc, m_text_dim_color); // Slightly dimmer for artist
-        DrawText(hdc, wide_artist.get_ptr(), -1, &artist_rect, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+        update_artist_ticker(hdc, m_current_artist, artist_font, artist_rect, m_text_dim_color);
     }
     
+    // Calculate elapsed time text dimensions dynamically using active m_timer_font to prevent clipping at high DPI / 2160p
+    wchar_t time_str[16] = L"";
+    int time_width_needed = 0;
+    int time_height_needed = 0;
+    
+    if (m_is_playing) {
+        int elapsed_min = (int)(m_current_time / 60);
+        int elapsed_sec = (int)m_current_time % 60;
+        swprintf_s(time_str, 16, L"%d:%02d", elapsed_min, elapsed_sec);
+        
+        HFONT old_font = (HFONT)SelectObject(hdc, m_timer_font);
+        SIZE text_size = {};
+        GetTextExtentPoint32W(hdc, time_str, (int)wcslen(time_str), &text_size);
+        
+        SIZE sample_size = {};
+        GetTextExtentPoint32W(hdc, L"00:00", 5, &sample_size);
+        
+        time_width_needed = (std::max)((int)text_size.cx, (int)sample_size.cx);
+        time_height_needed = (std::max)((int)text_size.cy, (int)sample_size.cy);
+        SelectObject(hdc, old_font);
+    }
     
     // Draw progress bar at bottom - moved up by 10%
     int progress_bar_height = 5;
     int progress_bar_y = window_height - progress_bar_height - 2 - (int)(window_height * 0.1); // Move up by 10%
     int progress_bar_left = text_left; // Start under artist name
-    int progress_bar_width = text_right - text_left - 40; // Leave space for time display
+    
+    // Dynamically calculate progress_bar_width based on exact time text width + gap
+    int gap = 6;
+    int reserved_right_space = (m_is_playing && time_width_needed > 0) ? (time_width_needed + gap) : 0;
+    int progress_bar_width = text_right - text_left - reserved_right_space;
+    if (progress_bar_width < 10) progress_bar_width = 10;
     
     // Calculate progress
     double progress_ratio = (m_track_length > 0) ? (m_current_time / m_track_length) : 0.0;
@@ -5598,19 +5844,20 @@ void control_panel::paint_compact_mode(HDC hdc, const RECT& rect) {
     }
     
     // Draw elapsed time (count up, like Docked and Undocked modes)
-    if (m_is_playing) {
-        int elapsed_min = (int)(m_current_time / 60);
-        int elapsed_sec = (int)m_current_time % 60;
-        
-        wchar_t time_str[16];
-        swprintf_s(time_str, 16, L"%d:%02d", elapsed_min, elapsed_sec);
-        
+    if (m_is_playing && time_width_needed > 0) {
         // Use the configurable timer font
         HFONT old_font = (HFONT)SelectObject(hdc, m_timer_font);
         SetTextColor(hdc, m_text_color); // Match artist color
+        SetBkMode(hdc, TRANSPARENT);
         
-        RECT time_rect = {progress_bar_left + progress_bar_width + 5, progress_bar_y - 10, window_width - margin, progress_bar_y + progress_bar_height + 6};
-        DrawText(hdc, time_str, -1, &time_rect, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+        // Dynamically center time_rect vertically relative to progress bar center line to avoid vertical clipping
+        int bar_center_y = progress_bar_y + (progress_bar_height / 2);
+        int half_rect_height = (time_height_needed / 2) + 4;
+        int time_top = bar_center_y - half_rect_height;
+        int time_bottom = bar_center_y + half_rect_height;
+        
+        RECT time_rect = {text_right - time_width_needed, time_top, text_right, time_bottom};
+        DrawText(hdc, time_str, -1, &time_rect, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
         
         SelectObject(hdc, old_font);
     }
@@ -5663,8 +5910,15 @@ void control_panel::draw_time_info(HDC hdc, const RECT& client_rect) {
     // Use the configurable timer font
     HFONT old_font = (HFONT)SelectObject(hdc, m_timer_font);
     
-    RECT time_rect = {client_rect.right - 60, 20, client_rect.right - 10, 45};
     pfc::stringcvt::string_wide_from_utf8 wide_time(time_str.c_str());
+    SIZE text_size = {};
+    GetTextExtentPoint32W(hdc, wide_time.get_ptr(), (int)wcslen(wide_time.get_ptr()), &text_size);
+
+    int width = (std::max)((int)text_size.cx + 8, 50);
+    int height = (std::max)((int)text_size.cy + 8, 25);
+    int center_y = 32; // middle of title/artist height area
+    
+    RECT time_rect = {client_rect.right - width - 10, center_y - (height / 2), client_rect.right - 10, center_y + (height / 2)};
     DrawText(hdc, wide_time.get_ptr(), -1, &time_rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
     
     SelectObject(hdc, old_font);
@@ -5673,9 +5927,50 @@ void control_panel::draw_time_info(HDC hdc, const RECT& client_rect) {
 void control_panel::draw_track_info_overlay(HDC hdc, int window_width, int window_height) {
     // Don't return early when no title/artist - overlay should still appear for controls
     
-    // Create semi-transparent overlay background at the top using GDI+ alpha blending (glass effect)
-    int overlay_height = 70; // Height of the overlay area
+    // Track title (use configured track font, fallback to default if not set)
+    HFONT title_font = m_track_font;
+    bool need_delete_title = false;
+    if (!title_font) {
+        title_font = CreateFont(get_dpi_scaled_font_height(20), 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+                                 DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                                 DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+        need_delete_title = true;
+    }
     
+    // Artist name (use configured artist font, fallback to default if not set)
+    HFONT artist_font = m_artist_font;
+    bool need_delete_artist = false;
+    if (!artist_font) {
+        artist_font = CreateFont(get_dpi_scaled_font_height(14), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                                  DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                                  DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+        need_delete_artist = true;
+    }
+
+    // Dynamically measure font metrics to guarantee sufficient bounding box heights and proper line spacing
+    TEXTMETRIC tm_title = {};
+    HFONT old_font = (HFONT)SelectObject(hdc, title_font);
+    GetTextMetrics(hdc, &tm_title);
+    SelectObject(hdc, old_font);
+
+    TEXTMETRIC tm_artist = {};
+    old_font = (HFONT)SelectObject(hdc, artist_font);
+    GetTextMetrics(hdc, &tm_artist);
+    SelectObject(hdc, old_font);
+
+    int title_h = tm_title.tmHeight;
+    int artist_h = tm_artist.tmHeight;
+    if (title_h <= 0) title_h = 24;
+    if (artist_h <= 0) artist_h = 18;
+
+    // Dynamic line spacing proportional to font size (min 6px for comfortable breathing room)
+    int spacing = (std::max)(6, (int)(artist_h * 0.35f));
+    int total_text_h = title_h + spacing + artist_h;
+
+    // Calculate dynamic overlay height (minimum 70px, or dynamic height if text block is larger)
+    int padding_v = (std::max)(10, (int)(title_h * 0.35f));
+    int overlay_height = (std::max)(70, total_text_h + (padding_v * 2));
+
     if (m_overlay_opacity > 0) {
         // Use GDI+ for true alpha blending (glass effect)
         Gdiplus::Graphics graphics(hdc);
@@ -5699,58 +5994,38 @@ void control_panel::draw_track_info_overlay(HDC hdc, int window_width, int windo
         SetTextColor(hdc, m_is_dark_mode ? RGB(255, 255, 255) : RGB(32, 32, 32));
         SetBkMode(hdc, TRANSPARENT);
     
-    // Track title (use configured track font, fallback to default if not set)
-    HFONT title_font = m_track_font;
-    bool need_delete_title = false;
-    if (!title_font) {
-        title_font = CreateFont(get_dpi_scaled_font_height(20), 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
-                                 DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                                 DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
-        need_delete_title = true;
-    }
-    HFONT old_font = (HFONT)SelectObject(hdc, title_font);
-    
-    // Position title - balanced spacing between title and artist
-    int title_y = (overlay_height / 2) - 18;
-    RECT title_rect = {15, title_y, window_width - 15, title_y + 20};
-    if (!m_current_title.is_empty()) {
-        pfc::stringcvt::string_wide_from_utf8 wide_title(m_current_title.c_str());
-        DrawText(hdc, wide_title.get_ptr(), -1, &title_rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-    } else {
-        DrawText(hdc, L"[No Track Title]", -1, &title_rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-    }
-    
-    SelectObject(hdc, old_font);
+        int start_y = (overlay_height - total_text_h) / 2;
+
+        // Position title - dynamic rect based on tmHeight
+        old_font = (HFONT)SelectObject(hdc, title_font);
+        RECT title_rect = {15, start_y, window_width - 15, start_y + title_h};
+        if (!m_current_title.is_empty()) {
+            pfc::stringcvt::string_wide_from_utf8 wide_title(m_current_title.c_str());
+            DrawText(hdc, wide_title.get_ptr(), -1, &title_rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+        } else {
+            DrawText(hdc, L"[No Track Title]", -1, &title_rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+        }
+        SelectObject(hdc, old_font);
+
+        // Position artist - dynamic rect based on tmHeight and spacing
+        old_font = (HFONT)SelectObject(hdc, artist_font);
+        int artist_y = start_y + title_h + spacing;
+        RECT artist_rect = {15, artist_y, window_width - 15, artist_y + artist_h};
+        if (!m_current_artist.is_empty()) {
+            pfc::stringcvt::string_wide_from_utf8 wide_artist(m_current_artist.c_str());
+            DrawText(hdc, wide_artist.get_ptr(), -1, &artist_rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+        } else {
+            DrawText(hdc, L"[No Artist]", -1, &artist_rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+        }
+        SelectObject(hdc, old_font);
+    } // End of should_draw_overlay condition
+
     if (need_delete_title) {
         DeleteObject(title_font);
     }
-    
-    // Artist name (use configured artist font, fallback to default if not set)
-    HFONT artist_font = m_artist_font;
-    bool need_delete_artist = false;
-    if (!artist_font) {
-        artist_font = CreateFont(get_dpi_scaled_font_height(14), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-                                  DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                                  DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
-        need_delete_artist = true;
+    if (need_delete_artist) {
+        DeleteObject(artist_font);
     }
-    old_font = (HFONT)SelectObject(hdc, artist_font);
-    
-    // Position artist - balanced spacing from title
-    int artist_y = (overlay_height / 2) + 6;
-    RECT artist_rect = {15, artist_y, window_width - 15, artist_y + 16};
-    if (!m_current_artist.is_empty()) {
-        pfc::stringcvt::string_wide_from_utf8 wide_artist(m_current_artist.c_str());
-        DrawText(hdc, wide_artist.get_ptr(), -1, &artist_rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-    } else {
-        DrawText(hdc, L"[No Artist]", -1, &artist_rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-    }
-    
-        SelectObject(hdc, old_font);
-        if (need_delete_artist) {
-            DeleteObject(artist_font);
-        }
-    } // End of should_draw_overlay condition
 }
 
 void control_panel::draw_control_overlay(HDC hdc, int window_width, int window_height) {
