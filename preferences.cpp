@@ -31,6 +31,7 @@ static cfg_int cfg_cover_style(GUID{0x12345697, 0x9abc, 0xdef0, {0x12, 0x34, 0x5
 static cfg_int cfg_background_style(GUID{0x12345698, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0); // 0=Solid, 1=Artwork Colors, 2=Blurred Artwork
 static cfg_int cfg_show_volume_feedback(GUID{0x12345699, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 1); // 1=Yes, 0=No
 static cfg_int cfg_hover_circles(GUID{0x1234568F, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 1); // 1=Show (default), 0=Hide
+static cfg_int cfg_alternative_icons(GUID{0x123456D8, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 0); // 0=Style 1 (default), 1=Style 2, 2=Style 3
 static cfg_int cfg_miniplayer_border_style(GUID{0x1234568B, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 1); // 0=Square, 1=Rounded (Default Rounded)
 static cfg_int cfg_ticker_speed(GUID{0x1234568C, 0x9abc, 0xdef0, {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0}}, 2); // 0=Off, 1=Slowest, 2=Slow, 3=Fast, 4=Fastest
 
@@ -305,6 +306,10 @@ COLORREF get_volume_osd_color() {
 
 bool get_hover_circles_enabled() {
     return cfg_hover_circles != 0;
+}
+
+int get_alternative_icons_style() {
+    return cfg_alternative_icons;
 }
 
 bool get_show_volume_feedback() {
@@ -779,6 +784,13 @@ INT_PTR CALLBACK tray_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, LP
         SendMessage(hHoverCirclesCombo, CB_ADDSTRING, 0, (LPARAM)L"Hide");
         SendMessage(hHoverCirclesCombo, CB_SETCURSEL, (cfg_hover_circles != 0) ? 0 : 1, 0);
 
+        HWND hAltIconsCombo = GetDlgItem(hwnd, IDC_ALTERNATIVE_ICONS_COMBO);
+        SendMessage(hAltIconsCombo, CB_RESETCONTENT, 0, 0);
+        SendMessage(hAltIconsCombo, CB_ADDSTRING, 0, (LPARAM)L"Style 1");
+        SendMessage(hAltIconsCombo, CB_ADDSTRING, 0, (LPARAM)L"Style 2");
+        SendMessage(hAltIconsCombo, CB_ADDSTRING, 0, (LPARAM)L"Style 3");
+        SendMessage(hAltIconsCombo, CB_SETCURSEL, cfg_alternative_icons, 0);
+
         CheckDlgButton(hwnd, IDC_SHOW_VOLUME_FEEDBACK, cfg_show_volume_feedback ? BST_CHECKED : BST_UNCHECKED);
         update_volume_color_button_state(hwnd);
 
@@ -1052,6 +1064,7 @@ INT_PTR CALLBACK tray_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, LP
         case IDC_MINIPLAYER_BORDER_COMBO:
         case IDC_TICKER_SPEED_COMBO:
         case IDC_HOVER_CIRCLES_COMBO:
+        case IDC_ALTERNATIVE_ICONS_COMBO:
             if (HIWORD(wp) == CBN_SELCHANGE) {
                 p_this->on_changed();
             }
@@ -1202,6 +1215,7 @@ bool tray_preferences::has_changed() {
     int current_disable_slide = (IsDlgButtonChecked(m_hwnd, IDC_DISABLE_SLIDE_TO_SIDE) == BST_CHECKED) ? 1 : 0;
     int current_popup_position = (int)SendMessage(GetDlgItem(m_hwnd, IDC_POPUP_POSITION_COMBO), CB_GETCURSEL, 0, 0);
     int current_show_volume_feedback = (IsDlgButtonChecked(m_hwnd, IDC_SHOW_VOLUME_FEEDBACK) == BST_CHECKED) ? 1 : 0;
+    int current_alternative_icons = (int)SendMessage(GetDlgItem(m_hwnd, IDC_ALTERNATIVE_ICONS_COMBO), CB_GETCURSEL, 0, 0);
     
     return (current_minimize_to_tray != cfg_always_minimize_to_tray) || 
            (current_double_click != cfg_double_click_actions) ||
@@ -1209,7 +1223,8 @@ bool tray_preferences::has_changed() {
            (current_disable_miniplayer != cfg_disable_miniplayer) ||
            (current_disable_slide != cfg_disable_slide_to_side) ||
            (current_popup_position != cfg_popup_position) ||
-           (current_show_volume_feedback != cfg_show_volume_feedback);
+           (current_show_volume_feedback != cfg_show_volume_feedback) ||
+           (current_alternative_icons != cfg_alternative_icons);
 
 }
 
@@ -1248,6 +1263,7 @@ void tray_preferences::apply_settings() {
         cfg_ticker_speed = (int)SendMessage(GetDlgItem(m_hwnd, IDC_TICKER_SPEED_COMBO), CB_GETCURSEL, 0, 0);
         int hover_circles_sel = (int)SendMessage(GetDlgItem(m_hwnd, IDC_HOVER_CIRCLES_COMBO), CB_GETCURSEL, 0, 0);
         cfg_hover_circles = (hover_circles_sel == 0) ? 1 : 0;
+        cfg_alternative_icons = (int)SendMessage(GetDlgItem(m_hwnd, IDC_ALTERNATIVE_ICONS_COMBO), CB_GETCURSEL, 0, 0);
         cfg_show_volume_feedback = (IsDlgButtonChecked(m_hwnd, IDC_SHOW_VOLUME_FEEDBACK) == BST_CHECKED) ? 1 : 0;
 
         // Save display format strings
@@ -1298,6 +1314,7 @@ void tray_preferences::reset_settings() {
         cfg_cover_style = 1;              // Default: Rounded (1)
         cfg_background_style = 0;         // Default: Solid (0)
         cfg_hover_circles = 1;            // Default: Show (1)
+        cfg_alternative_icons = 0;        // Default: Style 1 (0)
         cfg_show_volume_feedback = 1;     // Default: Yes (1)
         cfg_compact_progress_color = RGB(255, 140, 0); // Default: orange
         cfg_volume_osd_color = RGB(255, 140, 0);       // Default: orange
@@ -1329,6 +1346,7 @@ void tray_preferences::reset_settings() {
         SendMessage(GetDlgItem(m_hwnd, IDC_MINIPLAYER_BORDER_COMBO), CB_SETCURSEL, 1, 0);     // Rounded (index 1)
         SendMessage(GetDlgItem(m_hwnd, IDC_TICKER_SPEED_COMBO), CB_SETCURSEL, 2, 0);           // Slow (index 2)
         SendMessage(GetDlgItem(m_hwnd, IDC_HOVER_CIRCLES_COMBO), CB_SETCURSEL, 0, 0);          // Show (index 0)
+        SendMessage(GetDlgItem(m_hwnd, IDC_ALTERNATIVE_ICONS_COMBO), CB_SETCURSEL, 0, 0);      // Style 1 (index 0)
         CheckDlgButton(m_hwnd, IDC_SHOW_VOLUME_FEEDBACK, BST_CHECKED);
         update_volume_color_button_state(m_hwnd);
         // Repaint the color swatch buttons with the reset colors
@@ -1498,14 +1516,36 @@ static UINT_PTR CALLBACK FontHookProc(HWND hwndDlg, UINT msg, WPARAM wp, LPARAM 
 }
 
 static bool show_font_picker(HWND hwndOwner, LOGFONT& lf) {
+    HDC hdc = GetDC(nullptr);
+    int current_dpi = GetDeviceCaps(hdc, LOGPIXELSY);
+    ReleaseDC(nullptr, hdc);
+    if (current_dpi <= 0) current_dpi = 96;
+
+    // Calculate unscaled point size from stored lf.lfHeight (which was scaled for current_dpi)
+    int point_size = MulDiv(abs(lf.lfHeight), 72, current_dpi);
+    if (point_size <= 0) point_size = 9;
+
+    // Prepare temporary LOGFONT for ChooseFont using standard 96 DPI height so ChooseFont selects the exact point size
+    LOGFONT picker_lf = lf;
+    picker_lf.lfHeight = -MulDiv(point_size, 96, 72);
+
     CHOOSEFONT cf = {};
     cf.lStructSize = sizeof(CHOOSEFONT);
     cf.hwndOwner = hwndOwner;
-    cf.lpLogFont = &lf;
+    cf.lpLogFont = &picker_lf;
     cf.Flags = CF_INITTOLOGFONTSTRUCT | CF_SCREENFONTS | CF_ENABLEHOOK;
     cf.lpfnHook = FontHookProc;
     
     if (ChooseFont(&cf)) {
+        int chosen_point_size = cf.iPointSize / 10;
+        if (chosen_point_size <= 0) {
+            chosen_point_size = MulDiv(abs(picker_lf.lfHeight), 72, 96);
+        }
+
+        // Apply chosen attributes back to lf and scale lfHeight for current_dpi
+        lf = picker_lf;
+        lf.lfHeight = -MulDiv(chosen_point_size, current_dpi, 72);
+
         if (lf.lfFaceName[0] == L'@') {
             wchar_t temp[LF_FACESIZE] = {};
             wcscpy_s(temp, lf.lfFaceName + 1);
@@ -1523,7 +1563,7 @@ void tray_preferences::select_artist_font() {
     if (get_use_artist_custom_font()) {
         lf = get_artist_font();
     } else {
-        lf = get_default_font(true, 11);
+        lf = get_default_font(true, 9);
     }
     
     if (show_font_picker(m_hwnd, lf)) {
@@ -1540,7 +1580,7 @@ void tray_preferences::select_track_font() {
     if (get_use_track_custom_font()) {
         lf = get_track_font();
     } else {
-        lf = get_default_font(false, 14);
+        lf = get_default_font(false, 11);
     }
     
     if (show_font_picker(m_hwnd, lf)) {
@@ -1563,7 +1603,7 @@ void tray_preferences::select_cp_artist_font() {
     if (get_cp_use_artist_custom_font()) {
         lf = get_cp_artist_font();
     } else {
-        lf = get_default_font(true, 13);
+        lf = get_default_font(true, 9);
     }
     
     if (show_font_picker(m_hwnd, lf)) {
@@ -1580,7 +1620,7 @@ void tray_preferences::select_cp_track_font() {
     if (get_cp_use_track_custom_font()) {
         lf = get_cp_track_font();
     } else {
-        lf = get_default_font(false, 14);
+        lf = get_default_font(false, 11);
     }
     
     if (show_font_picker(m_hwnd, lf)) {
@@ -1605,21 +1645,21 @@ void tray_preferences::select_font_for_mode(int mode, bool is_artist) {
         if (is_artist ? get_undocked_use_artist_custom_font() : get_undocked_use_track_custom_font()) {
             lf = is_artist ? cfg_undocked_artist_font.get_value() : cfg_undocked_track_font.get_value();
         } else {
-            lf = get_default_font(is_artist, is_artist ? 11 : 14);
+            lf = get_default_font(is_artist, is_artist ? 9 : 11);
         }
         break;
     case 2: // Expanded
         if (is_artist ? get_expanded_use_artist_custom_font() : get_expanded_use_track_custom_font()) {
             lf = is_artist ? cfg_expanded_artist_font.get_value() : cfg_expanded_track_font.get_value();
         } else {
-            lf = get_default_font(is_artist, is_artist ? 11 : 14);
+            lf = get_default_font(is_artist, is_artist ? 9 : 11);
         }
         break;
     case 3: // Compact
         if (is_artist ? get_compact_use_artist_custom_font() : get_compact_use_track_custom_font()) {
             lf = is_artist ? cfg_compact_artist_font.get_value() : cfg_compact_track_font.get_value();
         } else {
-            lf = get_default_font(is_artist, is_artist ? 11 : 14);
+            lf = get_default_font(is_artist, is_artist ? 9 : 11);
         }
         break;
     default:
@@ -1830,7 +1870,9 @@ void tray_preferences::switch_tab(int tab) {
     // Icons tab controls
     int icons_controls[] = {
         IDC_HOVER_CIRCLES_LABEL,
-        IDC_HOVER_CIRCLES_COMBO
+        IDC_HOVER_CIRCLES_COMBO,
+        IDC_ALTERNATIVE_ICONS_LABEL,
+        IDC_ALTERNATIVE_ICONS_COMBO
     };
 
     // MiniPlayer tab controls
