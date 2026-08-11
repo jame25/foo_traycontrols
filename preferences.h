@@ -23,6 +23,7 @@ int get_miniplayer_border_style(); // 0=Square, 1=Rounded
 int get_ticker_speed(); // 0=Off, 1=Slowest, 2=Slow, 3=Fast, 4=Fastest
 bool get_show_volume_feedback(); // true=Enabled, false=Disabled
 bool get_hover_circles_enabled(); // true=Show (default), false=Hide
+int get_alternative_icons_style(); // 0=Style 1 (default), 1=Style 2, 2=Style 3
 COLORREF get_compact_progress_color(); // Compact MiniPlayer track progress bar fill color
 COLORREF get_volume_osd_color();       // Volume OSD bar fill color
 
