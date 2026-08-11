@@ -40,6 +40,14 @@ static void add_rounded_rect_to_path(Gdiplus::GraphicsPath& path, float x, float
     path.CloseFigure();
 }
 
+// Helper function to get system DPI scale ratio (1.0 = 100% / 96 DPI, 2.0 = 200% / 192 DPI)
+static float get_dpi_scale() {
+    HDC hdc = GetDC(nullptr);
+    int dpi = GetDeviceCaps(hdc, LOGPIXELSY);
+    ReleaseDC(nullptr, hdc);
+    return (dpi > 0) ? (static_cast<float>(dpi) / 96.0f) : 1.0f;
+}
+
 volume_popup* volume_popup::s_instance = nullptr;
 extern HINSTANCE g_hIns;
 
@@ -169,8 +177,9 @@ void volume_popup::show_feedback() {
         m_current_volume_db = -100.0f;
     }
 
-    int w = FEEDBACK_WIDTH;
-    int h = FEEDBACK_HEIGHT;
+    float scale = get_dpi_scale();
+    int w = (int)std::round(FEEDBACK_WIDTH * scale);
+    int h = (int)std::round(FEEDBACK_HEIGHT * scale);
 
     // Clear custom window region so GDI+ anti-aliased edges are preserved
     SetWindowRgn(m_window, nullptr, TRUE);
@@ -180,17 +189,19 @@ void volume_popup::show_feedback() {
     GetCursorPos(&pt);
 
     int win_x = pt.x - (w / 2);
-    int win_y = pt.y - h - 40; // Shifted upward for clearer visibility above taskbar
+    int win_y = pt.y - h - (int)std::round(40.0f * scale); // Shifted upward for clearer visibility above taskbar
 
     // Ensure within primary monitor work area with breathing room above taskbar
     RECT work_area = {};
     SystemParametersInfo(SPI_GETWORKAREA, 0, &work_area, 0);
 
-    if (win_x < work_area.left + 10) win_x = work_area.left + 10;
-    if (win_x + w > work_area.right - 10) win_x = work_area.right - 10;
-    if (win_y < work_area.top + 10) win_y = work_area.top + 10;
-    if (win_y + h > work_area.bottom - 25) win_y = work_area.bottom - h - 25;
+    int margin_side = (int)std::round(10.0f * scale);
+    int margin_bottom = (int)std::round(25.0f * scale);
 
+    if (win_x < work_area.left + margin_side) win_x = work_area.left + margin_side;
+    if (win_x + w > work_area.right - margin_side) win_x = work_area.right - w - margin_side;
+    if (win_y < work_area.top + margin_side) win_y = work_area.top + margin_side;
+    if (win_y + h > work_area.bottom - margin_bottom) win_y = work_area.bottom - h - margin_bottom;
 
     SetWindowPos(m_window, HWND_TOPMOST, win_x, win_y, w, h, SWP_SHOWWINDOW | SWP_NOACTIVATE);
     m_visible = true;
@@ -220,8 +231,9 @@ void volume_popup::update_volume_from_point(POINT pt) {
 
     // In feedback OSD mode, the slider track runs from FEEDBACK_TRACK_X to the text area.
     if (m_is_feedback_mode) {
-        int track_left = FEEDBACK_TRACK_X;
-        int track_right = rc.right - FEEDBACK_TEXT_W - 12;
+        float scale = get_dpi_scale();
+        int track_left = (int)std::round(FEEDBACK_TRACK_X * scale);
+        int track_right = rc.right - (int)std::round((FEEDBACK_TEXT_W + 12.0f) * scale);
         int track_width = track_right - track_left;
 
         if (track_width <= 0) return;
@@ -456,10 +468,12 @@ void volume_popup::paint_feedback(HDC hdc) {
     g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
     g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
 
+    float scale = get_dpi_scale();
+
     // 1. Draw Pill Card Background & Border with GDI+ Anti-Aliasing
-    float stroke = 1.0f;
+    float stroke = 1.0f * scale;
     float pad = stroke * 0.5f;
-    float radius = get_use_rounded_corners() ? 12.0f : 6.0f;
+    float radius = (get_use_rounded_corners() ? 12.0f : 6.0f) * scale;
 
     Gdiplus::GraphicsPath card_path;
     add_rounded_rect_to_path(card_path, pad, pad, (float)w - stroke, (float)h - stroke, radius);
@@ -475,18 +489,36 @@ void volume_popup::paint_feedback(HDC hdc) {
     int vol_int = (int)std::round(vol_pct * 100.0f);
 
     // 2. Draw Speaker Vector Icon
-    int icon_size = FEEDBACK_ICON_SIZE;
-    int icon_x = FEEDBACK_ICON_X;
+    int icon_size = (int)std::round(FEEDBACK_ICON_SIZE * scale);
+    int icon_x = (int)std::round(FEEDBACK_ICON_X * scale);
     int icon_y = (h - icon_size) / 2;
 
     Gdiplus::Color gdiplus_icon_color(GetRValue(icon_color), GetGValue(icon_color), GetBValue(icon_color));
     draw_speaker_icon(g, icon_x, icon_y, icon_size, vol_pct, gdiplus_icon_color);
 
-    // 3. Draw Slider Track Bar & Orange Accent Fill with GDI+ Anti-Aliasing
-    float track_x = FEEDBACK_TRACK_X;
-    float text_w = FEEDBACK_TEXT_W;
-    float track_w = (float)w - track_x - text_w - 12.0f;
-    float track_h = 6.0f;
+    // 4. Measure Numerical Volume Display dynamically first so track_w fits perfectly
+    g.SetTextRenderingHint(Gdiplus::TextRenderingHintAntiAliasGridFit);
+    float font_size_pt = 10.5f * scale;
+    Gdiplus::Font font(L"Segoe UI", font_size_pt, Gdiplus::FontStyleRegular, Gdiplus::UnitPoint);
+    Gdiplus::SolidBrush text_brush(Gdiplus::Color(255, GetRValue(text_color), GetGValue(text_color), GetBValue(text_color)));
+    Gdiplus::StringFormat format;
+    format.SetAlignment(Gdiplus::StringAlignmentFar);
+    format.SetLineAlignment(Gdiplus::StringAlignmentCenter);
+    format.SetFormatFlags(Gdiplus::StringFormatFlagsNoWrap);
+
+    std::wstring vol_str = std::to_wstring(vol_int);
+
+    // Measure exact string width needed for volume percentage text
+    Gdiplus::RectF bounds;
+    g.MeasureString(vol_str.c_str(), (int)vol_str.length(), &font, Gdiplus::PointF(0.0f, 0.0f), &format, &bounds);
+
+    float text_w = (std::max)(bounds.Width + (8.0f * scale), FEEDBACK_TEXT_W * scale);
+    float right_margin = 12.0f * scale;
+
+    // 3. Draw Slider Track Bar & Accent Fill
+    float track_x = FEEDBACK_TRACK_X * scale;
+    float track_w = (float)w - track_x - text_w - right_margin;
+    float track_h = 6.0f * scale;
     float track_y = ((float)h - track_h) * 0.5f;
 
     if (track_w > 0.0f) {
@@ -511,16 +543,8 @@ void volume_popup::paint_feedback(HDC hdc) {
         }
     }
 
-    // 4. Draw Numerical Volume Display (GDI+ Anti-Aliased Text)
-    g.SetTextRenderingHint(Gdiplus::TextRenderingHintAntiAliasGridFit);
-    Gdiplus::Font font(L"Segoe UI", 10.5f, Gdiplus::FontStyleRegular, Gdiplus::UnitPoint);
-    Gdiplus::SolidBrush text_brush(Gdiplus::Color(255, GetRValue(text_color), GetGValue(text_color), GetBValue(text_color)));
-    Gdiplus::StringFormat format;
-    format.SetAlignment(Gdiplus::StringAlignmentFar);
-    format.SetLineAlignment(Gdiplus::StringAlignmentCenter);
-
-    std::wstring vol_str = std::to_wstring(vol_int);
-    Gdiplus::RectF text_rect((float)w - text_w - 12.0f, 0.0f, text_w, (float)h);
+    // Draw text inside calculated bounding box
+    Gdiplus::RectF text_rect((float)w - text_w - right_margin, 0.0f, text_w, (float)h);
     g.DrawString(vol_str.c_str(), (int)vol_str.length(), &font, text_rect, &format, &text_brush);
 
     // Update Layered Window with AC_SRC_ALPHA for hardware per-pixel alpha composition
