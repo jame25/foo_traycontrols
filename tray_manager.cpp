@@ -411,6 +411,9 @@ void tray_manager::on_settings_changed() {
     
     // Update popup window settings
     popup_window::get_instance().on_settings_changed();
+    
+    // Refresh tray icon tooltip with updated title formatting
+    force_update_tooltip();
 }
 
 void tray_manager::show_context_menu(int x, int y) {
