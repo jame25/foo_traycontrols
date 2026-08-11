@@ -165,14 +165,26 @@ private:
     static const int ROLL_ANIMATION_STEPS = 15;
     static const int ROLL_ANIMATION_DURATION = 250; // ms
     
-    // Track title ticker animation state (right-to-left and back)
+    // Track title & artist ticker animation state (right-to-left and back)
     float m_ticker_offset;    // Current horizontal pixel offset (fractional for sub-pixel smoothness)
     int m_ticker_direction;   // +1 = moving left (right-to-left), -1 = moving right (back)
-    bool m_ticker_active;     // Whether the ticker timer is running
+    bool m_ticker_active;     // Whether the title ticker timer is running
     pfc::string8 m_ticker_title; // Title currently being scrolled (to detect title changes)
+
+    float m_artist_ticker_offset;    // Current horizontal pixel offset for artist
+    int m_artist_ticker_direction;   // +1 = moving left (right-to-left), -1 = moving right (back)
+    bool m_artist_ticker_active;     // Whether the artist ticker timer is running
+    pfc::string8 m_artist_ticker_title; // Artist currently being scrolled (to detect artist changes)
+
     void update_ticker();     // Advances the ticker and invalidates the window
     void update_title_ticker(HDC hdc, const pfc::string8& title, HFONT font, const RECT& rect); // Draws scrolling title and manages ticker state
+    void update_artist_ticker(HDC hdc, const pfc::string8& artist, HFONT font, const RECT& rect, COLORREF text_color = CLR_INVALID); // Draws scrolling artist and manages ticker state
+    void update_text_ticker_internal(HDC hdc, const pfc::string8& text, HFONT font, const RECT& rect,
+                                     float& offset, int& direction, bool& active, pfc::string8& ticker_text,
+                                     COLORREF text_color);
+    void sync_ticker_timer(); // Starts or stops TICKER_TIMER_ID based on m_ticker_active and m_artist_ticker_active
     static bool is_short_title(const pfc::string8& title) { return title.length() > 0 && title.length() < 30; }
+
     
     
     // Album art
@@ -210,6 +222,10 @@ private:
     void draw_hover_circle(HDC hdc, int x, int y, int size);
     void draw_play_icon(HDC hdc, int x, int y, int size);
     void draw_pause_icon(HDC hdc, int x, int y, int size);
+    void draw_alternate_play_icon(HDC hdc, int x, int y, int size, COLORREF color);
+    void draw_alternate_pause_icon(HDC hdc, int x, int y, int size, COLORREF color);
+    void draw_style3_play_icon(HDC hdc, int x, int y, int size, COLORREF color);
+    void draw_style3_pause_icon(HDC hdc, int x, int y, int size, COLORREF color);
     void draw_previous_icon(HDC hdc, int x, int y, int size);
     void draw_next_icon(HDC hdc, int x, int y, int size);
     void draw_play_icon_with_opacity(HDC hdc, int x, int y, int size, int opacity);
