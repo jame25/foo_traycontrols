@@ -107,6 +107,10 @@
 #define IDC_DOUBLE_CLICK_ACTIONS     332
 #define IDC_STATIC_DBLCLICK_HELP     333
 
+// Alternative Icons (Icons tab)
+#define IDC_ALTERNATIVE_ICONS_LABEL  334
+#define IDC_ALTERNATIVE_ICONS_COMBO  335
+
 // Preview button for popup notifications
 #define IDC_PREVIEW_POPUP_BTN        285
 
