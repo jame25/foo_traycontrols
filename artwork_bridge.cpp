@@ -1,5 +1,8 @@
 #include "stdafx.h"
 #include "artwork_bridge.h"
+#include "control_panel.h"
+#include "popup_window.h"
+#include <mutex>
 
 // Global function pointers
 pfn_foo_artwork_search g_artwork_search = nullptr;
@@ -11,7 +14,8 @@ pfn_foo_artwork_remove_callback g_artwork_remove_callback = nullptr;
 // Module handle for foo_artwork
 static HMODULE g_foo_artwork_module = nullptr;
 
-// Pending artwork from callback
+// Pending artwork from callback (guarded by g_pending_mutex)
+static std::mutex g_pending_mutex;
 static HBITMAP g_pending_artwork_bitmap = nullptr;
 static bool g_has_pending_artwork_popup = false;
 static bool g_has_pending_artwork_panel = false;
@@ -44,12 +48,22 @@ static HBITMAP copy_hbitmap(HBITMAP source) {
     return copy;
 }
 
-// Callback function that receives artwork results from foo_artwork
+// Callback function that receives artwork results from foo_artwork.
+// Called on foo_artwork's worker thread - must synchronize and marshal to main thread.
 static void artwork_result_callback(bool success, HBITMAP bitmap) {
     if (success && bitmap) {
-        g_pending_artwork_bitmap = bitmap;
-        g_has_pending_artwork_popup = true;
-        g_has_pending_artwork_panel = true;
+        {
+            std::lock_guard<std::mutex> lock(g_pending_mutex);
+            g_pending_artwork_bitmap = bitmap;
+            g_has_pending_artwork_popup = true;
+            g_has_pending_artwork_panel = true;
+        }
+
+        // Marshal notification to main thread
+        fb2k::inMainThread([]() {
+            control_panel::get_instance().on_online_artwork_received();
+            popup_window::get_instance().on_online_artwork_received();
+        });
     }
 }
 
@@ -93,12 +107,18 @@ void shutdown_artwork_bridge() {
     } else if (g_artwork_set_callback) {
         g_artwork_set_callback(nullptr); // Fallback for older foo_artwork
     }
+    std::lock_guard<std::mutex> lock(g_pending_mutex);
     g_pending_artwork_bitmap = nullptr;
     g_has_pending_artwork_popup = false;
     g_has_pending_artwork_panel = false;
 }
 
+// Last requested artist & title for search deduplication
+static std::string g_last_requested_artist;
+static std::string g_last_requested_title;
+
 void clear_pending_online_artwork() {
+    std::lock_guard<std::mutex> lock(g_pending_mutex);
     g_pending_artwork_bitmap = nullptr;
     g_has_pending_artwork_popup = false;
     g_has_pending_artwork_panel = false;
@@ -109,50 +129,86 @@ void request_online_artwork(const char* artist, const char* title) {
         return;
     }
 
-    // Clear any pending artwork from previous search
-    clear_pending_online_artwork();
+    const char* safe_artist = artist ? artist : "";
+    const char* safe_title = title ? title : "";
 
-    g_artwork_search(artist, title);
+    if (safe_artist[0] == '\0' && safe_title[0] == '\0') {
+        return;
+    }
+
+    // Deduplicate: If already searching or searched for this exact artist & title, don't re-issue search
+    {
+        std::lock_guard<std::mutex> lock(g_pending_mutex);
+        if (g_last_requested_artist == safe_artist && g_last_requested_title == safe_title) {
+            return;
+        }
+        g_last_requested_artist = safe_artist;
+        g_last_requested_title = safe_title;
+        g_pending_artwork_bitmap = nullptr;
+        g_has_pending_artwork_popup = false;
+        g_has_pending_artwork_panel = false;
+    }
+
+    g_artwork_search(safe_artist, safe_title);
 }
 
 bool has_pending_online_artwork() {
+    std::lock_guard<std::mutex> lock(g_pending_mutex);
     return g_has_pending_artwork_popup || g_has_pending_artwork_panel;
 }
 
 bool has_pending_online_artwork_popup() {
+    std::lock_guard<std::mutex> lock(g_pending_mutex);
     return g_has_pending_artwork_popup;
 }
 
 bool has_pending_online_artwork_panel() {
+    std::lock_guard<std::mutex> lock(g_pending_mutex);
     return g_has_pending_artwork_panel;
 }
 
 HBITMAP get_pending_online_artwork() {
-    // Return an independent COPY of the bitmap. The caller owns the copy and must
-    // DeleteObject it. This is necessary because foo_artwork owns the original and
-    // can DeleteObject it at any time (e.g. when foo_nowbar re-requests artwork).
-    HBITMAP copy = copy_hbitmap(g_pending_artwork_bitmap);
-    g_has_pending_artwork_popup = false;
-    g_has_pending_artwork_panel = false;
-    return copy;
+    HBITMAP src = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(g_pending_mutex);
+        src = g_pending_artwork_bitmap;
+        g_has_pending_artwork_popup = false;
+        g_has_pending_artwork_panel = false;
+    }
+    return copy_hbitmap(src);
 }
 
 HBITMAP get_pending_online_artwork_popup() {
-    HBITMAP copy = copy_hbitmap(g_pending_artwork_bitmap);
-    g_has_pending_artwork_popup = false;
-    return copy;
+    HBITMAP src = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(g_pending_mutex);
+        if (g_has_pending_artwork_popup) {
+            src = g_pending_artwork_bitmap;
+            g_has_pending_artwork_popup = false;
+        }
+    }
+    return copy_hbitmap(src);
 }
 
 HBITMAP get_pending_online_artwork_panel() {
-    HBITMAP copy = copy_hbitmap(g_pending_artwork_bitmap);
-    g_has_pending_artwork_panel = false;
-    return copy;
+    HBITMAP src = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(g_pending_mutex);
+        if (g_has_pending_artwork_panel) {
+            src = g_pending_artwork_bitmap;
+            g_has_pending_artwork_panel = false;
+        }
+    }
+    return copy_hbitmap(src);
 }
 
 HBITMAP get_last_online_artwork() {
-    // Return an independent COPY of the last received bitmap.
-    // Used to re-acquire artwork after mode switches that call cleanup_cover_art().
-    return copy_hbitmap(g_pending_artwork_bitmap);
+    HBITMAP src = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(g_pending_mutex);
+        src = g_pending_artwork_bitmap;
+    }
+    return copy_hbitmap(src);
 }
 
 HBITMAP get_current_online_artwork() {
