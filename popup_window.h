@@ -13,12 +13,16 @@ public:
     
     // Show popup with track information
     void show_track_info(metadb_handle_ptr p_track);
+    void update_stream_metadata(const file_info & p_info);
     void show_preview();
     void hide_popup();
     void refresh_track_info();
     
     // Settings
     void on_settings_changed();
+    
+    // Online artwork notification from foo_artwork bridge
+    void on_online_artwork_received();
     
 private:
     popup_window();
@@ -53,6 +57,9 @@ private:
     HBITMAP m_cover_art_bitmap;
     bool m_artwork_from_bridge; // true if m_cover_art_bitmap is owned by foo_artwork (do NOT DeleteObject)
     pfc::string8 m_last_track_path;
+    pfc::string8 m_current_title;
+    pfc::string8 m_current_artist;
+    bool m_is_stream;
     metadb_handle_ptr m_current_track;
     metadb_handle_ptr m_pending_track;
     int m_artwork_wait_count;
