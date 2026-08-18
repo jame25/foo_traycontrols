@@ -387,20 +387,70 @@ pfc::string8 get_line2_format() {
     return cfg_line2_format.get();
 }
 
-void format_display_lines(pfc::string8& line1_out, pfc::string8& line2_out) {
-    try {
-        auto playback = playback_control::get();
-        static_api_ptr_t<titleformat_compiler> compiler;
+static const char* safe_meta_get_pref(const file_info& info, const char* name) {
+    t_size index = info.meta_find(name);
+    if (index != pfc_infinite && info.meta_enum_value_count(index) > 0) {
+        const char* val = info.meta_enum_value(index, 0);
+        if (val && val[0] != '\0') return val;
+    }
+    return nullptr;
+}
 
+void format_display_lines_track(metadb_handle_ptr track, pfc::string8& line1_out, pfc::string8& line2_out) {
+    if (!track.is_valid()) return;
+    try {
         pfc::string8 line1_fmt = get_line1_format();
         pfc::string8 line2_fmt = get_line2_format();
 
-        service_ptr_t<titleformat_object> script;
-        if (compiler->compile(script, line1_fmt)) {
-            playback->playback_format_title(nullptr, line1_out, script, nullptr, playback_control::display_level_all);
+        if (line1_fmt.is_empty()) line1_fmt = "%title%";
+        if (line2_fmt.is_empty()) line2_fmt = "%artist%";
+
+        static_api_ptr_t<titleformat_compiler> compiler;
+        service_ptr_t<titleformat_object> script1;
+        service_ptr_t<titleformat_object> script2;
+        compiler->compile_safe(script1, line1_fmt);
+        compiler->compile_safe(script2, line2_fmt);
+
+        if (script1.is_valid()) {
+            track->format_title(nullptr, line1_out, script1, nullptr);
         }
-        if (compiler->compile(script, line2_fmt)) {
-            playback->playback_format_title(nullptr, line2_out, script, nullptr, playback_control::display_level_all);
+        if (script2.is_valid()) {
+            track->format_title(nullptr, line2_out, script2, nullptr);
+        }
+
+        // Direct metadata tag fallback via get_info_ref() and file_info
+        if (line1_out.is_empty() || line2_out.is_empty()) {
+            metadb_info_container::ptr info_container = track->get_info_ref();
+            if (info_container.is_valid()) {
+                const file_info& info = info_container->info();
+                if (line1_out.is_empty()) {
+                    const char* val = safe_meta_get_pref(info, "TITLE");
+                    if (!val) val = safe_meta_get_pref(info, "title");
+                    if (!val) val = pfc::string_filename_ext(track->get_path()).get_ptr();
+                    if (val) line1_out = val;
+                }
+                if (line2_out.is_empty()) {
+                    const char* val = safe_meta_get_pref(info, "ARTIST");
+                    if (!val) val = safe_meta_get_pref(info, "artist");
+                    if (!val) val = safe_meta_get_pref(info, "ALBUMARTIST");
+                    if (!val) val = safe_meta_get_pref(info, "albumartist");
+                    if (!val) val = safe_meta_get_pref(info, "PERFORMER");
+                    if (!val) val = safe_meta_get_pref(info, "performer");
+                    if (val) line2_out = val;
+                }
+            }
+        }
+    } catch (...) {
+        // Leave outputs unchanged on error
+    }
+}
+
+void format_display_lines(pfc::string8& line1_out, pfc::string8& line2_out) {
+    try {
+        auto playback = playback_control::get();
+        metadb_handle_ptr track;
+        if (playback->get_now_playing(track) && track.is_valid()) {
+            format_display_lines_track(track, line1_out, line2_out);
         }
     } catch (...) {
         // Leave outputs unchanged on error
