@@ -87,7 +87,7 @@ void tray_manager::initialize() {
         // Fallback to default application icon
         m_nid.hIcon = LoadIcon(nullptr, IDI_APPLICATION);
     }
-    wcscpy_s(m_nid.szTip, L"foobar2000 - Tray Controls");
+    wcsncpy_s(m_nid.szTip, _countof(m_nid.szTip), L"foobar2000 - Tray Controls", _TRUNCATE);
 
     // Add tray icon immediately - always visible
     Shell_NotifyIcon(NIM_ADD, &m_nid);
@@ -199,22 +199,92 @@ bool tray_manager::create_tray_window() {
     return m_tray_window != nullptr;
 }
 
+static bool is_remote_stream_path(const char* path) {
+    if (!path || path[0] == '\0') return false;
+    const char* proto = strstr(path, "://");
+    if (!proto) return false;
+    if (strncmp(path, "file://", 7) == 0 || strstr(path, "file://") != nullptr) return false;
+    return true;
+}
+
 void tray_manager::update_tooltip(metadb_handle_ptr p_track) {
     if (!m_initialized || !p_track.is_valid()) {
-        // Default tooltip if no valid track
-        wcscpy_s(m_nid.szTip, L"foobar2000 - No Track");
+        wcsncpy_s(m_nid.szTip, _countof(m_nid.szTip), L"foobar2000 - No Track", _TRUNCATE);
         if (m_tray_added) {
+            m_nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
             Shell_NotifyIcon(NIM_MODIFY, &m_nid);
         }
         return;
     }
     
     try {
-        // Use configurable display format strings
+        pfc::string8 path = p_track->get_path();
+        bool is_stream = is_remote_stream_path(path.get_ptr());
+
+        if (p_track != m_last_loaded_track) {
+            m_last_loaded_track = p_track;
+            if (!is_stream) {
+                m_last_stream_artist = "";
+                m_last_stream_title = "";
+            }
+        }
+
+        pfc::string8 tooltip;
+        if (is_stream && (!m_last_stream_title.is_empty() || !m_last_stream_artist.is_empty())) {
+            if (!m_last_stream_artist.is_empty() && !m_last_stream_title.is_empty()) {
+                tooltip = m_last_stream_artist;
+                tooltip += " - ";
+                tooltip += m_last_stream_title;
+            } else if (!m_last_stream_title.is_empty()) {
+                tooltip = m_last_stream_title;
+            } else {
+                tooltip = m_last_stream_artist;
+            }
+        } else {
+            pfc::string8 line1, line2;
+            format_display_lines_track(p_track, line1, line2);
+
+            if (!line1.is_empty() && !line2.is_empty()) {
+                tooltip = line1;
+                tooltip += " - ";
+                tooltip += line2;
+            } else if (!line1.is_empty()) {
+                tooltip = line1;
+            } else if (!line2.is_empty()) {
+                tooltip = line2;
+            } else {
+                tooltip = "foobar2000 - Playing";
+            }
+        }
+
+        if (tooltip == m_last_track_metadata && !tooltip.is_empty()) {
+            return;
+        }
+        m_last_track_metadata = tooltip;
+
+        pfc::stringcvt::string_wide_from_utf8 wide_tooltip(tooltip.get_ptr());
+        wcsncpy_s(m_nid.szTip, _countof(m_nid.szTip), wide_tooltip.get_ptr(), _TRUNCATE);
+        m_nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
+        
+        if (m_tray_added) {
+            Shell_NotifyIcon(NIM_MODIFY, &m_nid);
+        }
+    }
+    catch (...) {
+        wcsncpy_s(m_nid.szTip, _countof(m_nid.szTip), L"foobar2000 - Error", _TRUNCATE);
+        m_nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
+        if (m_tray_added) {
+            Shell_NotifyIcon(NIM_MODIFY, &m_nid);
+        }
+    }
+}
+
+void tray_manager::update_tooltip_from_playback() {
+    if (!m_initialized) return;
+    try {
         pfc::string8 line1, line2, tooltip;
         format_display_lines(line1, line2);
 
-        // Build tooltip from formatted lines
         if (!line1.is_empty() && !line2.is_empty()) {
             tooltip = line1;
             tooltip += " - ";
@@ -226,65 +296,129 @@ void tray_manager::update_tooltip(metadb_handle_ptr p_track) {
         } else {
             tooltip = "foobar2000 - Playing";
         }
-        
-        // Convert to wide string and update tooltip
+
+        if (tooltip == m_last_track_metadata && !tooltip.is_empty()) {
+            return;
+        }
+        m_last_track_metadata = tooltip;
+
         pfc::stringcvt::string_wide_from_utf8 wide_tooltip(tooltip.get_ptr());
-        wcscpy_s(m_nid.szTip, wide_tooltip.get_ptr());
-        
+        wcsncpy_s(m_nid.szTip, _countof(m_nid.szTip), wide_tooltip.get_ptr(), _TRUNCATE);
+        m_nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
+
         if (m_tray_added) {
             Shell_NotifyIcon(NIM_MODIFY, &m_nid);
         }
-        
-        // Popup will be triggered by playback callbacks for actual track changes
+    } catch (...) {}
+}
+
+static const char* safe_meta_get_tray(const file_info& info, const char* name) {
+    t_size index = info.meta_find(name);
+    if (index != pfc_infinite && info.meta_enum_value_count(index) > 0) {
+        const char* val = info.meta_enum_value(index, 0);
+        if (val && val[0] != '\0') return val;
     }
-    catch (...) {
-        // Fallback tooltip
-        wcscpy_s(m_nid.szTip, L"foobar2000 - Error");
-        if (m_tray_added) {
-            Shell_NotifyIcon(NIM_MODIFY, &m_nid);
+    return nullptr;
+}
+
+static bool is_inverted_stream_tray(const file_info& info, metadb_handle_ptr track = nullptr) {
+    try {
+        if (track.is_valid()) {
+            pfc::string8 path = track->get_path();
+            if (!path.is_empty()) {
+                std::string path_str = path.c_str();
+                std::transform(path_str.begin(), path_str.end(), path_str.begin(), ::tolower);
+                if (path_str.find("?inverted") != std::string::npos ||
+                    path_str.find("&inverted") != std::string::npos ||
+                    path_str.find("#inverted") != std::string::npos) {
+                    return true;
+                }
+            }
         }
-    }
+        
+        t_size index = info.meta_find("STREAM_INVERTED");
+        if (index != pfc_infinite && info.meta_enum_value_count(index) > 0) {
+            const char* val = info.meta_enum_value(index, 0);
+            if (val && strcmp(val, "1") == 0) return true;
+        }
+    } catch (...) {}
+    return false;
 }
 
 void tray_manager::update_tooltip_with_dynamic_info(const file_info & p_info) {
     if (!m_initialized) return;
     
     try {
-        // Build tooltip string with dynamic info
-        pfc::string8 artist, title, tooltip;
+        pfc::string8 artist, title;
+
+        const char* p_artist = safe_meta_get_tray(p_info, "ARTIST");
+        const char* p_title = safe_meta_get_tray(p_info, "TITLE");
+
+        const char* stream_title = safe_meta_get_tray(p_info, "STREAMTITLE");
+        if (!stream_title) {
+            stream_title = safe_meta_get_tray(p_info, "ICY_TITLE");
+        }
+
+        if (stream_title) {
+            const char* dash = strstr(stream_title, " - ");
+            if (dash) {
+                if (!p_artist) {
+                    artist.set_string(stream_title, dash - stream_title);
+                }
+                if (!p_title) {
+                    title.set_string(dash + 3);
+                }
+            } else if (!p_title) {
+                title = stream_title;
+            }
+        }
+
+        if (p_artist && artist.is_empty()) artist = p_artist;
+        if (p_title && title.is_empty()) title = p_title;
+
+        if (artist.is_empty() && !title.is_empty()) {
+            pfc::string8 temp = title;
+            const char* dash = strstr(temp.get_ptr(), " - ");
+            if (dash) {
+                artist.set_string(temp.get_ptr(), dash - temp.get_ptr());
+                title = dash + 3;
+            }
+        }
+
+        if (artist.is_empty()) {
+            const char* val = safe_meta_get_tray(p_info, "ALBUMARTIST");
+            if (val) artist = val;
+        }
+        if (artist.is_empty()) {
+            const char* val = safe_meta_get_tray(p_info, "PERFORMER");
+            if (val) artist = val;
+        }
+        if (title.is_empty()) {
+            const char* val = safe_meta_get_tray(p_info, "DESCRIPTION");
+            if (val) title = val;
+        }
+        if (title.is_empty()) {
+            const char* val = safe_meta_get_tray(p_info, "COMMENT");
+            if (val) title = val;
+        }
         
-        // Check for metadata in dynamic info
-        if (p_info.meta_exists("ARTIST")) {
-            artist = p_info.meta_get("ARTIST", 0);
+        if (artist.is_empty() && title.is_empty()) {
+            return;
         }
-        if (p_info.meta_exists("TITLE")) {
-            title = p_info.meta_get("TITLE", 0);
+
+        artist.trim(' ');
+        title.trim(' ');
+
+        if (is_inverted_stream_tray(p_info, m_last_loaded_track)) {
+            pfc::string8 temp = artist;
+            artist = title;
+            title = temp;
         }
+
+        m_last_stream_artist = artist;
+        m_last_stream_title = title;
         
-        // Check for streaming metadata
-        if (title.is_empty() && p_info.meta_exists("STREAMTITLE")) {
-            title = p_info.meta_get("STREAMTITLE", 0);
-        }
-        if (title.is_empty() && p_info.meta_exists("ICY_TITLE")) {
-            title = p_info.meta_get("ICY_TITLE", 0);
-        }
-        
-        // Check for alternative artist fields
-        if (artist.is_empty() && p_info.meta_exists("ALBUMARTIST")) {
-            artist = p_info.meta_get("ALBUMARTIST", 0);
-        }
-        if (artist.is_empty() && p_info.meta_exists("PERFORMER")) {
-            artist = p_info.meta_get("PERFORMER", 0);
-        }
-        
-        // Try additional dynamic metadata fields
-        if (title.is_empty() && p_info.meta_exists("DESCRIPTION")) {
-            title = p_info.meta_get("DESCRIPTION", 0);
-        }
-        if (title.is_empty() && p_info.meta_exists("COMMENT")) {
-            title = p_info.meta_get("COMMENT", 0);
-        }
-        
+        pfc::string8 tooltip;
         if (!artist.is_empty() && !title.is_empty()) {
             tooltip = artist;
             tooltip += " - ";
@@ -292,22 +426,18 @@ void tray_manager::update_tooltip_with_dynamic_info(const file_info & p_info) {
         } else if (!title.is_empty()) {
             tooltip = title;
         } else {
-            // If no useful dynamic metadata found, try to get the current track and force an update
-            try {
-                static_api_ptr_t<playback_control> pc;
-                metadb_handle_ptr track;
-                if (pc->get_now_playing(track) && track.is_valid()) {
-                    update_tooltip(track);
-                }
-            } catch (...) {
-                // Ignore errors
-            }
+            tooltip = artist;
+        }
+
+        if (tooltip == m_last_track_metadata && !tooltip.is_empty()) {
             return;
         }
+        m_last_track_metadata = tooltip;
         
         // Convert to wide string and update tooltip
         pfc::stringcvt::string_wide_from_utf8 wide_tooltip(tooltip.get_ptr());
-        wcscpy_s(m_nid.szTip, wide_tooltip.get_ptr());
+        wcsncpy_s(m_nid.szTip, _countof(m_nid.szTip), wide_tooltip.get_ptr(), _TRUNCATE);
+        m_nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
         
         if (m_tray_added) {
             Shell_NotifyIcon(NIM_MODIFY, &m_nid);
@@ -315,7 +445,8 @@ void tray_manager::update_tooltip_with_dynamic_info(const file_info & p_info) {
     }
     catch (...) {
         // Fallback tooltip
-        wcscpy_s(m_nid.szTip, L"foobar2000 - Playing");
+        wcsncpy_s(m_nid.szTip, _countof(m_nid.szTip), L"foobar2000 - Playing", _TRUNCATE);
+        m_nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
         if (m_tray_added) {
             Shell_NotifyIcon(NIM_MODIFY, &m_nid);
         }
@@ -325,12 +456,27 @@ void tray_manager::update_tooltip_with_dynamic_info(const file_info & p_info) {
 void tray_manager::update_playback_state(const char* state) {
     if (!m_initialized) return;
     
-    // Update tooltip with playback state
+    if (strcmp(state, "Playing") == 0) {
+        if (!m_last_track_metadata.is_empty()) {
+            pfc::stringcvt::string_wide_from_utf8 wide_tooltip(m_last_track_metadata.get_ptr());
+            wcsncpy_s(m_nid.szTip, _countof(m_nid.szTip), wide_tooltip.get_ptr(), _TRUNCATE);
+            m_nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
+            if (m_tray_added) Shell_NotifyIcon(NIM_MODIFY, &m_nid);
+            return;
+        }
+    } else if (strcmp(state, "Stopped") == 0) {
+        m_last_track_metadata = "";
+        m_last_stream_artist = "";
+        m_last_stream_title = "";
+        m_last_loaded_track = nullptr;
+    }
+
     pfc::string8 tooltip = "foobar2000 - ";
     tooltip += state;
     
     pfc::stringcvt::string_wide_from_utf8 wide_tooltip(tooltip.get_ptr());
-    wcscpy_s(m_nid.szTip, wide_tooltip.get_ptr());
+    wcsncpy_s(m_nid.szTip, _countof(m_nid.szTip), wide_tooltip.get_ptr(), _TRUNCATE);
+    m_nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
     
     if (m_tray_added) {
         Shell_NotifyIcon(NIM_MODIFY, &m_nid);
@@ -519,14 +665,14 @@ void tray_manager::force_update_tooltip() {
         debug_info += pc->is_paused() ? "true" : "false";
         
         pfc::stringcvt::string_wide_from_utf8 wide_debug(debug_info.get_ptr());
-        wcscpy_s(m_nid.szTip, wide_debug.get_ptr());
+        wcsncpy_s(m_nid.szTip, _countof(m_nid.szTip), wide_debug.get_ptr(), _TRUNCATE);
         
         if (m_tray_added) {
             Shell_NotifyIcon(NIM_MODIFY, &m_nid);
         }
         
     } catch (...) {
-        wcscpy_s(m_nid.szTip, L"Debug: Exception occurred");
+        wcsncpy_s(m_nid.szTip, _countof(m_nid.szTip), L"Debug: Exception occurred", _TRUNCATE);
         if (m_tray_added) {
             Shell_NotifyIcon(NIM_MODIFY, &m_nid);
         }
@@ -741,80 +887,14 @@ LRESULT CALLBACK tray_manager::low_level_mouse_proc(int nCode, WPARAM wParam, LP
 // Timer procedure for periodic tooltip updates and window monitoring
 VOID CALLBACK tray_manager::tooltip_timer_proc(HWND hwnd, UINT msg, UINT_PTR timer_id, DWORD time) {
     if (s_instance && timer_id == TOOLTIP_TIMER_ID && s_instance->m_initialized) {
-        s_instance->check_for_track_changes();
         s_instance->check_window_visibility();
     }
 }
 
 // Check if the current track has changed and update tooltip accordingly
 void tray_manager::check_for_track_changes() {
-    if (!m_initialized) return;
-    
-    try {
-        static_api_ptr_t<playback_control> pc;
-        
-        if (pc->is_playing()) {
-            metadb_handle_ptr track;
-            if (pc->get_now_playing(track) && track.is_valid()) {
-                pfc::string8 current_path = track->get_path();
-                
-                bool is_stream = strstr(current_path.get_ptr(), "://") != nullptr;
-                
-                if (is_stream) {
-                    // For streams, use metadata as identifier for track changes
-                    pfc::string8 metadata_identifier;
-                    try {
-                        static_api_ptr_t<titleformat_compiler> compiler;
-                        service_ptr_t<titleformat_object> script;
-                        
-                        if (compiler->compile(script, "[%artist%]|[%title%]")) {
-                            pfc::string8 formatted_title;
-                            if (pc->playback_format_title(nullptr, formatted_title, script, nullptr, playback_control::display_level_all)) {
-                                metadata_identifier = formatted_title;
-                            }
-                        }
-                    } catch (...) {
-                        metadata_identifier = current_path;
-                    }
-                    
-                    // Check if metadata has actually changed
-                    if (metadata_identifier != m_last_track_metadata && !metadata_identifier.is_empty()) {
-                        m_last_track_metadata = metadata_identifier;
-                        m_last_track_path = current_path;
-                        update_tooltip(track);
-                        // Show popup notification for stream metadata change
-                        popup_window::get_instance().show_track_info(track);
-                    } else {
-                        // Just update tooltip periodically without popup
-                        static int update_counter = 0;
-                        update_counter++;
-                        if (update_counter >= 10) { // Every 5 seconds
-                            update_counter = 0;
-                            update_tooltip(track);
-                        }
-                    }
-                } else {
-                    // For local files, use path as identifier
-                    if (current_path != m_last_track_path) {
-                        m_last_track_path = current_path;
-                        m_last_track_metadata = ""; // Clear metadata for local files
-                        update_tooltip(track);
-                        // Show popup notification for track change
-                        popup_window::get_instance().show_track_info(track);
-                    }
-                }
-            }
-        } else {
-            // Not playing - clear last track and update state
-            if (!m_last_track_path.is_empty()) {
-                m_last_track_path = "";
-                m_last_track_metadata = "";
-                update_playback_state("Stopped");
-            }
-        }
-    } catch (...) {
-        // Ignore timer errors
-    }
+    // No-op: Playback callbacks in main.cpp (tray_play_callback) handle all track and playback state changes
+    // event-driven from foobar2000, eliminating periodic playback_control polling on the main UI thread.
 }
 
 // Check for window visibility changes and handle minimize behavior
