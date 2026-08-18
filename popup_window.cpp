@@ -40,6 +40,7 @@ popup_window::popup_window()
     , m_start_x(0), m_start_y(0)
     , m_cover_art_bitmap(nullptr)
     , m_artwork_from_bridge(false)
+    , m_is_stream(false)
     , m_pending_track(nullptr)
     , m_artwork_wait_count(0) {
 }
@@ -88,76 +89,67 @@ void popup_window::cleanup() {
     m_animating = false;
 }
 
+static bool is_remote_stream_path(const char* path) {
+    if (!path || path[0] == '\0') return false;
+    const char* proto = strstr(path, "://");
+    if (!proto) return false;
+    if (strncmp(path, "file://", 7) == 0 || strstr(path, "file://") != nullptr) return false;
+    return true;
+}
+
 void popup_window::show_track_info(metadb_handle_ptr p_track) {
-    if (!m_initialized || !get_show_popup_notification() || !p_track.is_valid()) {
+    if (!m_initialized) {
+        initialize();
+    }
+    if (!m_popup_window) {
+        create_popup_window();
+    }
+    if (!m_initialized || !m_popup_window || !get_show_popup_notification() || !p_track.is_valid()) {
         return;
     }
     
-    // For track change detection, use path for local files and metadata for streams
-    pfc::string8 current_path = p_track->get_path();
-    bool is_stream = strstr(current_path.get_ptr(), "://") != nullptr;
-    
-    pfc::string8 track_identifier;
+    pfc::string8 track_identifier = p_track->get_path();
+    bool is_stream = is_remote_stream_path(track_identifier.get_ptr());
     if (is_stream) {
-        // For streams, use artist|title as identifier since path doesn't change
-        try {
-            auto playback = playback_control::get();
-            static_api_ptr_t<titleformat_compiler> compiler;
-            service_ptr_t<titleformat_object> script;
-            
-            if (compiler->compile(script, "[%artist%]|[%title%]")) {
-                pfc::string8 formatted_title;
-                if (playback->playback_format_title(nullptr, formatted_title, script, nullptr, playback_control::display_level_all)) {
-                    track_identifier = formatted_title;
-                }
-            }
-        } catch (...) {
-            // Fallback to path if titleformat fails
-            track_identifier = current_path;
-        }
-    } else {
-        // For local files, use path as identifier
-        track_identifier = current_path;
+        // For online radio streams, wait for dynamic metadata in update_stream_metadata()
+        m_pending_track = p_track;
+        m_is_stream = true;
+        return;
     }
     
-    // Check if this is the same track/metadata to prevent duplicate popups
-    if (track_identifier == m_last_track_path && !track_identifier.is_empty()) {
-        return; // Same track/metadata, don't show popup again
-    }
-    
+    m_is_stream = false;
     m_last_track_path = track_identifier;
     m_pending_track = p_track;
+    m_current_track = p_track;
     m_artwork_wait_count = 0;
     
     if (m_popup_window) {
         KillTimer(m_popup_window, ARTWORK_WAIT_TIMER_ID);
+        KillTimer(m_popup_window, ANIMATION_TIMER_ID);
+        KillTimer(m_popup_window, POPUP_TIMER_ID);
     }
+    bool was_fully_visible = (m_visible && !m_animating);
+    m_animating = false;
     
     // Purge previous track's artwork and pending online searches to ensure old cover art is never displayed
     cleanup_cover_art();
     clear_pending_online_artwork();
     
-    // Attempt initial cover art load for the new track (embedded art check)
-    load_cover_art(p_track);
+    // 1. Update text metadata (Title & Artist)
+    update_track_info(p_track);
+
+    // 2. Load cover art for the new track (embedded/local)
+    load_cover_art(p_track, false);
     
-    if (m_cover_art_bitmap != nullptr) {
-        // Embedded artwork is ready immediately! Show popup right now.
-        update_track_info(p_track);
-        position_popup();
-        if (m_visible && !m_animating) {
-            SetWindowPos(m_popup_window, HWND_TOPMOST, m_final_x, m_final_y, 320, 80, SWP_NOACTIVATE);
-            InvalidateRect(m_popup_window, nullptr, TRUE);
-            UpdateWindow(m_popup_window);
-            SetTimer(m_popup_window, POPUP_TIMER_ID, get_popup_duration(), hide_timer_proc);
-        } else if (!m_visible) {
-            start_slide_in_animation();
-        }
+    // 3. Position and show popup immediately
+    position_popup();
+    if (was_fully_visible) {
+        SetWindowPos(m_popup_window, HWND_TOPMOST, m_final_x, m_final_y, 320, 80, SWP_NOACTIVATE);
+        ShowWindow(m_popup_window, SW_SHOWNOACTIVATE);
+        InvalidateRect(m_popup_window, nullptr, TRUE);
+        SetTimer(m_popup_window, POPUP_TIMER_ID, get_popup_duration(), hide_timer_proc);
     } else {
-        // Embedded artwork not ready.
-        // Keep popup hidden and poll every 50ms (up to 3.5s) for foo_artwork callback to load artwork for this track.
-        if (m_popup_window) {
-            SetTimer(m_popup_window, ARTWORK_WAIT_TIMER_ID, ARTWORK_WAIT_INTERVAL, nullptr);
-        }
+        start_slide_in_animation();
     }
 }
 
@@ -214,7 +206,6 @@ void popup_window::show_preview() {
             if (m_visible && !m_animating) {
                 SetWindowPos(m_popup_window, HWND_TOPMOST, m_final_x, m_final_y, 320, 80, SWP_NOACTIVATE);
                 InvalidateRect(m_popup_window, nullptr, TRUE);
-                UpdateWindow(m_popup_window);
                 SetTimer(m_popup_window, POPUP_TIMER_ID, get_popup_duration(), hide_timer_proc);
             } else if (!m_visible) {
                 start_slide_in_animation();
@@ -232,7 +223,6 @@ void popup_window::show_preview() {
     if (m_visible && !m_animating) {
         SetWindowPos(m_popup_window, HWND_TOPMOST, m_final_x, m_final_y, 320, 80, SWP_NOACTIVATE);
         InvalidateRect(m_popup_window, nullptr, TRUE);
-        UpdateWindow(m_popup_window);
         SetTimer(m_popup_window, POPUP_TIMER_ID, get_popup_duration(), hide_timer_proc);
     } else if (!m_visible) {
         start_slide_in_animation();
@@ -247,14 +237,21 @@ void popup_window::on_artwork_wait_timer() {
     
     m_artwork_wait_count++;
     
-    // Poll for cover art loading via callback or embedded art
-    load_cover_art(m_pending_track);
+    // Check if artwork has arrived via foo_artwork callback
+    if (has_pending_online_artwork_popup()) {
+        HBITMAP bitmap = get_pending_online_artwork_popup();
+        if (bitmap) {
+            cleanup_cover_art();
+            m_cover_art_bitmap = bitmap;
+            m_artwork_from_bridge = false;
+        }
+    }
     
     // Check if foo_artwork is actively downloading artwork over the network
     bool is_downloading = is_online_artwork_loading();
     
     // 1. Artwork loaded successfully
-    // 2. Online search finished (not downloading) AND waited at least 15 steps (750ms for local tag I/O)
+    // 2. Online search finished (not downloading) AND waited at least 15 steps (750ms)
     // 3. Network timeout reached (3.5s)
     bool artwork_ready = (m_cover_art_bitmap != nullptr);
     bool search_finished = (!is_downloading && m_artwork_wait_count >= 15);
@@ -272,7 +269,6 @@ void popup_window::on_artwork_wait_timer() {
         if (m_visible && !m_animating) {
             SetWindowPos(m_popup_window, HWND_TOPMOST, m_final_x, m_final_y, 320, 80, SWP_NOACTIVATE);
             InvalidateRect(m_popup_window, nullptr, TRUE);
-            UpdateWindow(m_popup_window);
             SetTimer(m_popup_window, POPUP_TIMER_ID, get_popup_duration(), hide_timer_proc);
         } else if (!m_visible) {
             start_slide_in_animation();
@@ -292,7 +288,6 @@ void popup_window::refresh_track_info() {
     
     // Force repaint to update displayed info with current metadata
     InvalidateRect(m_popup_window, nullptr, TRUE);
-    UpdateWindow(m_popup_window);
 }
 
 void popup_window::on_settings_changed() {
@@ -365,78 +360,50 @@ void popup_window::create_popup_window() {
 void popup_window::position_popup() {
     if (!m_popup_window) return;
     
-    // Get screen dimensions
-    int screen_width = GetSystemMetrics(SM_CXSCREEN);
-    int screen_height = GetSystemMetrics(SM_CYSCREEN);
+    RECT work_area = {};
+    if (!SystemParametersInfo(SPI_GETWORKAREA, 0, &work_area, 0)) {
+        work_area.left = 0;
+        work_area.top = 0;
+        work_area.right = GetSystemMetrics(SM_CXSCREEN);
+        work_area.bottom = GetSystemMetrics(SM_CYSCREEN);
+    }
     
-    // Get taskbar info to avoid overlapping
-    APPBARDATA abd = {};
-    abd.cbSize = sizeof(APPBARDATA);
-    SHAppBarMessage(ABM_GETTASKBARPOS, &abd);
-    
-    // Calculate popup dimensions
     const int popup_width = 320;
     const int popup_height = 80;
     const int margin = 10;
-    const int top_margin = 96; // About an inch down (96 pixels ≈ 1 inch at 96 DPI)
     
-    // Position based on user preference
-    int x;
-    int y;
     int popup_position = get_popup_position();
     if (popup_position < 0 || popup_position > 5) popup_position = 0;
-    bool is_right_side = (popup_position >= 3); // 3, 4, 5 are right-side positions
+    bool is_right_side = (popup_position >= 3);
 
-    // Set X position based on left/right side
-    if (is_right_side) {
-        x = screen_width - popup_width - margin;
-    } else {
-        x = margin;
-    }
+    int x = is_right_side ? (work_area.right - popup_width - margin) : (work_area.left + margin);
 
-    // Set Y position based on top/middle/bottom (indices 0,3=top, 1,4=middle, 2,5=bottom)
     int vertical_position = popup_position % 3;
+    int y;
     switch (vertical_position) {
     case 0: // Top
-        y = top_margin;
+        y = work_area.top + margin;
         break;
     case 1: // Middle
-        y = (screen_height - popup_height) / 2;
+        y = work_area.top + (work_area.bottom - work_area.top - popup_height) / 2;
         break;
     case 2: // Bottom
-        y = screen_height - popup_height - margin;
-        break;
     default:
-        y = top_margin;
+        y = work_area.bottom - popup_height - margin;
         break;
     }
     
-    // Adjust for taskbar position
-    if (abd.rc.top == 0 && abd.rc.left == 0 && abd.rc.right == screen_width) {
-        // Taskbar is at top
-        if (vertical_position == 0) { // Only adjust top position
-            y = abd.rc.bottom + margin;
-        }
-    } else if (abd.rc.left == 0 && abd.rc.top == 0 && abd.rc.bottom == screen_height) {
-        // Taskbar is at left - only affects left-side popups
-        if (!is_right_side) {
-            x = abd.rc.right + margin;
-        }
-    } else if (abd.rc.top == screen_height - abd.rc.bottom && abd.rc.left == 0 && abd.rc.right == screen_width) {
-        // Taskbar is at bottom
-        if (vertical_position == 2) { // Only adjust bottom position
-            y = abd.rc.top - popup_height - margin;
-        }
-    } else if (abd.rc.right == screen_width && abd.rc.top == 0 && abd.rc.bottom == screen_height && abd.rc.left > 0) {
-        // Taskbar is at right - only affects right-side popups
-        if (is_right_side) {
-            x = abd.rc.left - popup_width - margin;
-        }
-    }
-    
-    // Store final position for animation
     m_final_x = x;
     m_final_y = y;
+}
+
+static const char* safe_meta_get_popup(const file_info& info, const char* name) {
+    t_size index = info.meta_find(name);
+    if (index != pfc_infinite && info.meta_enum_value_count(index) > 0) {
+        const char* val = info.meta_enum_value(index, 0);
+        if (val && val[0] != '\0') return val;
+    }
+    return nullptr;
 }
 
 void popup_window::update_track_info(metadb_handle_ptr p_track) {
@@ -444,14 +411,186 @@ void popup_window::update_track_info(metadb_handle_ptr p_track) {
     
     // Store track path for comparison
     m_last_track_path = p_track->get_path();
-    
-    // Store track handle for use during painting
     m_current_track = p_track;
+    
+    pfc::string8 path = p_track->get_path();
+    m_is_stream = is_remote_stream_path(path.get_ptr());
+    if (!m_is_stream) {
+        m_current_title = "";
+        m_current_artist = "";
+        format_display_lines_track(p_track, m_current_title, m_current_artist);
+
+        if (m_current_title.is_empty() || m_current_artist.is_empty()) {
+            metadb_info_container::ptr info_container = p_track->get_info_ref();
+            if (info_container.is_valid()) {
+                const file_info& info = info_container->info();
+                if (m_current_title.is_empty()) {
+                    const char* val = safe_meta_get_popup(info, "TITLE");
+                    if (!val) val = safe_meta_get_popup(info, "title");
+                    if (!val) val = pfc::string_filename_ext(p_track->get_path()).get_ptr();
+                    if (val) m_current_title = val;
+                }
+                if (m_current_artist.is_empty()) {
+                    const char* val = safe_meta_get_popup(info, "ARTIST");
+                    if (!val) val = safe_meta_get_popup(info, "artist");
+                    if (!val) val = safe_meta_get_popup(info, "ALBUMARTIST");
+                    if (!val) val = safe_meta_get_popup(info, "albumartist");
+                    if (!val) val = safe_meta_get_popup(info, "PERFORMER");
+                    if (!val) val = safe_meta_get_popup(info, "performer");
+                    if (val) m_current_artist = val;
+                }
+            }
+        }
+
+        if (m_current_title.is_empty()) m_current_title = "Unknown Title";
+        if (m_current_artist.is_empty()) m_current_artist = "Unknown Artist";
+    }
     
     // Force repaint to update displayed info
     if (m_popup_window) {
         InvalidateRect(m_popup_window, nullptr, TRUE);
-        UpdateWindow(m_popup_window);
+    }
+}
+
+static bool is_inverted_stream_popup(const file_info& info, metadb_handle_ptr track = nullptr) {
+    try {
+        if (track.is_valid()) {
+            pfc::string8 path = track->get_path();
+            if (!path.is_empty()) {
+                std::string path_str = path.c_str();
+                std::transform(path_str.begin(), path_str.end(), path_str.begin(), ::tolower);
+                if (path_str.find("?inverted") != std::string::npos ||
+                    path_str.find("&inverted") != std::string::npos ||
+                    path_str.find("#inverted") != std::string::npos) {
+                    return true;
+                }
+            }
+        }
+        
+        t_size index = info.meta_find("STREAM_INVERTED");
+        if (index != pfc_infinite && info.meta_enum_value_count(index) > 0) {
+            const char* val = info.meta_enum_value(index, 0);
+            if (val && strcmp(val, "1") == 0) return true;
+        }
+    } catch (...) {}
+    return false;
+}
+
+void popup_window::update_stream_metadata(const file_info & p_info) {
+    if (!m_initialized || !get_show_popup_notification()) return;
+
+    try {
+        pfc::string8 artist, title;
+
+        const char* p_artist = safe_meta_get_popup(p_info, "ARTIST");
+        const char* p_title = safe_meta_get_popup(p_info, "TITLE");
+
+        const char* stream_title = safe_meta_get_popup(p_info, "STREAMTITLE");
+        if (!stream_title) {
+            stream_title = safe_meta_get_popup(p_info, "ICY_TITLE");
+        }
+
+        if (stream_title) {
+            const char* dash = strstr(stream_title, " - ");
+            if (dash) {
+                if (!p_artist) {
+                    artist.set_string(stream_title, dash - stream_title);
+                }
+                if (!p_title) {
+                    title.set_string(dash + 3);
+                }
+            } else if (!p_title) {
+                title = stream_title;
+            }
+        }
+
+        if (p_artist && artist.is_empty()) artist = p_artist;
+        if (p_title && title.is_empty()) title = p_title;
+
+        if (artist.is_empty() && !title.is_empty()) {
+            pfc::string8 temp = title;
+            const char* dash = strstr(temp.get_ptr(), " - ");
+            if (dash) {
+                artist.set_string(temp.get_ptr(), dash - temp.get_ptr());
+                title = dash + 3;
+            }
+        }
+
+        if (artist.is_empty()) {
+            const char* val = safe_meta_get_popup(p_info, "ALBUMARTIST");
+            if (val) artist = val;
+        }
+        if (artist.is_empty()) {
+            const char* val = safe_meta_get_popup(p_info, "PERFORMER");
+            if (val) artist = val;
+        }
+        if (title.is_empty()) {
+            const char* val = safe_meta_get_popup(p_info, "DESCRIPTION");
+            if (val) title = val;
+        }
+        if (title.is_empty()) {
+            const char* val = safe_meta_get_popup(p_info, "COMMENT");
+            if (val) title = val;
+        }
+
+        if (title.is_empty() && artist.is_empty()) return;
+
+        artist.trim(' ');
+        title.trim(' ');
+
+        if (is_inverted_stream_popup(p_info, m_pending_track.is_valid() ? m_pending_track : m_current_track)) {
+            pfc::string8 temp = artist;
+            artist = title;
+            title = temp;
+        }
+
+        pfc::string8 stream_id;
+        stream_id << artist << " - " << title;
+        if (stream_id == m_last_track_path) return;
+        m_last_track_path = stream_id;
+
+        m_current_title = title.is_empty() ? "Unknown Title" : title;
+        m_current_artist = artist.is_empty() ? "Unknown Artist" : artist;
+        m_is_stream = true;
+
+        // Show popup notification for stream track change
+        if (m_popup_window) {
+            KillTimer(m_popup_window, ARTWORK_WAIT_TIMER_ID);
+            KillTimer(m_popup_window, ANIMATION_TIMER_ID);
+            KillTimer(m_popup_window, POPUP_TIMER_ID);
+        }
+        bool was_fully_visible = (m_visible && !m_animating);
+        m_animating = false;
+
+        position_popup();
+        if (was_fully_visible) {
+            SetWindowPos(m_popup_window, HWND_TOPMOST, m_final_x, m_final_y, 320, 80, SWP_NOACTIVATE);
+            ShowWindow(m_popup_window, SW_SHOWNOACTIVATE);
+            InvalidateRect(m_popup_window, nullptr, TRUE);
+            SetTimer(m_popup_window, POPUP_TIMER_ID, get_popup_duration(), hide_timer_proc);
+        } else {
+            start_slide_in_animation();
+        }
+    } catch (...) {}
+}
+
+void popup_window::on_online_artwork_received() {
+    if (has_pending_online_artwork_popup()) {
+        HBITMAP bitmap = get_pending_online_artwork_popup();
+        if (bitmap) {
+            cleanup_cover_art();
+            m_cover_art_bitmap = bitmap;
+            m_artwork_from_bridge = false; // We own the copy
+
+            if (m_popup_window) {
+                KillTimer(m_popup_window, ARTWORK_POLL_TIMER_ID);
+                KillTimer(m_popup_window, ARTWORK_WAIT_TIMER_ID);
+            }
+
+            if (m_visible && m_popup_window) {
+                InvalidateRect(m_popup_window, nullptr, TRUE);
+            }
+        }
     }
 }
 
@@ -471,25 +610,49 @@ void popup_window::load_cover_art(metadb_handle_ptr p_track, bool allow_stale_fa
     }
 
     try {
-        // Try local/embedded artwork first for p_track
-        try {
-            auto api = album_art_manager_v2::get();
-            if (api.is_valid()) {
-                auto extractor = api->open(pfc::list_single_ref_t<metadb_handle_ptr>(p_track),
-                                           pfc::list_single_ref_t<GUID>(album_art_ids::cover_front),
-                                           fb2k::noAbort);
+        pfc::string8 path = p_track->get_path();
+        bool is_stream = is_remote_stream_path(path.get_ptr());
 
-                if (extractor.is_valid()) {
-                    auto data = extractor->query(album_art_ids::cover_front, fb2k::noAbort);
-                    if (data.is_valid() && data->get_size() > 0) {
-                        // Found local/embedded artwork - replace old artwork
-                        cleanup_cover_art();
-                        m_cover_art_bitmap = convert_album_art_to_bitmap(data);
-                        if (m_cover_art_bitmap) return;
+        // Try local/embedded artwork ONLY for local files (NEVER for streams - prevents network lockup)
+        if (!is_stream) {
+            album_art_data_ptr data;
+            try {
+                auto api_v3 = album_art_manager_v3::get();
+                if (api_v3.is_valid()) {
+                    auto extractor = api_v3->open(
+                        pfc::list_single_ref_t<metadb_handle_ptr>(p_track),
+                        pfc::list_single_ref_t<GUID>(album_art_ids::cover_front),
+                        fb2k::noAbort
+                    );
+                    if (extractor.is_valid()) {
+                        extractor->query(album_art_ids::cover_front, data, fb2k::noAbort);
                     }
                 }
+            } catch (...) {}
+
+            if (!data.is_valid() || data->get_size() == 0) {
+                try {
+                    auto api_v2 = album_art_manager_v2::get();
+                    if (api_v2.is_valid()) {
+                        auto extractor = api_v2->open(
+                            pfc::list_single_ref_t<metadb_handle_ptr>(p_track),
+                            pfc::list_single_ref_t<GUID>(album_art_ids::cover_front),
+                            fb2k::noAbort
+                        );
+                        if (extractor.is_valid()) {
+                            data = extractor->query(album_art_ids::cover_front, fb2k::noAbort);
+                        }
+                    }
+                } catch (...) {}
             }
-        } catch (...) {}
+
+            if (data.is_valid() && data->get_size() > 0) {
+                // Found local/embedded artwork - replace old artwork
+                cleanup_cover_art();
+                m_cover_art_bitmap = convert_album_art_to_bitmap(data);
+                if (m_cover_art_bitmap) return;
+            }
+        }
 
         // Fallbacks ONLY allowed for manual preview button click
         if (allow_stale_fallback) {
@@ -674,8 +837,8 @@ LRESULT CALLBACK popup_window::popup_window_proc(HWND hwnd, UINT msg, WPARAM wpa
                 return 0;
             } else if (wparam == ARTWORK_POLL_TIMER_ID) {
                 // Poll foo_artwork for completed artwork search
-                if (popup && has_pending_online_artwork()) {
-                    HBITMAP bitmap = get_pending_online_artwork();
+                if (popup && has_pending_online_artwork_popup()) {
+                    HBITMAP bitmap = get_pending_online_artwork_popup();
                     if (bitmap) {
                         popup->cleanup_cover_art();
                         popup->m_cover_art_bitmap = bitmap;
@@ -1075,9 +1238,8 @@ void popup_window::paint_popup(HDC hdc) {
 void popup_window::draw_track_info(HDC hdc, const RECT& client_rect) {
     if (!hdc) return;
     
-    // Get track info using configurable display format
-    pfc::string8 title, artist;
-    format_display_lines(title, artist);
+    pfc::string8 title = m_current_title;
+    pfc::string8 artist = m_current_artist;
 
     if (title.is_empty()) title = "Unknown Title";
     if (artist.is_empty()) artist = "Unknown Artist";
@@ -1125,7 +1287,7 @@ void popup_window::draw_track_info(HDC hdc, const RECT& client_rect) {
     
     RECT title_rect = {text_left, 15, client_rect.right - 10, 35};
     pfc::stringcvt::string_wide_from_utf8 wide_title(title.c_str());
-    DrawText(hdc, wide_title.get_ptr(), -1, &title_rect, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+    DrawText(hdc, wide_title.get_ptr(), -1, &title_rect, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
     
     // Draw artist second (bottom line)
     SelectObject(hdc, artist_font);
@@ -1133,7 +1295,7 @@ void popup_window::draw_track_info(HDC hdc, const RECT& client_rect) {
     
     RECT artist_rect = {text_left, 40, client_rect.right - 10, 60};
     pfc::stringcvt::string_wide_from_utf8 wide_artist(artist.c_str());
-    DrawText(hdc, wide_artist.get_ptr(), -1, &artist_rect, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+    DrawText(hdc, wide_artist.get_ptr(), -1, &artist_rect, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
     
     // Cleanup fonts
     SelectObject(hdc, old_font);
@@ -1142,21 +1304,28 @@ void popup_window::draw_track_info(HDC hdc, const RECT& client_rect) {
 }
 
 void popup_window::start_slide_in_animation() {
-    if (m_animating) return;
+    if (m_popup_window) {
+        KillTimer(m_popup_window, ANIMATION_TIMER_ID);
+        KillTimer(m_popup_window, POPUP_TIMER_ID);
+    }
+    m_animating = false;
 
     // Determine if sliding from right or left based on popup position
     int popup_position = get_popup_position();
     if (popup_position < 0 || popup_position > 5) popup_position = 0;
     bool is_right_side = (popup_position >= 3);
 
-    // Get screen width for right-side calculations
-    int screen_width = GetSystemMetrics(SM_CXSCREEN);
+    RECT work_area = {};
+    if (!SystemParametersInfo(SPI_GETWORKAREA, 0, &work_area, 0)) {
+        work_area.left = 0;
+        work_area.right = GetSystemMetrics(SM_CXSCREEN);
+    }
 
     // Calculate start position (off-screen on the appropriate side)
     if (is_right_side) {
-        m_start_x = screen_width; // Start off-screen to the right
+        m_start_x = work_area.right; // Start off-screen to the right
     } else {
-        m_start_x = -320; // Start off-screen to the left (negative width)
+        m_start_x = work_area.left - 320; // Start off-screen to the left (negative width)
     }
     m_start_y = m_final_y;
 
@@ -1176,15 +1345,22 @@ void popup_window::start_slide_in_animation() {
 }
 
 void popup_window::start_slide_out_animation() {
-    if (m_animating) return;
+    if (m_popup_window) {
+        KillTimer(m_popup_window, ANIMATION_TIMER_ID);
+        KillTimer(m_popup_window, POPUP_TIMER_ID);
+    }
+    m_animating = false;
 
     // Determine if sliding to right or left based on popup position
     int popup_position = get_popup_position();
     if (popup_position < 0 || popup_position > 5) popup_position = 0;
     bool is_right_side = (popup_position >= 3);
 
-    // Get screen width for right-side calculations
-    int screen_width = GetSystemMetrics(SM_CXSCREEN);
+    RECT work_area = {};
+    if (!SystemParametersInfo(SPI_GETWORKAREA, 0, &work_area, 0)) {
+        work_area.left = 0;
+        work_area.right = GetSystemMetrics(SM_CXSCREEN);
+    }
 
     // Get current position as start position
     RECT window_rect;
@@ -1194,9 +1370,9 @@ void popup_window::start_slide_out_animation() {
 
     // Set final position (off-screen on the appropriate side)
     if (is_right_side) {
-        m_final_x = screen_width; // Exit off-screen to the right
+        m_final_x = work_area.right; // Exit off-screen to the right
     } else {
-        m_final_x = -320; // Exit off-screen to the left
+        m_final_x = work_area.left - 320; // Exit off-screen to the left
     }
     m_final_y = m_start_y;
 
