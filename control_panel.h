@@ -22,11 +22,15 @@ public:
     void toggle_control_panel();
     
     // Update with current track info
-    void update_track_info();
+    void update_track_info(metadb_handle_ptr p_track = nullptr);
+    void update_stream_metadata(const file_info & p_info);
     
     // Settings change notification
     void on_settings_changed();
     void update_playback_order_state();
+    
+    // Online artwork notification from foo_artwork bridge
+    void on_online_artwork_received();
     
     // Public accessors for tray manager
     bool is_undocked() const { return m_is_undocked; }
@@ -194,12 +198,15 @@ private:
     int m_original_art_width;
     int m_original_art_height;
     metadb_handle_ptr m_last_loaded_track; // Cache for current loaded artwork track
+    pfc::string8 m_last_loaded_artist;
+    pfc::string8 m_last_loaded_title;
 
     // Online artwork dedup cache (avoid re-requesting same artist/title)
     pfc::string8 m_last_stream_artist;
     pfc::string8 m_last_stream_title;
     bool m_online_artwork_pending;
     bool m_artwork_from_bridge; // true if m_cover_art_bitmap is owned by foo_artwork (do NOT DeleteObject)
+    bool m_is_stream;
     
     // Custom fonts
     HFONT m_artist_font;
@@ -277,7 +284,7 @@ private:
     void position_control_panel();
     void create_controls();
     void update_play_button();
-    void load_cover_art();
+    void load_cover_art(metadb_handle_ptr p_track = nullptr);
     void cleanup_cover_art();
     HBITMAP convert_album_art_to_bitmap(album_art_data_ptr art_data);
     HBITMAP convert_album_art_to_bitmap_large(album_art_data_ptr art_data);
