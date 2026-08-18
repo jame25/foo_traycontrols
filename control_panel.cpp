@@ -132,6 +132,7 @@ control_panel::control_panel()
     , m_original_art_height(0)
     , m_online_artwork_pending(false)
     , m_artwork_from_bridge(false)
+    , m_is_stream(false)
     , m_artist_font(nullptr)
     , m_track_font(nullptr)
     , m_animating(false)
@@ -220,7 +221,6 @@ void control_panel::cleanup() {
         KillTimer(m_control_window, ANIMATION_TIMER_ID);
         KillTimer(m_control_window, BUTTON_FADE_TIMER_ID);
         KillTimer(m_control_window, BUTTON_FADE_TIMER_ID + 1);
-        KillTimer(m_control_window, ARTWORK_POLL_TIMER_ID);
     }
 
     cleanup_cover_art();
@@ -613,54 +613,107 @@ void control_panel::show_undocked_miniplayer() {
     InvalidateRect(m_control_window, nullptr, TRUE);
 }
 
-void control_panel::update_track_info() {
+static bool is_remote_stream_path(const char* path) {
+    if (!path || path[0] == '\0') return false;
+    const char* proto = strstr(path, "://");
+    if (!proto) return false;
+    if (strncmp(path, "file://", 7) == 0 || strstr(path, "file://") != nullptr) return false;
+    return true;
+}
+
+static const char* safe_meta_get(const file_info& info, const char* name) {
+    t_size index = info.meta_find(name);
+    if (index != pfc_infinite && info.meta_enum_value_count(index) > 0) {
+        const char* val = info.meta_enum_value(index, 0);
+        if (val && val[0] != '\0') return val;
+    }
+    return nullptr;
+}
+
+void control_panel::update_track_info(metadb_handle_ptr p_track) {
     try {
-        auto playback = playback_control::get();
+        metadb_handle_ptr track = p_track;
+        if (!track.is_valid()) {
+            auto playback = playback_control::get();
+            if (!playback->get_now_playing(track) || !track.is_valid()) {
+                track = nullptr;
+            }
+        }
         
-        // Get current track
-        metadb_handle_ptr track;
-        if (playback->get_now_playing(track) && track.is_valid()) {
+        if (track.is_valid()) {
             // Check if this is a stream
             pfc::string8 path = track->get_path();
-            bool is_stream = strstr(path.get_ptr(), "://") != nullptr;
-            
-            m_current_title = "";
-            m_current_artist = "";
+            bool is_stream = is_remote_stream_path(path.get_ptr());
+            m_is_stream = is_stream;
 
-            // Use configurable display format strings
-            format_display_lines(m_current_title, m_current_artist);
+            if (is_stream && (!m_last_stream_title.is_empty() || !m_last_stream_artist.is_empty())) {
+                m_current_title = m_last_stream_title.is_empty() ? "Unknown Title" : m_last_stream_title;
+                m_current_artist = m_last_stream_artist.is_empty() ? "Unknown Artist" : m_last_stream_artist;
+            } else {
+                if (!is_stream) {
+                    m_last_stream_title.reset();
+                    m_last_stream_artist.reset();
+                }
+                m_current_title = "";
+                m_current_artist = "";
 
-            // Fallback for streams if format returned empty
-            if (is_stream && m_current_title.is_empty() && m_current_artist.is_empty()) {
-                file_info_impl info;
-                if (track->get_info(info)) {
-                    if (info.meta_exists("server")) {
-                        m_current_title = info.meta_get("server", 0);
-                    } else if (info.meta_exists("SERVER")) {
-                        m_current_title = info.meta_get("SERVER", 0);
+                // Use configurable display format strings directly on track handle
+                format_display_lines_track(track, m_current_title, m_current_artist);
+
+                if (!is_stream && (m_current_title.is_empty() || m_current_artist.is_empty())) {
+                    metadb_info_container::ptr info_container = track->get_info_ref();
+                    if (info_container.is_valid()) {
+                        const file_info& info = info_container->info();
+                        if (m_current_title.is_empty()) {
+                            const char* val = safe_meta_get(info, "TITLE");
+                            if (!val) val = safe_meta_get(info, "title");
+                            if (!val) val = pfc::string_filename_ext(track->get_path()).get_ptr();
+                            if (val) m_current_title = val;
+                        }
+                        if (m_current_artist.is_empty()) {
+                            const char* val = safe_meta_get(info, "ARTIST");
+                            if (!val) val = safe_meta_get(info, "artist");
+                            if (!val) val = safe_meta_get(info, "ALBUMARTIST");
+                            if (!val) val = safe_meta_get(info, "albumartist");
+                            if (!val) val = safe_meta_get(info, "PERFORMER");
+                            if (!val) val = safe_meta_get(info, "performer");
+                            if (val) m_current_artist = val;
+                        }
                     }
                 }
-            }
 
-            if (m_current_title.is_empty()) m_current_title = "Unknown Title";
-            if (m_current_artist.is_empty()) m_current_artist = "Unknown Artist";
+                // Fallback for streams if format returned empty
+                if (is_stream && m_current_title.is_empty() && m_current_artist.is_empty()) {
+                    file_info_impl info;
+                    if (track->get_info(info)) {
+                        if (info.meta_exists("server")) {
+                            m_current_title = info.meta_get("server", 0);
+                        } else if (info.meta_exists("SERVER")) {
+                            m_current_title = info.meta_get("SERVER", 0);
+                        }
+                    }
+                }
+
+                if (m_current_title.is_empty()) m_current_title = "Unknown Title";
+                if (m_current_artist.is_empty()) m_current_artist = "Unknown Artist";
+            }
             
             // Get track length
             m_track_length = track->get_length();
-        } else {
-            m_current_artist = "No track";
-            m_current_title = "";
-            m_track_length = 0.0;
-        }
-        
-        // Get playback state and position
-        m_is_playing = playback->is_playing();
-        m_is_paused = playback->is_paused();
-        m_current_time = playback->playback_get_position();
-        
-        // Load cover art - always reload when track info updates
-        if (track.is_valid()) {
-            load_cover_art();
+            
+            if (p_track.is_valid()) {
+                m_is_playing = true;
+                m_is_paused = false;
+                m_current_time = 0.0;
+            } else {
+                auto playback = playback_control::get();
+                m_is_playing = playback->is_playing();
+                m_is_paused = playback->is_paused();
+                m_current_time = playback->playback_get_position();
+            }
+            
+            // Load cover art - always reload when track info updates
+            load_cover_art(track);
             
             // Adjust window size for new artwork aspect ratio when in expanded mode
             if (m_is_artwork_expanded && m_control_window && m_original_art_width > 0 && m_original_art_height > 0) {
@@ -719,6 +772,129 @@ void control_panel::update_track_info() {
     if (m_control_window && (m_is_undocked || m_visible || m_is_artwork_expanded)) {
         InvalidateRect(m_control_window, nullptr, TRUE);
     }
+}
+
+static bool is_inverted_stream(const file_info& info, metadb_handle_ptr track = nullptr) {
+    try {
+        if (track.is_valid()) {
+            pfc::string8 path = track->get_path();
+            if (!path.is_empty()) {
+                std::string path_str = path.c_str();
+                std::transform(path_str.begin(), path_str.end(), path_str.begin(), ::tolower);
+                if (path_str.find("?inverted") != std::string::npos ||
+                    path_str.find("&inverted") != std::string::npos ||
+                    path_str.find("#inverted") != std::string::npos) {
+                    return true;
+                }
+            }
+        }
+        
+        t_size index = info.meta_find("STREAM_INVERTED");
+        if (index != pfc_infinite && info.meta_enum_value_count(index) > 0) {
+            const char* val = info.meta_enum_value(index, 0);
+            if (val && strcmp(val, "1") == 0) return true;
+        }
+    } catch (...) {}
+    return false;
+}
+
+static bool is_bypass_stream(metadb_handle_ptr track = nullptr) {
+    try {
+        if (track.is_valid()) {
+            pfc::string8 path = track->get_path();
+            if (!path.is_empty()) {
+                std::string path_str = path.c_str();
+                std::transform(path_str.begin(), path_str.end(), path_str.begin(), ::tolower);
+                if (path_str.find("?bypass") != std::string::npos ||
+                    path_str.find("&bypass") != std::string::npos ||
+                    path_str.find("#bypass") != std::string::npos) {
+                    return true;
+                }
+            }
+        }
+    } catch (...) {}
+    return false;
+}
+
+void control_panel::update_stream_metadata(const file_info & p_info) {
+    if (!m_initialized) return;
+
+    try {
+        pfc::string8 artist, title;
+
+        const char* p_artist = safe_meta_get(p_info, "ARTIST");
+        const char* p_title = safe_meta_get(p_info, "TITLE");
+
+        const char* stream_title = safe_meta_get(p_info, "STREAMTITLE");
+        if (!stream_title) {
+            stream_title = safe_meta_get(p_info, "ICY_TITLE");
+        }
+
+        if (stream_title) {
+            const char* dash = strstr(stream_title, " - ");
+            if (dash) {
+                if (!p_artist) {
+                    artist.set_string(stream_title, dash - stream_title);
+                }
+                if (!p_title) {
+                    title.set_string(dash + 3);
+                }
+            } else if (!p_title) {
+                title = stream_title;
+            }
+        }
+
+        if (p_artist && artist.is_empty()) artist = p_artist;
+        if (p_title && title.is_empty()) title = p_title;
+
+        if (artist.is_empty()) {
+            const char* val = safe_meta_get(p_info, "ALBUMARTIST");
+            if (val) artist = val;
+        }
+        if (artist.is_empty()) {
+            const char* val = safe_meta_get(p_info, "PERFORMER");
+            if (val) artist = val;
+        }
+        if (title.is_empty()) {
+            const char* val = safe_meta_get(p_info, "DESCRIPTION");
+            if (val) title = val;
+        }
+        if (title.is_empty()) {
+            const char* val = safe_meta_get(p_info, "COMMENT");
+            if (val) title = val;
+        }
+
+        if (title.is_empty() && artist.is_empty()) return;
+
+        artist.trim(' ');
+        title.trim(' ');
+
+        if (is_inverted_stream(p_info, m_last_loaded_track)) {
+            pfc::string8 temp = artist;
+            artist = title;
+            title = temp;
+        }
+
+        bool metadata_changed = (artist != m_last_stream_artist || title != m_last_stream_title);
+        if (!metadata_changed) return;
+
+        m_last_stream_artist = artist;
+        m_last_stream_title = title;
+        m_current_artist = artist.is_empty() ? "Unknown Artist" : artist;
+        m_current_title = title.is_empty() ? "Unknown Title" : title;
+
+        // Request new artwork from foo_artwork
+        if (is_artwork_bridge_available() && !is_bypass_stream()) {
+            if (!artist.is_empty() || !title.is_empty()) {
+                request_online_artwork(artist.c_str(), title.c_str());
+                m_online_artwork_pending = true;
+            }
+        }
+
+        if (m_control_window) {
+            InvalidateRect(m_control_window, nullptr, FALSE);
+        }
+    } catch (...) {}
 }
 
 void control_panel::create_control_window() {
@@ -817,8 +993,7 @@ void control_panel::position_control_panel() {
     SetWindowPos(m_control_window, nullptr, x, y, panel_width, panel_height, SWP_NOACTIVATE | SWP_NOZORDER);
 }
 
-void control_panel::load_cover_art() {
-    // Check if artwork has arrived via callback (from foo_artwork).
+void control_panel::on_online_artwork_received() {
     if (has_pending_online_artwork_panel()) {
         HBITMAP bitmap = get_pending_online_artwork_panel();
         if (bitmap) {
@@ -828,89 +1003,179 @@ void control_panel::load_cover_art() {
             m_cover_art_bitmap_original = nullptr;
             m_artwork_from_bridge = false; // We own the copy, cleanup_cover_art will DeleteObject
             m_online_artwork_pending = false;
-            if (m_control_window) InvalidateRect(m_control_window, nullptr, FALSE);
+
+            m_last_loaded_artist = m_current_artist;
+            m_last_loaded_title = m_current_title;
+            {
+                auto playback = playback_control::get();
+                metadb_handle_ptr track;
+                if (playback->get_now_playing(track) && track.is_valid()) {
+                    m_last_loaded_track = track;
+                }
+            }
+
+            BITMAP bm;
+            if (GetObject(bitmap, sizeof(bm), &bm)) {
+                m_original_art_width = bm.bmWidth;
+                m_original_art_height = bm.bmHeight;
+            }
+
+            // Adjust window size for new artwork aspect ratio when in expanded mode
+            if (m_is_artwork_expanded && m_control_window && m_original_art_width > 0 && m_original_art_height > 0) {
+                RECT current_rect;
+                GetWindowRect(m_control_window, &current_rect);
+                int current_width = current_rect.right - current_rect.left;
+                int current_height = current_rect.bottom - current_rect.top;
+                
+                float image_aspect = (float)m_original_art_width / (float)m_original_art_height;
+                float window_aspect = (float)current_width / (float)current_height;
+                
+                if (abs(image_aspect - window_aspect) > 0.05f) {
+                    int new_width, new_height;
+                    
+                    if (image_aspect >= 1.0f) {
+                        new_width = current_width;
+                        new_height = (int)((float)current_width / image_aspect);
+                    } else {
+                        new_height = current_height;
+                        new_width = (int)((float)current_height * image_aspect);
+                    }
+                    
+                    if (new_width < 200) new_width = 200;
+                    if (new_height < 200) new_height = 200;
+                    
+                    m_saved_expanded_width = new_width;
+                    m_saved_expanded_height = new_height;
+                    
+                    SetWindowPos(m_control_window, HWND_TOPMOST, 0, 0, new_width, new_height,
+                        SWP_NOMOVE | SWP_NOACTIVATE);
+                }
+            }
+
+            if (m_control_window) {
+                InvalidateRect(m_control_window, nullptr, FALSE);
+            }
+        }
+    }
+}
+
+void control_panel::load_cover_art(metadb_handle_ptr p_track) {
+    // Check if artwork has arrived via callback (from foo_artwork).
+    if (has_pending_online_artwork_panel()) {
+        on_online_artwork_received();
+        if (m_cover_art_bitmap != nullptr) {
             return;
         }
     }
 
     try {
-        auto playback = playback_control::get();
-        metadb_handle_ptr track;
+        metadb_handle_ptr track = p_track;
+        if (!track.is_valid()) {
+            auto playback = playback_control::get();
+            if (!playback->get_now_playing(track) || !track.is_valid()) {
+                track = nullptr;
+            }
+        }
 
-        if (playback->get_now_playing(track) && track.is_valid()) {
-            pfc::string8 artist, title;
-            service_ptr_t<titleformat_object> script_artist, script_title;
-            titleformat_compiler::get()->compile_safe(script_artist, "%artist%");
-            titleformat_compiler::get()->compile_safe(script_title, "%title%");
-            track->format_title(nullptr, artist, script_artist, nullptr);
-            track->format_title(nullptr, title, script_title, nullptr);
+        if (track.is_valid()) {
+            pfc::string8 artist = m_current_artist;
+            pfc::string8 title = m_current_title;
 
-            bool metadata_changed = (artist != m_last_stream_artist || title != m_last_stream_title);
+            // Check if this is a stream
+            pfc::string8 path = track->get_path();
+            bool is_stream = is_remote_stream_path(path.get_ptr());
 
-            // Fast path: If artwork is already loaded and cached for this exact track, return immediately!
-            if (!metadata_changed && track == m_last_loaded_track && m_cover_art_bitmap != nullptr) {
+            bool metadata_changed = (artist != m_last_loaded_artist || title != m_last_loaded_title);
+            bool track_changed = (track != m_last_loaded_track);
+
+            // Fast path: If neither metadata nor track handle has changed and artwork is present or pending, keep it
+            if (!metadata_changed && !track_changed && (m_cover_art_bitmap != nullptr || m_online_artwork_pending)) {
                 return;
             }
 
-            // Metadata has changed (new track playing)
+            // Track or metadata has changed - update cache state
             m_last_loaded_track = track;
+            m_last_loaded_artist = artist;
+            m_last_loaded_title = title;
             m_last_stream_artist = artist;
             m_last_stream_title = title;
             clear_pending_online_artwork();
-            cleanup_cover_art();
-            m_last_loaded_track = track;
 
-            // 1. Try local/embedded artwork first for current track
-            try {
-                auto api = album_art_manager_v2::get();
-                if (api.is_valid()) {
-                    auto extractor = api->open(pfc::list_single_ref_t<metadb_handle_ptr>(track),
-                                               pfc::list_single_ref_t<GUID>(album_art_ids::cover_front),
-                                               fb2k::noAbort);
-
-                    if (extractor.is_valid()) {
-                        auto data = extractor->query(album_art_ids::cover_front, fb2k::noAbort);
-                        if (data.is_valid() && data->get_size() > 0) {
-                            cleanup_cover_art();
-                            m_last_loaded_track = track;
-                            m_cover_art_bitmap = convert_album_art_to_bitmap(data);
-                            m_cover_art_bitmap_original = convert_album_art_to_bitmap_original(data);
-                            m_online_artwork_pending = false;
-                            if (m_control_window) InvalidateRect(m_control_window, nullptr, FALSE);
-                            return;
+            // 1. Try local/embedded artwork ONLY for local files (NEVER for streams - prevents network lockup)
+            if (!is_stream) {
+                album_art_data_ptr data;
+                try {
+                    auto api_v3 = album_art_manager_v3::get();
+                    if (api_v3.is_valid()) {
+                        auto extractor = api_v3->open(
+                            pfc::list_single_ref_t<metadb_handle_ptr>(track),
+                            pfc::list_single_ref_t<GUID>(album_art_ids::cover_front),
+                            fb2k::noAbort
+                        );
+                        if (extractor.is_valid()) {
+                            extractor->query(album_art_ids::cover_front, data, fb2k::noAbort);
                         }
                     }
-                }
-            } catch (...) {}
+                } catch (...) {}
 
-            // 2. Mirror active artwork shown by foo_artwork in main display window
-            if (is_artwork_bridge_available()) {
-                // If we don't have artwork loaded yet for this track, check foo_artwork active bitmap
-                if (m_cover_art_bitmap == nullptr) {
-                    HBITMAP current_online = get_current_online_artwork();
-                    if (current_online) {
-                        cleanup_cover_art();
-                        m_last_loaded_track = track;
-                        m_cover_art_bitmap = current_online;
-                        m_cover_art_bitmap_large = nullptr;
-                        m_cover_art_bitmap_original = nullptr;
-                        m_artwork_from_bridge = false;
-                        m_online_artwork_pending = false;
-                        if (m_control_window) InvalidateRect(m_control_window, nullptr, FALSE);
-                        return;
-                    }
+                if (!data.is_valid() || data->get_size() == 0) {
+                    try {
+                        auto api_v2 = album_art_manager_v2::get();
+                        if (api_v2.is_valid()) {
+                            auto extractor = api_v2->open(
+                                pfc::list_single_ref_t<metadb_handle_ptr>(track),
+                                pfc::list_single_ref_t<GUID>(album_art_ids::cover_front),
+                                fb2k::noAbort
+                            );
+                            if (extractor.is_valid()) {
+                                data = extractor->query(album_art_ids::cover_front, fb2k::noAbort);
+                            }
+                        }
+                    } catch (...) {}
                 }
 
-                // If foo_artwork has not updated its display bitmap yet, ensure poll timer is active
-                if (m_control_window) {
-                    SetTimer(m_control_window, ARTWORK_POLL_TIMER_ID, ARTWORK_POLL_INTERVAL, nullptr);
+                if (data.is_valid() && data->get_size() > 0) {
+                    cleanup_cover_art();
+                    m_last_loaded_track = track;
+                    m_last_loaded_artist = artist;
+                    m_last_loaded_title = title;
+                    m_cover_art_bitmap = convert_album_art_to_bitmap(data);
+                    m_cover_art_bitmap_original = convert_album_art_to_bitmap_original(data);
+                    m_online_artwork_pending = false;
+                    if (m_control_window) InvalidateRect(m_control_window, nullptr, FALSE);
+                    return;
                 }
-                return;
             }
 
-            // No local or online artwork found - clear artwork
+            // 2. Try online artwork via foo_artwork bridge
             cleanup_cover_art();
+            m_last_loaded_track = track;
+            m_last_loaded_artist = artist;
+            m_last_loaded_title = title;
+
+            if (is_artwork_bridge_available() && !is_bypass_stream(track)) {
+                // If foo_artwork already has active artwork available for this track/stream, grab it immediately
+                HBITMAP current_online = get_current_online_artwork();
+                if (current_online) {
+                    m_cover_art_bitmap = current_online;
+                    m_artwork_from_bridge = false;
+                    m_online_artwork_pending = false;
+                    BITMAP bm;
+                    if (GetObject(m_cover_art_bitmap, sizeof(bm), &bm)) {
+                        m_original_art_width = bm.bmWidth;
+                        m_original_art_height = bm.bmHeight;
+                    }
+                    if (m_control_window) InvalidateRect(m_control_window, nullptr, FALSE);
+                    return;
+                }
+
+                if (!artist.is_empty() || !title.is_empty()) {
+                    request_online_artwork(artist.c_str(), title.c_str());
+                    m_online_artwork_pending = true;
+                }
+            }
             if (m_control_window) InvalidateRect(m_control_window, nullptr, FALSE);
+            return;
         } else {
             // No valid track - clear artwork
             m_last_stream_artist.reset();
@@ -943,6 +1208,8 @@ void control_panel::cleanup_cover_art() {
     m_original_art_height = 0;
     m_artwork_from_bridge = false;
     m_last_loaded_track = nullptr;
+    m_last_loaded_artist.clear();
+    m_last_loaded_title.clear();
 }
 
 HBITMAP control_panel::convert_album_art_to_bitmap(album_art_data_ptr art_data) {
@@ -2743,27 +3010,28 @@ void control_panel::handle_button_click(int button_id) {
         switch (button_id) {
         case BTN_PREV:
             playback->previous();
-            // Delay update to allow track change to process
-            SetTimer(m_control_window, UPDATE_TIMER_ID + 1, 100, nullptr);
-            return; // Don't update immediately
+            return;
 
         case BTN_PLAYPAUSE:
             if (m_is_playing) {
                 if (m_is_paused) {
                     playback->pause(false); // Resume
+                    m_is_paused = false;
                 } else {
                     playback->pause(true); // Pause
+                    m_is_paused = true;
                 }
             } else {
                 playback->play_or_unpause();
+                m_is_playing = true;
+                m_is_paused = false;
             }
-            break;
+            if (m_control_window) InvalidateRect(m_control_window, nullptr, FALSE);
+            return;
 
         case BTN_NEXT:
             playback->next();
-            // Delay update to allow track change to process
-            SetTimer(m_control_window, UPDATE_TIMER_ID + 1, 100, nullptr);
-            return; // Don't update immediately
+            return;
 
         case BTN_VOLUME:
             {
@@ -2980,170 +3248,18 @@ void control_panel::update_playback_order_state() {
 }
 
 void control_panel::handle_timer() {
-    // Use simple behavior (like original) when in basic popup mode
-    if (!m_is_undocked && !m_is_artwork_expanded) {
-        // Original simple timer behavior - but also check for stream metadata changes
-        try {
-            auto playback = playback_control::get();
-            m_current_time = playback->playback_get_position();
-            m_is_playing = playback->is_playing();
-            m_is_paused = playback->is_paused();
-            
-            // For streams in docked mode, also check for metadata changes
-            metadb_handle_ptr current_track;
-            if (playback->get_now_playing(current_track) && current_track.is_valid()) {
-                pfc::string8 path = current_track->get_path();
-                bool is_stream = strstr(path.get_ptr(), "://") != nullptr;
-                
-                if (is_stream) {
-                    // Check if stream metadata has changed
-                    static pfc::string8 last_docked_title, last_docked_artist;
-                    pfc::string8 current_title, current_artist;
-                    
-                    // Use titleformat to get current stream metadata
-                    try {
-                        static_api_ptr_t<titleformat_compiler> compiler;
-                        service_ptr_t<titleformat_object> script;
-                        
-                        if (compiler->compile(script, "[%artist%]|[%title%]")) {
-                            pfc::string8 formatted_title;
-                            if (playback->playback_format_title(nullptr, formatted_title, script, nullptr, playback_control::display_level_all)) {
-                                const char* separator = strstr(formatted_title.get_ptr(), "|");
-                                if (separator && strlen(formatted_title.get_ptr()) > 1) {
-                                    pfc::string8 tf_artist(formatted_title.get_ptr(), separator - formatted_title.get_ptr());
-                                    pfc::string8 tf_title(separator + 1);
-                                    
-                                    if (!tf_artist.is_empty() && !tf_title.is_empty()) {
-                                        current_artist = tf_artist;
-                                        current_title = tf_title;
-                                    }
-                                }
-                            }
-                        }
-                    } catch (...) {
-                        // Fall through to basic metadata
-                    }
-                    
-                    // Check if metadata changed
-                    if (current_title != last_docked_title || current_artist != last_docked_artist) {
-                        last_docked_title = current_title;
-                        last_docked_artist = current_artist;
-                        update_track_info(); // Update track info for stream metadata change
-                        return;
-                    }
-                }
-            }
-            
-            // Refresh time display
-            if (m_control_window) {
-                InvalidateRect(m_control_window, nullptr, FALSE);
-            }
-        } catch (...) {
-            // Ignore errors
+    try {
+        auto playback = playback_control::get();
+        m_current_time = playback->playback_get_position();
+        m_is_playing = playback->is_playing();
+        m_is_paused = playback->is_paused();
+
+        // Refresh time display and progress bar (skip in artwork expanded mode where timer is not shown)
+        if (m_control_window && !m_is_artwork_expanded) {
+            InvalidateRect(m_control_window, nullptr, FALSE);
         }
-        return;
-    }
-    
-    // Complex behavior for undocked/artwork modes
-    bool skip_time_updates = m_is_artwork_expanded;
-    
-    // For undocked mini player or artwork expanded mode, check for track changes every timer tick
-    if (m_is_undocked || m_is_artwork_expanded) {
-        // Check if track has actually changed by comparing track handles
-        static metadb_handle_ptr last_track;
-        static pfc::string8 last_title, last_artist;
-        
-        try {
-            auto playback = playback_control::get();
-            metadb_handle_ptr current_track;
-            if (playback->get_now_playing(current_track) && current_track.is_valid()) {
-                // Compare track handle first
-                bool track_changed = !last_track.is_valid() || current_track.get_ptr() != last_track.get_ptr();
-                
-                // Also compare metadata for streams that might not change track handle
-                pfc::string8 current_title, current_artist;
-                
-                // Check if this is a stream
-                pfc::string8 path = current_track->get_path();
-                bool is_stream = strstr(path.get_ptr(), "://") != nullptr;
-                
-                if (is_stream) {
-                    // For streams, use titleformat to get current metadata (same as update_track_info)
-                    try {
-                        static_api_ptr_t<titleformat_compiler> compiler;
-                        service_ptr_t<titleformat_object> script;
-                        
-                        if (compiler->compile(script, "[%artist%]|[%title%]")) {
-                            pfc::string8 formatted_title;
-                            if (playback->playback_format_title(nullptr, formatted_title, script, nullptr, playback_control::display_level_all)) {
-                                const char* separator = strstr(formatted_title.get_ptr(), "|");
-                                if (separator && strlen(formatted_title.get_ptr()) > 1) {
-                                    pfc::string8 tf_artist(formatted_title.get_ptr(), separator - formatted_title.get_ptr());
-                                    pfc::string8 tf_title(separator + 1);
-                                    
-                                    if (!tf_artist.is_empty() && !tf_title.is_empty()) {
-                                        current_artist = tf_artist;
-                                        current_title = tf_title;
-                                    }
-                                }
-                            }
-                        }
-                    } catch (...) {
-                        // Fall through to basic metadata
-                    }
-                }
-                
-                // If titleformat didn't work or not a stream, use basic metadata
-                if (current_title.is_empty() || current_artist.is_empty()) {
-                    file_info_impl info;
-                    if (current_track->get_info(info)) {
-                        const char* title_str = info.meta_get("TITLE", 0);
-                        const char* artist_str = info.meta_get("ARTIST", 0);
-                        if (title_str && current_title.is_empty()) current_title = title_str;
-                        if (artist_str && current_artist.is_empty()) current_artist = artist_str;
-                    }
-                }
-                
-                bool metadata_changed = (current_title != last_title) || (current_artist != last_artist);
-                
-                if (track_changed || metadata_changed) {
-                    // Track or metadata changed - force full update
-                    last_track = current_track;
-                    last_title = current_title;
-                    last_artist = current_artist;
-                    update_track_info(); // Full update including artwork
-                    return;
-                }
-            } else if (last_track.is_valid()) {
-                // Playback stopped
-                last_track.release();
-                last_title = "";
-                last_artist = "";
-                update_track_info();
-                return;
-            }
-        } catch (...) {
-            // If we can't get track info, force update anyway
-            update_track_info();
-            return;
-        }
-    }
-    
-    // Otherwise just update current playback position (skip in artwork expanded mode)
-    if (!skip_time_updates) {
-        try {
-            auto playback = playback_control::get();
-            m_current_time = playback->playback_get_position();
-            m_is_playing = playback->is_playing();
-            m_is_paused = playback->is_paused();
-            
-            // Refresh time display
-            if (m_control_window) {
-                InvalidateRect(m_control_window, nullptr, FALSE);
-            }
-        } catch (...) {
-            // Ignore errors
-        }
+    } catch (...) {
+        // Ignore errors
     }
 }
 
@@ -3281,7 +3397,7 @@ void control_panel::update_text_ticker_internal(HDC hdc, const pfc::string8& tex
         ExtTextOutW(hdc, rect.left - rounded_offset, text_y, ETO_CLIPPED, &text_clip, wide_text.get_ptr(), (UINT)wcslen(wide_text.get_ptr()), nullptr);
     } else {
         RECT fit_rect = rect;
-        DrawText(hdc, wide_text.get_ptr(), -1, &fit_rect, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+        DrawText(hdc, wide_text.get_ptr(), -1, &fit_rect, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
     }
 }
 
@@ -4638,125 +4754,74 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
                 // Keep topmost behavior even when undocked
                 SetWindowPos(panel->m_control_window, HWND_TOPMOST, 0, 0, 0, 0, 
                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-                // Schedule track info update (asynchronous to avoid drag delay)
-                SetTimer(panel->m_control_window, UPDATE_TIMER_ID + 2, 50, nullptr);
                 // Trigger repaint to hide undock icon
                 InvalidateRect(panel->m_control_window, nullptr, TRUE);
             }
             break;
             
-        case WM_SIZE:
-            // Handle window resizing
-            if (panel) {
+        case WM_SIZING: {
+            if (panel && lparam) {
+                RECT* prc = reinterpret_cast<RECT*>(lparam);
+                int w = prc->right - prc->left;
+                int h = prc->bottom - prc->top;
+
                 if (panel->m_is_artwork_expanded) {
-                    // Maintain aspect ratio in expanded artwork mode
-                    if (panel->m_cover_art_bitmap_original && panel->m_original_art_width > 0 && panel->m_original_art_height > 0) {
-                        int new_width = LOWORD(lparam);
-                        int new_height = HIWORD(lparam);
-                        
-                        float image_aspect = (float)panel->m_original_art_width / (float)panel->m_original_art_height;
-                        float window_aspect = (float)new_width / (float)new_height;
-                        
-                        // Adjust dimensions to maintain artwork aspect ratio
-                        int corrected_width, corrected_height;
-                        
-                        if (window_aspect > image_aspect) {
-                            // Window is too wide - adjust width to match aspect ratio
-                            corrected_height = new_height;
-                            corrected_width = (int)((float)new_height * image_aspect);
+                    if (panel->m_original_art_width > 0 && panel->m_original_art_height > 0) {
+                        float aspect = (float)panel->m_original_art_width / (float)panel->m_original_art_height;
+                        if (w < 200) w = 200;
+                        if (h < 200) h = 200;
+                        if (aspect >= 1.0f) {
+                            h = (int)((float)w / aspect);
                         } else {
-                            // Window is too tall - adjust height to match aspect ratio
-                            corrected_width = new_width;
-                            corrected_height = (int)((float)new_width / image_aspect);
+                            w = (int)((float)h * aspect);
                         }
-                        
-                        // Apply minimum size constraints
-                        if (corrected_width < 200) corrected_width = 200;
-                        if (corrected_height < 200) corrected_height = 200;
-                        
-                        // Only resize if different from current size to avoid recursion
-                        if (corrected_width != new_width || corrected_height != new_height) {
-                            SetWindowPos(hwnd, nullptr, 0, 0, corrected_width, corrected_height, 
-                                SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
-                            return 0; // Prevent further processing
-                        }
-                        
-                        // Save the corrected dimensions for expanded mode
-                        panel->m_saved_expanded_width = corrected_width;
-                        panel->m_saved_expanded_height = corrected_height;
+                        if (w < 200) w = 200;
+                        if (h < 200) h = 200;
+                        prc->right = prc->left + w;
+                        prc->bottom = prc->top + h;
+                        return TRUE;
                     }
-                    
-                    // Repaint to adjust artwork display - use optimized invalidation to prevent flicker
-                    InvalidateRect(hwnd, nullptr, FALSE);
                 } else if (panel->m_is_undocked) {
-                    // Enforce mode-specific size constraints without automatic mode switching
-                    int new_width = LOWORD(lparam);
-                    int new_height = HIWORD(lparam);
-                    
                     if (panel->m_is_compact_mode) {
                         int compact_height = panel->m_saved_compact_height > 0 ? panel->m_saved_compact_height : 75;
-                        const int compact_min_width = 200;
-                        const int compact_max_width = 800;
-                        
-                        bool needs_adjustment = false;
-                        if (new_width < compact_min_width) {
-                            new_width = compact_min_width;
-                            needs_adjustment = true;
-                        }
-                        if (new_width > compact_max_width) {
-                            new_width = compact_max_width;
-                            needs_adjustment = true;
-                        }
-                        if (new_height != compact_height) {
-                            new_height = compact_height;
-                            needs_adjustment = true;
-                        }
-                        
-                        if (!needs_adjustment) {
+                        if (w < 200) w = 200;
+                        if (w > 800) w = 800;
+                        prc->right = prc->left + w;
+                        prc->bottom = prc->top + compact_height;
+                        return TRUE;
+                    } else {
+                        if (w < 200) w = 200;
+                        if (w > 1200) w = 1200;
+                        if (h < 50) h = 50;
+                        if (h > 400) h = 400;
+                        prc->right = prc->left + w;
+                        prc->bottom = prc->top + h;
+                        return TRUE;
+                    }
+                }
+            }
+            break;
+        }
+
+        case WM_SIZE:
+            // Handle window resizing without recursive SetWindowPos
+            if (panel) {
+                int new_width = LOWORD(lparam);
+                int new_height = HIWORD(lparam);
+                if (new_width > 0 && new_height > 0) {
+                    if (panel->m_is_artwork_expanded) {
+                        panel->m_saved_expanded_width = new_width;
+                        panel->m_saved_expanded_height = new_height;
+                        InvalidateRect(hwnd, nullptr, FALSE);
+                    } else if (panel->m_is_undocked) {
+                        if (panel->m_is_compact_mode) {
                             panel->m_saved_compact_width = new_width;
                         } else {
-                            SetWindowPos(hwnd, nullptr, 0, 0, new_width, new_height, 
-                                SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
-                            return 0;
-                        }
-                    }
-                    else {
-                        // Undocked normal mode constraints
-                        const int normal_min_width = 200;
-                        const int normal_max_width = 1200;
-                        const int normal_min_height = 50;
-                        const int normal_max_height = 400;
-
-                        bool needs_adjustment = false;
-                        if (new_width < normal_min_width) {
-                            new_width = normal_min_width;
-                            needs_adjustment = true;
-                        }
-                        if (new_width > normal_max_width) {
-                            new_width = normal_max_width;
-                            needs_adjustment = true;
-                        }
-                        if (new_height < normal_min_height) {
-                            new_height = normal_min_height;
-                            needs_adjustment = true;
-                        }
-                        if (new_height > normal_max_height) {
-                            new_height = normal_max_height;
-                            needs_adjustment = true;
-                        }
-                        
-                        if (!needs_adjustment) {
                             panel->m_saved_normal_width = new_width;
                             panel->m_saved_normal_height = new_height;
-                        } else {
-                            SetWindowPos(hwnd, nullptr, 0, 0, new_width, new_height, 
-                                SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
-                            return 0;
                         }
+                        InvalidateRect(hwnd, nullptr, TRUE);
                     }
-                    
-                    // Repaint to ensure proper display
-                    InvalidateRect(hwnd, nullptr, TRUE);
                 }
             }
             break;
@@ -4776,22 +4841,6 @@ LRESULT CALLBACK control_panel::control_window_proc(HWND hwnd, UINT msg, WPARAM 
             } else if (wparam == TICKER_TIMER_ID) {
                 // Track title ticker animation timer
                 if (panel) panel->update_ticker();
-                return 0;
-            } else if (wparam == UPDATE_TIMER_ID + 1) {
-                // Delayed update after track change
-                KillTimer(hwnd, UPDATE_TIMER_ID + 1);
-                panel->update_track_info();
-                return 0;
-            } else if (wparam == UPDATE_TIMER_ID + 2) {
-                // Delayed update after showing panel (asynchronous)
-                KillTimer(hwnd, UPDATE_TIMER_ID + 2);
-                panel->update_track_info(); // Full update
-                return 0;
-            } else if (wparam == ARTWORK_POLL_TIMER_ID) {
-                // Poll foo_artwork to mirror active artwork shown in main display window
-                if (panel) {
-                    panel->load_cover_art();
-                }
                 return 0;
             } else if (wparam == MOUSE_POLL_TIMER_ID) {
                 if (panel) {
@@ -5365,27 +5414,17 @@ void control_panel::paint_control_panel(HDC hdc) {
         bool is_rounded = (get_cover_style() == 1);
         draw_cover_art_styled(hdc, m_cover_art_bitmap, cover_rect, is_rounded);
         
-        if (!m_cover_art_bitmap) {
-            // Check if stream/radio icon placeholder needed
-            try {
-                auto playback = playback_control::get();
-                metadb_handle_ptr track;
-                if (playback->get_now_playing(track) && track.is_valid()) {
-                    pfc::string8 path = track->get_path();
-                    bool is_stream = strstr(path.get_ptr(), "://") != nullptr;
-                    if (is_stream) {
-                        HICON radio_icon = (HICON)LoadImage(g_hIns, MAKEINTRESOURCE(IDI_RADIO_ICON), IMAGE_ICON, art_size/2, art_size/2, LR_DEFAULTCOLOR);
-                        if (!radio_icon) radio_icon = LoadIcon(g_hIns, MAKEINTRESOURCE(IDI_RADIO_ICON));
-                        if (radio_icon) {
-                            int icon_size = art_size / 2;
-                            int icon_x = cover_rect.left + (art_size - icon_size) / 2;
-                            int icon_y = cover_rect.top + (art_size - icon_size) / 2;
-                            DrawIconEx(hdc, icon_x, icon_y, radio_icon, icon_size, icon_size, 0, nullptr, DI_NORMAL);
-                            DestroyIcon(radio_icon);
-                        }
-                    }
-                }
-            } catch (...) {}
+        if (!m_cover_art_bitmap && m_is_stream) {
+            // Draw stream/radio icon placeholder for internet streams
+            HICON radio_icon = (HICON)LoadImage(g_hIns, MAKEINTRESOURCE(IDI_RADIO_ICON), IMAGE_ICON, art_size/2, art_size/2, LR_DEFAULTCOLOR);
+            if (!radio_icon) radio_icon = LoadIcon(g_hIns, MAKEINTRESOURCE(IDI_RADIO_ICON));
+            if (radio_icon) {
+                int icon_size = art_size / 2;
+                int icon_x = cover_rect.left + (art_size - icon_size) / 2;
+                int icon_y = cover_rect.top + (art_size - icon_size) / 2;
+                DrawIconEx(hdc, icon_x, icon_y, radio_icon, icon_size, icon_size, 0, nullptr, DI_NORMAL);
+                DestroyIcon(radio_icon);
+            }
         }
     }
     
@@ -5566,62 +5605,50 @@ void control_panel::paint_artwork_expanded(HDC hdc, const RECT& client_rect) {
         DeleteObject(placeholder_brush);
         
         // Check if current track is a stream and show radio icon
-        try {
-            auto playback = playback_control::get();
-            metadb_handle_ptr track;
+        if (m_is_stream) {
+            // Load and draw radio icon for internet streams (use larger size for expanded view)
+            int icon_size = (window_width < window_height ? window_width : window_height) / 4; // Quarter of smallest dimension
+            HICON radio_icon = (HICON)LoadImage(g_hIns, MAKEINTRESOURCE(IDI_RADIO_ICON), IMAGE_ICON, icon_size, icon_size, LR_DEFAULTCOLOR);
             
-            if (playback->get_now_playing(track) && track.is_valid()) {
-                pfc::string8 path = track->get_path();
-                bool is_stream = strstr(path.get_ptr(), "://") != nullptr;
-                
-                if (is_stream) {
-                    // Load and draw radio icon for internet streams (use larger size for expanded view)
-                    int icon_size = (window_width < window_height ? window_width : window_height) / 4; // Quarter of smallest dimension
-                    HICON radio_icon = (HICON)LoadImage(g_hIns, MAKEINTRESOURCE(IDI_RADIO_ICON), IMAGE_ICON, icon_size, icon_size, LR_DEFAULTCOLOR);
-                    
-                    if (!radio_icon) {
-                        radio_icon = LoadIcon(g_hIns, MAKEINTRESOURCE(IDI_RADIO_ICON));
-                    }
-                    
-                    if (radio_icon) {
-                        int icon_x = (window_width - icon_size) / 2;
-                        int icon_y = (window_height - icon_size) / 2;
-                        
-                        DrawIconEx(buffer_dc, icon_x, icon_y, radio_icon, icon_size, icon_size, 0, nullptr, DI_NORMAL);
-                        DestroyIcon(radio_icon);
-                    } else {
-                        // Fallback to text if icon can't be loaded
-                        SetTextColor(buffer_dc, RGB(200, 200, 200));
-                        SetBkMode(buffer_dc, TRANSPARENT);
-                        int font_size = (window_width < window_height ? window_width : window_height) / 8; // Larger font for expanded view
-                        HFONT symbol_font = CreateFont(font_size, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-                                                       DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                                                       DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI Symbol");
-                        HFONT old_symbol_font = (HFONT)SelectObject(buffer_dc, symbol_font);
-                        
-                        DrawText(buffer_dc, L"📻", -1, &artwork_rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-                        
-                        SelectObject(buffer_dc, old_symbol_font);
-                        DeleteObject(symbol_font);
-                    }
-                } else {
-                    // Draw musical note symbol for local files
-                    SetTextColor(buffer_dc, RGB(200, 200, 200));
-                    SetBkMode(buffer_dc, TRANSPARENT);
-                    int font_size = (window_width < window_height ? window_width : window_height) / 8;
-                    HFONT symbol_font = CreateFont(font_size, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-                                                   DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                                                   DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI Symbol");
-                    HFONT old_symbol_font = (HFONT)SelectObject(buffer_dc, symbol_font);
-                    
-                    DrawText(buffer_dc, L"♪", -1, &artwork_rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-                    
-                    SelectObject(buffer_dc, old_symbol_font);
-                    DeleteObject(symbol_font);
-                }
+            if (!radio_icon) {
+                radio_icon = LoadIcon(g_hIns, MAKEINTRESOURCE(IDI_RADIO_ICON));
             }
-        } catch (...) {
-            // Ignore errors - placeholder will remain plain gray
+            
+            if (radio_icon) {
+                int icon_x = (window_width - icon_size) / 2;
+                int icon_y = (window_height - icon_size) / 2;
+                
+                DrawIconEx(buffer_dc, icon_x, icon_y, radio_icon, icon_size, icon_size, 0, nullptr, DI_NORMAL);
+                DestroyIcon(radio_icon);
+            } else {
+                // Fallback to text if icon can't be loaded
+                SetTextColor(buffer_dc, RGB(200, 200, 200));
+                SetBkMode(buffer_dc, TRANSPARENT);
+                int font_size = (window_width < window_height ? window_width : window_height) / 8; // Larger font for expanded view
+                HFONT symbol_font = CreateFont(font_size, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                                               DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                                               DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI Symbol");
+                HFONT old_symbol_font = (HFONT)SelectObject(buffer_dc, symbol_font);
+                
+                DrawText(buffer_dc, L"📻", -1, &artwork_rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+                
+                SelectObject(buffer_dc, old_symbol_font);
+                DeleteObject(symbol_font);
+            }
+        } else {
+            // Draw musical note symbol for local files
+            SetTextColor(buffer_dc, RGB(200, 200, 200));
+            SetBkMode(buffer_dc, TRANSPARENT);
+            int font_size = (window_width < window_height ? window_width : window_height) / 8;
+            HFONT symbol_font = CreateFont(font_size, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                                           DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                                           DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI Symbol");
+            HFONT old_symbol_font = (HFONT)SelectObject(buffer_dc, symbol_font);
+            
+            DrawText(buffer_dc, L"♪", -1, &artwork_rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+            
+            SelectObject(buffer_dc, old_symbol_font);
+            DeleteObject(symbol_font);
         }
         
         // Draw overlay even when no artwork (controls should appear on hover)
@@ -5857,7 +5884,7 @@ void control_panel::paint_compact_mode(HDC hdc, const RECT& rect) {
         int time_bottom = bar_center_y + half_rect_height;
         
         RECT time_rect = {text_right - time_width_needed, time_top, text_right, time_bottom};
-        DrawText(hdc, time_str, -1, &time_rect, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+        DrawText(hdc, time_str, -1, &time_rect, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
         
         SelectObject(hdc, old_font);
     }
@@ -5919,7 +5946,7 @@ void control_panel::draw_time_info(HDC hdc, const RECT& client_rect) {
     int center_y = 32; // middle of title/artist height area
     
     RECT time_rect = {client_rect.right - width - 10, center_y - (height / 2), client_rect.right - 10, center_y + (height / 2)};
-    DrawText(hdc, wide_time.get_ptr(), -1, &time_rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    DrawText(hdc, wide_time.get_ptr(), -1, &time_rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
     
     SelectObject(hdc, old_font);
 }
@@ -6001,9 +6028,9 @@ void control_panel::draw_track_info_overlay(HDC hdc, int window_width, int windo
         RECT title_rect = {15, start_y, window_width - 15, start_y + title_h};
         if (!m_current_title.is_empty()) {
             pfc::stringcvt::string_wide_from_utf8 wide_title(m_current_title.c_str());
-            DrawText(hdc, wide_title.get_ptr(), -1, &title_rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+            DrawText(hdc, wide_title.get_ptr(), -1, &title_rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
         } else {
-            DrawText(hdc, L"[No Track Title]", -1, &title_rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+            DrawText(hdc, L"[No Track Title]", -1, &title_rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
         }
         SelectObject(hdc, old_font);
 
@@ -6013,9 +6040,9 @@ void control_panel::draw_track_info_overlay(HDC hdc, int window_width, int windo
         RECT artist_rect = {15, artist_y, window_width - 15, artist_y + artist_h};
         if (!m_current_artist.is_empty()) {
             pfc::stringcvt::string_wide_from_utf8 wide_artist(m_current_artist.c_str());
-            DrawText(hdc, wide_artist.get_ptr(), -1, &artist_rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+            DrawText(hdc, wide_artist.get_ptr(), -1, &artist_rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
         } else {
-            DrawText(hdc, L"[No Artist]", -1, &artist_rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+            DrawText(hdc, L"[No Artist]", -1, &artist_rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
         }
         SelectObject(hdc, old_font);
     } // End of should_draw_overlay condition
