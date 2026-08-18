@@ -26,7 +26,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 // Component version declaration using the proper SDK macro
 DECLARE_COMPONENT_VERSION(
     "Tray Controls",
-    "1.4.2",
+    "1.4.3",
     "System tray controls for foobar2000.\n"
     "Features:\n"
     "- Minimize to system tray\n"
@@ -40,11 +40,18 @@ DECLARE_COMPONENT_VERSION(
 // Validate component compatibility using the proper SDK macro
 VALIDATE_COMPONENT_FILENAME("foo_traycontrols.dll");
 
+static ULONG_PTR g_gdiplusToken = 0;
+
 // Tray Controls initialization handler
 class tray_init : public initquit {
 public:
     void on_init() override {
-        // Initialize the tray manager
+        // Initialize GDI+ globally
+        Gdiplus::GdiplusStartupInput gdiplusStartupInput;
+        Gdiplus::GdiplusStartup(&g_gdiplusToken, &gdiplusStartupInput, nullptr);
+
+        // Initialize the popup window and tray manager
+        popup_window::get_instance().initialize();
         tray_manager::get_instance().initialize();
         // Initialize foo_artwork bridge for online artwork support
         init_artwork_bridge();
@@ -72,20 +79,12 @@ public:
         // Update tray tooltip with new track information
         tray_manager::get_instance().update_tooltip(p_track);
         // Update control panel with new track information
-        control_panel::get_instance().update_track_info();
+        control_panel::get_instance().update_track_info(p_track);
         // Show popup notification for new tracks
         popup_window::get_instance().show_track_info(p_track);
     }
     
-    void on_playback_starting(play_control::t_track_command p_command, bool p_paused) override {
-        // Also update when playback starts
-        static_api_ptr_t<playback_control> pc;
-        metadb_handle_ptr track;
-        if (pc->get_now_playing(track) && track.is_valid()) {
-            tray_manager::get_instance().update_tooltip(track);
-            control_panel::get_instance().update_track_info();
-        }
-    }
+    void on_playback_starting(play_control::t_track_command p_command, bool p_paused) override {}
     
     void on_playback_pause(bool p_state) override {
         // Update tray tooltip to show pause state
@@ -95,6 +94,9 @@ public:
     }
     
     void on_playback_stop(play_control::t_stop_reason p_reason) override {
+        if (p_reason == play_control::stop_reason_starting_another) {
+            return;
+        }
         // Update tray tooltip to show stopped state
         tray_manager::get_instance().update_playback_state("Stopped");
         // Update control panel playback state
@@ -107,27 +109,26 @@ public:
         // Update tooltip when track metadata is edited
         tray_manager::get_instance().update_tooltip(p_track);
         // Update control panel when track metadata is edited
-        control_panel::get_instance().update_track_info();
+        control_panel::get_instance().update_track_info(p_track);
     }
     void on_playback_dynamic_info(const file_info & p_info) override {
-        // Update tooltip with dynamic metadata info (for streaming sources)
         tray_manager::get_instance().update_tooltip_with_dynamic_info(p_info);
-        // Update control panel with dynamic info (for streaming sources)
-        control_panel::get_instance().update_track_info();
-        // Note: Do NOT trigger popup here - this fires too frequently for streams
-        // Popup will be handled by track change detection in tray_manager timer
+        control_panel::get_instance().update_stream_metadata(p_info);
+        popup_window::get_instance().update_stream_metadata(p_info);
     }
     void on_playback_dynamic_info_track(const file_info & p_info) override {
-        // Update tooltip with track-specific dynamic info (for streaming sources)
         tray_manager::get_instance().update_tooltip_with_dynamic_info(p_info);
-        // Update control panel with track-specific dynamic info (for streaming sources)
-        control_panel::get_instance().update_track_info();
-        // Note: Do NOT trigger popup here - this fires too frequently for streams
-        // Popup will be handled by track change detection in tray_manager timer
+        control_panel::get_instance().update_stream_metadata(p_info);
+        popup_window::get_instance().update_stream_metadata(p_info);
     }
     void on_playback_time(double p_time) override {}
     void on_volume_change(float p_new_val) override {}
-    unsigned get_flags() override { return 0; }
+    unsigned get_flags() override {
+        return flag_on_playback_starting | flag_on_playback_new_track | 
+               flag_on_playback_stop | flag_on_playback_pause | 
+               flag_on_playback_edited | flag_on_playback_dynamic_info | 
+               flag_on_playback_dynamic_info_track;
+    }
 };
 
 // Theme change callback to update control panel when dark mode is toggled
