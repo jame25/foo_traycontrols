@@ -38,6 +38,7 @@ int get_miniplayer_expanded_size();
 pfc::string8 get_line1_format();
 pfc::string8 get_line2_format();
 void format_display_lines(pfc::string8& line1_out, pfc::string8& line2_out);
+void format_display_lines_track(metadb_handle_ptr track, pfc::string8& line1_out, pfc::string8& line2_out);
 
 // Opens the Preferences dialog at this component's page (General tab is shown first)
 void show_preferences_page();
