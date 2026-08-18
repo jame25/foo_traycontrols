@@ -17,6 +17,7 @@ public:
     
     // Playback event handlers
     void update_tooltip(metadb_handle_ptr p_track);
+    void update_tooltip_from_playback();
     void update_tooltip_with_dynamic_info(const file_info & p_info);
     void update_playback_state(const char* state);
     
@@ -50,6 +51,9 @@ private:
     static const UINT TRAY_SINGLE_CLICK_TIMER_ID = 2002;
     pfc::string8 m_last_track_path;
     pfc::string8 m_last_track_metadata;
+    pfc::string8 m_last_stream_artist;
+    pfc::string8 m_last_stream_title;
+    metadb_handle_ptr m_last_loaded_track;
 
     // Low-level mouse hook for volume wheel control over tray icon
     static HHOOK s_mouse_hook;
