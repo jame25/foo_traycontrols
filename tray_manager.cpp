@@ -223,10 +223,8 @@ void tray_manager::update_tooltip(metadb_handle_ptr p_track) {
 
         if (p_track != m_last_loaded_track) {
             m_last_loaded_track = p_track;
-            if (!is_stream) {
-                m_last_stream_artist = "";
-                m_last_stream_title = "";
-            }
+            m_last_stream_artist = "";
+            m_last_stream_title = "";
         }
 
         pfc::string8 tooltip;
