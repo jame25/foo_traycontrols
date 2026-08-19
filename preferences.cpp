@@ -440,6 +440,30 @@ void format_display_lines_track(metadb_handle_ptr track, pfc::string8& line1_out
                 }
             }
         }
+
+        // Check for external stream metadata discovered via foo_artwork (e.g. ?azuracast_api / ?radioreg_api)
+        static service_ptr_t<titleformat_object> tf_fa_title, tf_fa_artist;
+        if (!tf_fa_title.is_valid()) {
+            compiler->compile_safe(tf_fa_title, "%foo_artwork_title%");
+        }
+        if (!tf_fa_artist.is_valid()) {
+            compiler->compile_safe(tf_fa_artist, "%foo_artwork_artist%");
+        }
+        pfc::string8 fa_title, fa_artist;
+        track->format_title(nullptr, fa_title, tf_fa_title, nullptr);
+        track->format_title(nullptr, fa_artist, tf_fa_artist, nullptr);
+
+        if (!fa_title.is_empty() && fa_title != "?") {
+            if (line1_fmt == "%title%" || line1_out.is_empty() ||
+                line1_out.find_first("http://") == 0 || line1_out.find_first("https://") == 0) {
+                line1_out = fa_title;
+            }
+        }
+        if (!fa_artist.is_empty() && fa_artist != "?") {
+            if (line2_fmt == "%artist%" || line2_out.is_empty()) {
+                line2_out = fa_artist;
+            }
+        }
     } catch (...) {
         // Leave outputs unchanged on error
     }
@@ -1437,7 +1461,7 @@ void tray_preferences::update_font_displays() {
         pfc::string8 font_desc = format_font_name(lf);
         uSetDlgItemText(m_hwnd, IDC_ARTIST_FONT_DISPLAY, font_desc);
     } else {
-        uSetDlgItemText(m_hwnd, IDC_ARTIST_FONT_DISPLAY, "Microsoft YaHei UI, 11pt, Regular (Default)");
+        uSetDlgItemText(m_hwnd, IDC_ARTIST_FONT_DISPLAY, "Microsoft YaHei UI, 9pt (Default)");
     }
     
     // Update original track font display
@@ -1446,7 +1470,7 @@ void tray_preferences::update_font_displays() {
         pfc::string8 font_desc = format_font_name(lf);
         uSetDlgItemText(m_hwnd, IDC_TRACK_FONT_DISPLAY, font_desc);
     } else {
-        uSetDlgItemText(m_hwnd, IDC_TRACK_FONT_DISPLAY, "Microsoft YaHei UI, 14pt, Bold (Default)");
+        uSetDlgItemText(m_hwnd, IDC_TRACK_FONT_DISPLAY, "Microsoft YaHei UI, 11pt, Bold (Default)");
     }
     
     // Update Docked Control Panel font displays
@@ -1523,6 +1547,39 @@ void tray_preferences::update_font_displays() {
     }
 }
 
+static bool is_windows_11_or_greater() {
+    typedef LONG(WINAPI* PFN_RtlGetVersion)(PRTL_OSVERSIONINFOW);
+    HMODULE hNtdll = GetModuleHandle(L"ntdll.dll");
+    if (hNtdll) {
+        PFN_RtlGetVersion pRtlGetVersion = (PFN_RtlGetVersion)GetProcAddress(hNtdll, "RtlGetVersion");
+        if (pRtlGetVersion) {
+            RTL_OSVERSIONINFOW rovi = {};
+            rovi.dwOSVersionInfoSize = sizeof(rovi);
+            if (pRtlGetVersion(&rovi) == 0) {
+                // Windows 11 is major version 10 with build number >= 22000
+                return (rovi.dwMajorVersion > 10) || (rovi.dwMajorVersion == 10 && rovi.dwBuildNumber >= 22000);
+            }
+        }
+    }
+    return false;
+}
+
+static int get_dpi_for_window_or_screen(HWND hwnd) {
+    if (hwnd != nullptr) {
+        typedef UINT(WINAPI* PFN_GetDpiForWindow)(HWND);
+        static PFN_GetDpiForWindow pfnGetDpiForWindow = (PFN_GetDpiForWindow)GetProcAddress(
+            GetModuleHandle(L"user32.dll"), "GetDpiForWindow");
+        if (pfnGetDpiForWindow != nullptr) {
+            UINT dpi = pfnGetDpiForWindow(hwnd);
+            if (dpi > 0) return (int)dpi;
+        }
+    }
+    HDC hdc = GetDC(hwnd ? hwnd : nullptr);
+    int dpi = GetDeviceCaps(hdc, LOGPIXELSY);
+    ReleaseDC(hwnd ? hwnd : nullptr, hdc);
+    return (dpi > 0) ? dpi : 96;
+}
+
 static void filter_at_fonts_from_control(HWND hCtrl) {
     wchar_t className[64] = {};
     GetClassName(hCtrl, className, 64);
@@ -1558,26 +1615,74 @@ static BOOL CALLBACK FilterAtFontsChildEnumProc(HWND hwnd, LPARAM lParam) {
     return TRUE;
 }
 
+struct FontPickerHookData {
+    int target_point_size;
+};
+
 static UINT_PTR CALLBACK FontHookProc(HWND hwndDlg, UINT msg, WPARAM wp, LPARAM lp) {
-    if (msg == WM_INITDIALOG || (msg == WM_COMMAND && HIWORD(wp) == CBN_SELCHANGE)) {
+    if (msg == WM_INITDIALOG) {
+        CHOOSEFONT* cf = reinterpret_cast<CHOOSEFONT*>(lp);
+        EnumChildWindows(hwndDlg, FilterAtFontsChildEnumProc, 0);
+
+        if (cf && cf->lCustData) {
+            FontPickerHookData* data = reinterpret_cast<FontPickerHookData*>(cf->lCustData);
+            int target_size = data->target_point_size;
+            if (target_size > 0) {
+                wchar_t sizeStr[16];
+                swprintf_s(sizeStr, L"%d", target_size);
+
+                // Standard ChooseFont control IDs: cmb3 (1138) = size list/combo, edt3 (1154) = size edit
+                HWND hSizeList = GetDlgItem(hwndDlg, 1138);
+                HWND hSizeEdit = GetDlgItem(hwndDlg, 1154);
+
+                if (hSizeEdit) {
+                    SetWindowText(hSizeEdit, sizeStr);
+                }
+
+                if (hSizeList) {
+                    wchar_t className[64] = {};
+                    GetClassName(hSizeList, className, 64);
+                    if (_wcsicmp(className, L"COMBOBOX") == 0) {
+                        int idx = (int)SendMessage(hSizeList, CB_FINDSTRINGEXACT, -1, (LPARAM)sizeStr);
+                        if (idx != CB_ERR) {
+                            SendMessage(hSizeList, CB_SETCURSEL, idx, 0);
+                            SendMessage(hwndDlg, WM_COMMAND, MAKEWPARAM(1138, CBN_SELCHANGE), (LPARAM)hSizeList);
+                        }
+                    } else if (_wcsicmp(className, L"LISTBOX") == 0) {
+                        int idx = (int)SendMessage(hSizeList, LB_FINDSTRINGEXACT, -1, (LPARAM)sizeStr);
+                        if (idx != LB_ERR) {
+                            SendMessage(hSizeList, LB_SETCURSEL, idx, 0);
+                            SendMessage(hwndDlg, WM_COMMAND, MAKEWPARAM(1138, LBN_SELCHANGE), (LPARAM)hSizeList);
+                        }
+                    }
+                }
+            }
+        }
+        return 0;
+    } else if (msg == WM_COMMAND && HIWORD(wp) == CBN_SELCHANGE) {
         EnumChildWindows(hwndDlg, FilterAtFontsChildEnumProc, 0);
     }
     return 0;
 }
 
 static bool show_font_picker(HWND hwndOwner, LOGFONT& lf) {
-    HDC hdc = GetDC(nullptr);
-    int current_dpi = GetDeviceCaps(hdc, LOGPIXELSY);
-    ReleaseDC(nullptr, hdc);
-    if (current_dpi <= 0) current_dpi = 96;
+    int current_dpi = get_dpi_for_window_or_screen(hwndOwner);
 
     // Calculate unscaled point size from stored lf.lfHeight (which was scaled for current_dpi)
     int point_size = MulDiv(abs(lf.lfHeight), 72, current_dpi);
     if (point_size <= 0) point_size = 9;
 
-    // Prepare temporary LOGFONT for ChooseFont using standard 96 DPI height so ChooseFont selects the exact point size
+    // Prepare temporary LOGFONT for ChooseFont
+    // On Windows 11 (build >= 22000), ChooseFont is Per-Monitor DPI aware and expects lfHeight scaled to current_dpi.
+    // On Windows 10 and earlier, ChooseFont expects standard 96 DPI lfHeight.
     LOGFONT picker_lf = lf;
-    picker_lf.lfHeight = -MulDiv(point_size, 96, 72);
+    if (is_windows_11_or_greater()) {
+        picker_lf.lfHeight = -MulDiv(point_size, current_dpi, 72);
+    } else {
+        picker_lf.lfHeight = -MulDiv(point_size, 96, 72);
+    }
+
+    FontPickerHookData hookData = { point_size };
 
     CHOOSEFONT cf = {};
     cf.lStructSize = sizeof(CHOOSEFONT);
@@ -1585,11 +1690,12 @@ static bool show_font_picker(HWND hwndOwner, LOGFONT& lf) {
     cf.lpLogFont = &picker_lf;
     cf.Flags = CF_INITTOLOGFONTSTRUCT | CF_SCREENFONTS | CF_ENABLEHOOK;
     cf.lpfnHook = FontHookProc;
+    cf.lCustData = reinterpret_cast<LPARAM>(&hookData);
     
     if (ChooseFont(&cf)) {
-        int chosen_point_size = cf.iPointSize / 10;
+        int chosen_point_size = (cf.iPointSize + 5) / 10;
         if (chosen_point_size <= 0) {
-            chosen_point_size = MulDiv(abs(picker_lf.lfHeight), 72, 96);
+            chosen_point_size = MulDiv(abs(picker_lf.lfHeight), 72, current_dpi);
         }
 
         // Apply chosen attributes back to lf and scale lfHeight for current_dpi
@@ -1810,11 +1916,8 @@ pfc::string8 tray_preferences::format_font_name(const LOGFONT& lf) {
     pfc::stringcvt::string_utf8_from_wide font_name(lf.lfFaceName);
     
     // Calculate point size from lfHeight
-    HDC hdc = GetDC(nullptr);
-    int dpi = GetDeviceCaps(hdc, LOGPIXELSY);
+    int dpi = get_dpi_for_window_or_screen(m_hwnd);
     int point_size = MulDiv(abs(lf.lfHeight), 72, dpi);
-    ReleaseDC(nullptr, hdc);
-    
     
     // Format string
     result << font_name.get_ptr() << ", " << point_size << "pt";
