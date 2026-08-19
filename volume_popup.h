@@ -46,8 +46,8 @@ private:
     static const int CORNER_RADIUS = 8;
 
     // Feedback OSD visual constants
-    static const int FEEDBACK_WIDTH = 250;
-    static const int FEEDBACK_HEIGHT = 44;
+    static const int FEEDBACK_WIDTH = 202;
+    static const int FEEDBACK_HEIGHT = 36;
     static const int FEEDBACK_ICON_X = 14;
     static const int FEEDBACK_ICON_SIZE = 20;
     static const int FEEDBACK_TRACK_X = 44; // Slider track left edge
