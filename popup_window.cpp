@@ -111,9 +111,13 @@ void popup_window::show_track_info(metadb_handle_ptr p_track) {
     pfc::string8 track_identifier = p_track->get_path();
     bool is_stream = is_remote_stream_path(track_identifier.get_ptr());
     if (is_stream) {
-        // For online radio streams, wait for dynamic metadata in update_stream_metadata()
+        // For online radio streams, wait for dynamic metadata in update_stream_metadata() or metadb refresh
         m_pending_track = p_track;
+        m_current_track = p_track;
         m_is_stream = true;
+        m_last_track_path.clear();
+        cleanup_cover_art();
+        clear_pending_online_artwork();
         return;
     }
     
@@ -409,43 +413,111 @@ static const char* safe_meta_get_popup(const file_info& info, const char* name) 
 void popup_window::update_track_info(metadb_handle_ptr p_track) {
     if (!p_track.is_valid()) return;
     
-    // Store track path for comparison
-    m_last_track_path = p_track->get_path();
     m_current_track = p_track;
     
     pfc::string8 path = p_track->get_path();
     m_is_stream = is_remote_stream_path(path.get_ptr());
-    if (!m_is_stream) {
-        m_current_title = "";
-        m_current_artist = "";
-        format_display_lines_track(p_track, m_current_title, m_current_artist);
+    m_current_title = "";
+    m_current_artist = "";
+    format_display_lines_track(p_track, m_current_title, m_current_artist);
 
-        if (m_current_title.is_empty() || m_current_artist.is_empty()) {
-            metadb_info_container::ptr info_container = p_track->get_info_ref();
-            if (info_container.is_valid()) {
-                const file_info& info = info_container->info();
-                if (m_current_title.is_empty()) {
-                    const char* val = safe_meta_get_popup(info, "TITLE");
-                    if (!val) val = safe_meta_get_popup(info, "title");
-                    if (!val) val = pfc::string_filename_ext(p_track->get_path()).get_ptr();
-                    if (val) m_current_title = val;
+    if (!m_is_stream && (m_current_title.is_empty() || m_current_artist.is_empty())) {
+        metadb_info_container::ptr info_container = p_track->get_info_ref();
+        if (info_container.is_valid()) {
+            const file_info& info = info_container->info();
+            if (m_current_title.is_empty()) {
+                const char* val = safe_meta_get_popup(info, "TITLE");
+                if (!val) val = safe_meta_get_popup(info, "title");
+                if (!val) val = pfc::string_filename_ext(p_track->get_path()).get_ptr();
+                if (val) m_current_title = val;
+            }
+            if (m_current_artist.is_empty()) {
+                const char* val = safe_meta_get_popup(info, "ARTIST");
+                if (!val) val = safe_meta_get_popup(info, "artist");
+                if (!val) val = safe_meta_get_popup(info, "ALBUMARTIST");
+                if (!val) val = safe_meta_get_popup(info, "albumartist");
+                if (!val) val = safe_meta_get_popup(info, "PERFORMER");
+                if (!val) val = safe_meta_get_popup(info, "performer");
+                if (val) m_current_artist = val;
+            }
+        }
+    }
+
+    // Fallback for streams if format returned empty
+    if (m_is_stream && (m_current_title.is_empty() || m_current_artist.is_empty())) {
+        file_info_impl info;
+        if (p_track->get_info(info)) {
+            if (m_current_title.is_empty()) {
+                if (info.meta_exists("title")) {
+                    m_current_title = info.meta_get("title", 0);
+                } else if (info.meta_exists("TITLE")) {
+                    m_current_title = info.meta_get("TITLE", 0);
+                } else if (info.meta_exists("server")) {
+                    m_current_title = info.meta_get("server", 0);
+                } else if (info.meta_exists("SERVER")) {
+                    m_current_title = info.meta_get("SERVER", 0);
                 }
-                if (m_current_artist.is_empty()) {
-                    const char* val = safe_meta_get_popup(info, "ARTIST");
-                    if (!val) val = safe_meta_get_popup(info, "artist");
-                    if (!val) val = safe_meta_get_popup(info, "ALBUMARTIST");
-                    if (!val) val = safe_meta_get_popup(info, "albumartist");
-                    if (!val) val = safe_meta_get_popup(info, "PERFORMER");
-                    if (!val) val = safe_meta_get_popup(info, "performer");
-                    if (val) m_current_artist = val;
+            }
+            if (m_current_artist.is_empty()) {
+                if (info.meta_exists("artist")) {
+                    m_current_artist = info.meta_get("artist", 0);
+                } else if (info.meta_exists("ARTIST")) {
+                    m_current_artist = info.meta_get("ARTIST", 0);
                 }
             }
         }
-
-        if (m_current_title.is_empty()) m_current_title = "Unknown Title";
-        if (m_current_artist.is_empty()) m_current_artist = "Unknown Artist";
     }
+
+    if (m_current_title.is_empty()) m_current_title = "Unknown Title";
+    if (m_current_artist.is_empty()) m_current_artist = "Unknown Artist";
     
+    if (m_is_stream) {
+        // If stream has valid discovered track title (not raw URL or placeholder)
+        bool has_valid_title = !m_current_title.is_empty() && 
+                               m_current_title != "Unknown Title" && 
+                               m_current_title.find_first("http://") != 0 && 
+                               m_current_title.find_first("https://") != 0;
+        
+        if (has_valid_title) {
+            pfc::string8 stream_id;
+            if (!m_current_artist.is_empty() && m_current_artist != "Unknown Artist") {
+                stream_id << m_current_artist << " - " << m_current_title;
+            } else {
+                stream_id = m_current_title;
+            }
+
+            if (stream_id != m_last_track_path) {
+                m_last_track_path = stream_id;
+
+                // Load cover art for the stream track
+                load_cover_art(p_track, false);
+
+                if (get_show_popup_notification()) {
+                    if (m_popup_window) {
+                        KillTimer(m_popup_window, ARTWORK_WAIT_TIMER_ID);
+                        KillTimer(m_popup_window, ANIMATION_TIMER_ID);
+                        KillTimer(m_popup_window, POPUP_TIMER_ID);
+                    }
+                    bool was_fully_visible = (m_visible && !m_animating);
+                    m_animating = false;
+
+                    position_popup();
+                    if (was_fully_visible) {
+                        SetWindowPos(m_popup_window, HWND_TOPMOST, m_final_x, m_final_y, 320, 80, SWP_NOACTIVATE);
+                        ShowWindow(m_popup_window, SW_SHOWNOACTIVATE);
+                        InvalidateRect(m_popup_window, nullptr, TRUE);
+                        SetTimer(m_popup_window, POPUP_TIMER_ID, get_popup_duration(), hide_timer_proc);
+                    } else {
+                        start_slide_in_animation();
+                    }
+                    return;
+                }
+            }
+        }
+    } else {
+        m_last_track_path = p_track->get_path();
+    }
+
     // Force repaint to update displayed info
     if (m_popup_window) {
         InvalidateRect(m_popup_window, nullptr, TRUE);
@@ -582,6 +654,55 @@ void popup_window::on_online_artwork_received() {
             m_cover_art_bitmap = bitmap;
             m_artwork_from_bridge = false; // We own the copy
 
+            // Refresh track title and artist if stream metadata was discovered
+            auto playback = playback_control::get();
+            metadb_handle_ptr track;
+            if (playback->get_now_playing(track) && track.is_valid()) {
+                pfc::string8 line1, line2;
+                format_display_lines_track(track, line1, line2);
+                if (!line1.is_empty() && line1 != "Unknown Title") m_current_title = line1;
+                if (!line2.is_empty() && line2 != "Unknown Artist") m_current_artist = line2;
+
+                pfc::string8 path = track->get_path();
+                if (is_remote_stream_path(path.get_ptr())) {
+                    pfc::string8 stream_id;
+                    if (!m_current_artist.is_empty() && m_current_artist != "Unknown Artist") {
+                        stream_id << m_current_artist << " - " << m_current_title;
+                    } else {
+                        stream_id = m_current_title;
+                    }
+
+                    bool has_valid_title = !m_current_title.is_empty() && 
+                                           m_current_title != "Unknown Title" && 
+                                           m_current_title.find_first("http://") != 0 && 
+                                           m_current_title.find_first("https://") != 0;
+
+                    if (has_valid_title && stream_id != m_last_track_path) {
+                        m_last_track_path = stream_id;
+                        if (get_show_popup_notification()) {
+                            if (m_popup_window) {
+                                KillTimer(m_popup_window, ARTWORK_WAIT_TIMER_ID);
+                                KillTimer(m_popup_window, ANIMATION_TIMER_ID);
+                                KillTimer(m_popup_window, POPUP_TIMER_ID);
+                            }
+                            bool was_fully_visible = (m_visible && !m_animating);
+                            m_animating = false;
+
+                            position_popup();
+                            if (was_fully_visible) {
+                                SetWindowPos(m_popup_window, HWND_TOPMOST, m_final_x, m_final_y, 320, 80, SWP_NOACTIVATE);
+                                ShowWindow(m_popup_window, SW_SHOWNOACTIVATE);
+                                InvalidateRect(m_popup_window, nullptr, TRUE);
+                                SetTimer(m_popup_window, POPUP_TIMER_ID, get_popup_duration(), hide_timer_proc);
+                            } else {
+                                start_slide_in_animation();
+                            }
+                            return;
+                        }
+                    }
+                }
+            }
+
             if (m_popup_window) {
                 KillTimer(m_popup_window, ARTWORK_POLL_TIMER_ID);
                 KillTimer(m_popup_window, ARTWORK_WAIT_TIMER_ID);
@@ -612,6 +733,20 @@ void popup_window::load_cover_art(metadb_handle_ptr p_track, bool allow_stale_fa
     try {
         pfc::string8 path = p_track->get_path();
         bool is_stream = is_remote_stream_path(path.get_ptr());
+
+        if (is_stream) {
+            // Check if foo_artwork already has active artwork ready
+            try {
+                HBITMAP online_art = get_current_online_artwork();
+                if (online_art) {
+                    cleanup_cover_art();
+                    m_cover_art_bitmap = online_art;
+                    m_artwork_from_bridge = false;
+                    if (m_popup_window) KillTimer(m_popup_window, ARTWORK_POLL_TIMER_ID);
+                    return;
+                }
+            } catch (...) {}
+        }
 
         // Try local/embedded artwork ONLY for local files (NEVER for streams - prevents network lockup)
         if (!is_stream) {
