@@ -604,7 +604,7 @@ LRESULT CALLBACK volume_popup::window_proc(HWND hwnd, UINT msg, WPARAM wparam, L
             {
                 POINT pt = { (short)LOWORD(lparam), (short)HIWORD(lparam) };
                 // Feedback OSD: clicking the speaker/mute icon toggles mute without starting a drag.
-                if (pThis->m_is_feedback_mode && pt.x < FEEDBACK_TRACK_X) {
+                if (pThis->m_is_feedback_mode && pt.x < (int)std::round(FEEDBACK_TRACK_X * get_dpi_scale())) {
                     try {
                         auto playback = playback_control::get();
                         playback->volume_mute_toggle();
