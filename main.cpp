@@ -26,7 +26,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 // Component version declaration using the proper SDK macro
 DECLARE_COMPONENT_VERSION(
     "Tray Controls",
-    "1.4.3",
+    "1.4.4",
     "System tray controls for foobar2000.\n"
     "Features:\n"
     "- Minimize to system tray\n"
@@ -42,6 +42,26 @@ VALIDATE_COMPONENT_FILENAME("foo_traycontrols.dll");
 
 static ULONG_PTR g_gdiplusToken = 0;
 
+// Metadb callback to update control panel, popup window, and tray tooltip when stream metadata or display fields change
+class tray_metadb_callback : public metadb_io_callback_dynamic_impl_base {
+public:
+    void on_changed_sorted(metadb_handle_list_cref p_items_sorted, bool p_fromhook) override {
+        auto playback = playback_control::get();
+        if (!playback->is_playing() && !playback->is_paused()) return;
+
+        metadb_handle_ptr track;
+        if (playback->get_now_playing(track) && track.is_valid()) {
+            if (metadb_handle_list_helper::bsearch_by_pointer(p_items_sorted, track) != pfc_infinite) {
+                control_panel::get_instance().update_track_info(track);
+                popup_window::get_instance().update_track_info(track);
+                tray_manager::get_instance().update_tooltip(track);
+            }
+        }
+    }
+};
+
+static std::unique_ptr<tray_metadb_callback> g_metadb_callback;
+
 // Tray Controls initialization handler
 class tray_init : public initquit {
 public:
@@ -55,9 +75,13 @@ public:
         tray_manager::get_instance().initialize();
         // Initialize foo_artwork bridge for online artwork support
         init_artwork_bridge();
+        // Initialize metadb callback for dynamic stream metadata updates
+        g_metadb_callback = std::make_unique<tray_metadb_callback>();
     }
 
     void on_quit() override {
+        // Destroy metadb callback
+        g_metadb_callback.reset();
         // Unregister foo_artwork callback before other cleanup
         shutdown_artwork_bridge();
         // Clean up the tray manager, popup window, and control panel
@@ -101,6 +125,7 @@ public:
         tray_manager::get_instance().update_playback_state("Stopped");
         // Update control panel playback state
         control_panel::get_instance().update_track_info();
+        popup_window::get_instance().hide_popup();
     }
     
     // Required overrides for play_callback_static
