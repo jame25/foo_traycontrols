@@ -646,6 +646,12 @@ void control_panel::update_track_info(metadb_handle_ptr p_track) {
             bool is_stream = is_remote_stream_path(path.get_ptr());
             m_is_stream = is_stream;
 
+            bool track_changed = (track != m_last_loaded_track);
+            if (track_changed) {
+                m_last_stream_title.reset();
+                m_last_stream_artist.reset();
+            }
+
             if (is_stream && (!m_last_stream_title.is_empty() || !m_last_stream_artist.is_empty())) {
                 m_current_title = m_last_stream_title.is_empty() ? "Unknown Title" : m_last_stream_title;
                 m_current_artist = m_last_stream_artist.is_empty() ? "Unknown Artist" : m_last_stream_artist;
@@ -683,13 +689,26 @@ void control_panel::update_track_info(metadb_handle_ptr p_track) {
                 }
 
                 // Fallback for streams if format returned empty
-                if (is_stream && m_current_title.is_empty() && m_current_artist.is_empty()) {
+                if (is_stream && (m_current_title.is_empty() || m_current_artist.is_empty())) {
                     file_info_impl info;
                     if (track->get_info(info)) {
-                        if (info.meta_exists("server")) {
-                            m_current_title = info.meta_get("server", 0);
-                        } else if (info.meta_exists("SERVER")) {
-                            m_current_title = info.meta_get("SERVER", 0);
+                        if (m_current_title.is_empty()) {
+                            if (info.meta_exists("title")) {
+                                m_current_title = info.meta_get("title", 0);
+                            } else if (info.meta_exists("TITLE")) {
+                                m_current_title = info.meta_get("TITLE", 0);
+                            } else if (info.meta_exists("server")) {
+                                m_current_title = info.meta_get("server", 0);
+                            } else if (info.meta_exists("SERVER")) {
+                                m_current_title = info.meta_get("SERVER", 0);
+                            }
+                        }
+                        if (m_current_artist.is_empty()) {
+                            if (info.meta_exists("artist")) {
+                                m_current_artist = info.meta_get("artist", 0);
+                            } else if (info.meta_exists("ARTIST")) {
+                                m_current_artist = info.meta_get("ARTIST", 0);
+                            }
                         }
                     }
                 }
@@ -754,7 +773,12 @@ void control_panel::update_track_info(metadb_handle_ptr p_track) {
                 }
             }
         } else {
-            // Clear artwork if no valid track
+            // Clear artwork and state if no valid track
+            m_last_loaded_track = nullptr;
+            m_last_loaded_artist.reset();
+            m_last_loaded_title.reset();
+            m_last_stream_artist.reset();
+            m_last_stream_title.reset();
             cleanup_cover_art();
         }
         
@@ -1004,15 +1028,26 @@ void control_panel::on_online_artwork_received() {
             m_artwork_from_bridge = false; // We own the copy, cleanup_cover_art will DeleteObject
             m_online_artwork_pending = false;
 
-            m_last_loaded_artist = m_current_artist;
-            m_last_loaded_title = m_current_title;
             {
                 auto playback = playback_control::get();
                 metadb_handle_ptr track;
                 if (playback->get_now_playing(track) && track.is_valid()) {
                     m_last_loaded_track = track;
+                    pfc::string8 line1, line2;
+                    format_display_lines_track(track, line1, line2);
+                    if (!line1.is_empty() && line1 != "Unknown Title") {
+                        m_current_title = line1;
+                        m_last_stream_title = line1;
+                    }
+                    if (!line2.is_empty() && line2 != "Unknown Artist") {
+                        m_current_artist = line2;
+                        m_last_stream_artist = line2;
+                    }
                 }
             }
+
+            m_last_loaded_artist = m_current_artist;
+            m_last_loaded_title = m_current_title;
 
             BITMAP bm;
             if (GetObject(bitmap, sizeof(bm), &bm)) {
@@ -1097,8 +1132,6 @@ void control_panel::load_cover_art(metadb_handle_ptr p_track) {
             m_last_loaded_track = track;
             m_last_loaded_artist = artist;
             m_last_loaded_title = title;
-            m_last_stream_artist = artist;
-            m_last_stream_title = title;
             clear_pending_online_artwork();
 
             // 1. Try local/embedded artwork ONLY for local files (NEVER for streams - prevents network lockup)
@@ -1154,19 +1187,21 @@ void control_panel::load_cover_art(metadb_handle_ptr p_track) {
             m_last_loaded_title = title;
 
             if (is_artwork_bridge_available() && !is_bypass_stream(track)) {
-                // If foo_artwork already has active artwork available for this track/stream, grab it immediately
-                HBITMAP current_online = get_current_online_artwork();
-                if (current_online) {
-                    m_cover_art_bitmap = current_online;
-                    m_artwork_from_bridge = false;
-                    m_online_artwork_pending = false;
-                    BITMAP bm;
-                    if (GetObject(m_cover_art_bitmap, sizeof(bm), &bm)) {
-                        m_original_art_width = bm.bmWidth;
-                        m_original_art_height = bm.bmHeight;
+                // If restoring/reopening MiniPlayer for the same track and foo_artwork already has active artwork, grab it
+                if (!track_changed && !metadata_changed) {
+                    HBITMAP current_online = get_current_online_artwork();
+                    if (current_online) {
+                        m_cover_art_bitmap = current_online;
+                        m_artwork_from_bridge = false;
+                        m_online_artwork_pending = false;
+                        BITMAP bm;
+                        if (GetObject(m_cover_art_bitmap, sizeof(bm), &bm)) {
+                            m_original_art_width = bm.bmWidth;
+                            m_original_art_height = bm.bmHeight;
+                        }
+                        if (m_control_window) InvalidateRect(m_control_window, nullptr, FALSE);
+                        return;
                     }
-                    if (m_control_window) InvalidateRect(m_control_window, nullptr, FALSE);
-                    return;
                 }
 
                 if (!artist.is_empty() || !title.is_empty()) {
