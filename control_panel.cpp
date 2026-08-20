@@ -615,10 +615,49 @@ void control_panel::show_undocked_miniplayer() {
 
 static bool is_remote_stream_path(const char* path) {
     if (!path || path[0] == '\0') return false;
-    const char* proto = strstr(path, "://");
-    if (!proto) return false;
-    if (strncmp(path, "file://", 7) == 0 || strstr(path, "file://") != nullptr) return false;
-    return true;
+
+    // First check via foobar2000's filesystem service
+    try {
+        service_ptr_t<filesystem> fs;
+        if (filesystem::g_get_interface(fs, path)) {
+            return fs->is_remote(path);
+        }
+    } catch (...) {}
+
+    // Case-insensitive checks for local, archive, and disc formats
+    if (_strnicmp(path, "file://", 7) == 0 ||
+        _strnicmp(path, "unpack://", 9) == 0 ||
+        _strnicmp(path, "cdda://", 7) == 0 ||
+        _strnicmp(path, "cue://", 6) == 0 ||
+        _strnicmp(path, "zip://", 6) == 0 ||
+        _strnicmp(path, "rar://", 6) == 0 ||
+        _strnicmp(path, "7z://", 5) == 0 ||
+        _strnicmp(path, "iso://", 6) == 0 ||
+        _strnicmp(path, "subsong://", 10) == 0 ||
+        _strnicmp(path, "alac://", 7) == 0 ||
+        _strnicmp(path, "ape://", 6) == 0 ||
+        _strnicmp(path, "tak://", 6) == 0) {
+        return false;
+    }
+
+    // Standard remote streaming protocols
+    if (_strnicmp(path, "http://", 7) == 0 ||
+        _strnicmp(path, "https://", 8) == 0 ||
+        _strnicmp(path, "mms://", 6) == 0 ||
+        _strnicmp(path, "rtsp://", 7) == 0 ||
+        _strnicmp(path, "rtmp://", 7) == 0 ||
+        _strnicmp(path, "icy://", 6) == 0 ||
+        _strnicmp(path, "icecast://", 10) == 0 ||
+        _strnicmp(path, "hls://", 6) == 0) {
+        return true;
+    }
+
+    // Any embedded file:// reference
+    if (strstr(path, "file://") != nullptr || strstr(path, "FILE://") != nullptr) {
+        return false;
+    }
+
+    return false;
 }
 
 static const char* safe_meta_get(const file_info& info, const char* name) {
@@ -844,6 +883,18 @@ void control_panel::update_stream_metadata(const file_info & p_info) {
     if (!m_initialized) return;
 
     try {
+        metadb_handle_ptr track = m_last_loaded_track;
+        if (!track.is_valid()) {
+            auto playback = playback_control::get();
+            if (!playback->get_now_playing(track) || !track.is_valid()) {
+                return;
+            }
+        }
+        pfc::string8 path = track->get_path();
+        if (!is_remote_stream_path(path.get_ptr())) {
+            return;
+        }
+
         pfc::string8 artist, title;
 
         const char* p_artist = safe_meta_get(p_info, "ARTIST");
