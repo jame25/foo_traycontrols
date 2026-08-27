@@ -293,6 +293,31 @@ private:
     void cleanup_fonts();
     void apply_window_corner_preference();
     void composite_layered_content(); // Immediately re-render and composite the layered window
+    void free_layered_buffers();      // Free cached compositing memory surfaces
+
+    // Cached layered compositing buffers to eliminate per-frame GDI allocation churn
+    HDC m_cached_mem_dc = nullptr;
+    HBITMAP m_cached_mem_bitmap = nullptr;
+    HBITMAP m_cached_old_mem_bitmap = nullptr;
+    HDC m_cached_alpha_dc = nullptr;
+    HBITMAP m_cached_alpha_bitmap = nullptr;
+    HBITMAP m_cached_old_alpha_bitmap = nullptr;
+    void* m_cached_pv_bits = nullptr;
+    int m_cached_buffer_w = 0;
+    int m_cached_buffer_h = 0;
+
+    // Cached background and cover art rendering buffers to eliminate CPU re-computation
+    std::unique_ptr<Gdiplus::Bitmap> m_cached_bg_bitmap;
+    int m_cached_bg_w = 0;
+    int m_cached_bg_h = 0;
+    int m_cached_bg_style = -1;
+    HBITMAP m_cached_bg_source_art = nullptr;
+    bool m_cached_bg_dark = false;
+
+    std::unique_ptr<Gdiplus::Bitmap> m_cached_rounded_art;
+    int m_cached_rounded_art_w = 0;
+    int m_cached_rounded_art_h = 0;
+    HBITMAP m_cached_rounded_art_source = nullptr;
     
     // Event handlers
     void handle_button_click(int button_id);
