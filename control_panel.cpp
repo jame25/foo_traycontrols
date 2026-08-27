@@ -9,36 +9,54 @@
 // Apply an anti-aliased rounded-rectangle alpha mask to a 32-bit ARGB (BGRA) DIB section.
 // Pixels outside the rounded rectangle are made fully transparent; the corner edge is
 // anti-aliased using a 1px signed-distance coverage falloff for silky-smooth corners.
+// Optimized: sets bulk alpha to 255 and only calculates distance for the 4 corner bounding boxes.
 static void apply_rounded_corner_alpha(void* bits, int w, int h, float radius) {
     BYTE* px = static_cast<BYTE*>(bits);
-    if (!px) return;
-    const float cx = w * 0.5f;
-    const float cy = h * 0.5f;
-    const float hw = w * 0.5f - radius;
-    const float hh = h * 0.5f - radius;
+    if (!px || w <= 0 || h <= 0) return;
 
-    for (int y = 0; y < h; y++) {
-        const float py = (float)y + 0.5f - cy;
-        const float qy = fabsf(py) - hh;
-        const float ay = qy > 0.0f ? qy : 0.0f;
-        for (int x = 0; x < w; x++) {
-            const float p_x = (float)x + 0.5f - cx;
-            const float qx = fabsf(p_x) - hw;
-            const float ax = qx > 0.0f ? qx : 0.0f;
-            const float m = qx > qy ? qx : qy;
-            const float d = sqrtf(ax * ax + ay * ay) + (m < 0.0f ? m : 0.0f) - radius;
-            float coverage = 0.5f - d;
-            if (coverage < 0.0f) coverage = 0.0f;
-            if (coverage > 1.0f) coverage = 1.0f;
-            BYTE* p = px + (y * w + x) * 4;
-            const unsigned int a = (unsigned int)(coverage * 255.0f + 0.5f);
-            // Premultiply RGB by alpha (UpdateLayeredWindow AC_SRC_ALPHA expects premultiplied)
-            p[0] = (BYTE)(((unsigned int)p[0] * a + 127) / 255);
-            p[1] = (BYTE)(((unsigned int)p[1] * a + 127) / 255);
-            p[2] = (BYTE)(((unsigned int)p[2] * a + 127) / 255);
-            p[3] = (BYTE)a;
-        }
+    // 1. Fast bulk set alpha to 255 for the entire surface
+    uint32_t* p32 = reinterpret_cast<uint32_t*>(bits);
+    const int total_pixels = w * h;
+    for (int i = 0; i < total_pixels; i++) {
+        p32[i] |= 0xFF000000;
     }
+
+    if (radius <= 0.0f) return;
+
+    const int r_int = static_cast<int>(std::ceil(radius));
+    const int r_x = std::min(r_int, w / 2);
+    const int r_y = std::min(r_int, h / 2);
+
+    auto apply_corner = [&](int x_start, int x_end, int y_start, int y_end, float circle_cx, float circle_cy) {
+        for (int y = y_start; y < y_end; y++) {
+            const float py = (float)y + 0.5f - circle_cy;
+            const float py2 = py * py;
+            for (int x = x_start; x < x_end; x++) {
+                const float px_val = (float)x + 0.5f - circle_cx;
+                const float d = sqrtf(px_val * px_val + py2) - radius;
+                if (d > -0.5f) { // Only modify pixels near or outside the corner edge
+                    float coverage = 0.5f - d;
+                    if (coverage < 0.0f) coverage = 0.0f;
+                    if (coverage > 1.0f) coverage = 1.0f;
+                    BYTE* p = px + (y * w + x) * 4;
+                    const unsigned int a = static_cast<unsigned int>(coverage * 255.0f + 0.5f);
+                    p[0] = static_cast<BYTE>(((unsigned int)p[0] * a + 127) / 255);
+                    p[1] = static_cast<BYTE>(((unsigned int)p[1] * a + 127) / 255);
+                    p[2] = static_cast<BYTE>(((unsigned int)p[2] * a + 127) / 255);
+                    p[3] = static_cast<BYTE>(a);
+                }
+            }
+        }
+    };
+
+    // Top-left corner
+    apply_corner(0, r_x, 0, r_y, radius, radius);
+    // Top-right corner
+    apply_corner(w - r_x, w, 0, r_y, (float)w - radius, radius);
+    // Bottom-left corner
+    apply_corner(0, r_x, h - r_y, h, radius, (float)h - radius);
+    // Bottom-right corner
+    apply_corner(w - r_x, w, h - r_y, h, (float)w - radius, (float)h - radius);
 }
 
 // Timer constants
@@ -206,6 +224,38 @@ void control_panel::initialize() {
     m_initialized = true;
 }
 
+void control_panel::free_layered_buffers() {
+    if (m_cached_alpha_dc) {
+        if (m_cached_old_alpha_bitmap) {
+            SelectObject(m_cached_alpha_dc, m_cached_old_alpha_bitmap);
+            m_cached_old_alpha_bitmap = nullptr;
+        }
+        if (m_cached_alpha_bitmap) {
+            DeleteObject(m_cached_alpha_bitmap);
+            m_cached_alpha_bitmap = nullptr;
+        }
+        DeleteDC(m_cached_alpha_dc);
+        m_cached_alpha_dc = nullptr;
+    }
+    m_cached_pv_bits = nullptr;
+
+    if (m_cached_mem_dc) {
+        if (m_cached_old_mem_bitmap) {
+            SelectObject(m_cached_mem_dc, m_cached_old_mem_bitmap);
+            m_cached_old_mem_bitmap = nullptr;
+        }
+        if (m_cached_mem_bitmap) {
+            DeleteObject(m_cached_mem_bitmap);
+            m_cached_mem_bitmap = nullptr;
+        }
+        DeleteDC(m_cached_mem_dc);
+        m_cached_mem_dc = nullptr;
+    }
+
+    m_cached_buffer_w = 0;
+    m_cached_buffer_h = 0;
+}
+
 void control_panel::cleanup() {
     if (m_visible) {
         hide_control_panel_immediate(); // Use immediate hide during cleanup
@@ -225,6 +275,7 @@ void control_panel::cleanup() {
 
     cleanup_cover_art();
     cleanup_fonts();
+    free_layered_buffers();
     
     if (m_control_window) {
         DestroyWindow(m_control_window);
@@ -1296,6 +1347,11 @@ void control_panel::cleanup_cover_art() {
     m_last_loaded_track = nullptr;
     m_last_loaded_artist.clear();
     m_last_loaded_title.clear();
+
+    m_cached_bg_bitmap.reset();
+    m_cached_bg_source_art = nullptr;
+    m_cached_rounded_art.reset();
+    m_cached_rounded_art_source = nullptr;
 }
 
 HBITMAP control_panel::convert_album_art_to_bitmap(album_art_data_ptr art_data) {
@@ -2790,11 +2846,35 @@ void control_panel::composite_layered_content() {
     if (width <= 0 || height <= 0) return;
 
     HDC hdc = GetDC(m_control_window);
+    HDC hdcScreen = GetDC(nullptr);
 
-    // Double-buffering to eliminate flickering
-    HDC mem_dc = CreateCompatibleDC(hdc);
-    HBITMAP mem_bitmap = CreateCompatibleBitmap(hdc, width, height);
-    HBITMAP old_bitmap = (HBITMAP)SelectObject(mem_dc, mem_bitmap);
+    // Recreate cached off-screen memory buffers only when dimensions change
+    if (width != m_cached_buffer_w || height != m_cached_buffer_h || !m_cached_mem_dc || !m_cached_alpha_dc) {
+        free_layered_buffers();
+
+        m_cached_mem_dc = CreateCompatibleDC(hdc);
+        m_cached_mem_bitmap = CreateCompatibleBitmap(hdc, width, height);
+        m_cached_old_mem_bitmap = (HBITMAP)SelectObject(m_cached_mem_dc, m_cached_mem_bitmap);
+
+        BITMAPINFO bmi = {};
+        bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+        bmi.bmiHeader.biWidth = width;
+        bmi.bmiHeader.biHeight = -height; // Top-down DIB
+        bmi.bmiHeader.biPlanes = 1;
+        bmi.bmiHeader.biBitCount = 32;
+        bmi.bmiHeader.biCompression = BI_RGB;
+
+        m_cached_alpha_dc = CreateCompatibleDC(hdcScreen);
+        m_cached_alpha_bitmap = CreateDIBSection(m_cached_alpha_dc, &bmi, DIB_RGB_COLORS, &m_cached_pv_bits, nullptr, 0);
+        m_cached_old_alpha_bitmap = (HBITMAP)SelectObject(m_cached_alpha_dc, m_cached_alpha_bitmap);
+
+        m_cached_buffer_w = width;
+        m_cached_buffer_h = height;
+    }
+
+    HDC mem_dc = m_cached_mem_dc;
+    HDC alpha_dc = m_cached_alpha_dc;
+    void* pvBits = m_cached_pv_bits;
 
     // Pre-clear memory buffer with parent window DC background or container theme color
     // so outer corners match surrounding light/dark/custom container layout seamlessly
@@ -2826,21 +2906,6 @@ void control_panel::composite_layered_content() {
     // Paint to off-screen buffer
     paint_control_panel(mem_dc);
 
-    // Create 32-bit ARGB DIBSection for per-pixel alpha compositing
-    BITMAPINFO bmi = {};
-    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    bmi.bmiHeader.biWidth = width;
-    bmi.bmiHeader.biHeight = -height; // Top-down DIB
-    bmi.bmiHeader.biPlanes = 1;
-    bmi.bmiHeader.biBitCount = 32;
-    bmi.bmiHeader.biCompression = BI_RGB;
-
-    void* pvBits = nullptr;
-    HDC hdcScreen = GetDC(nullptr);
-    HDC alpha_dc = CreateCompatibleDC(hdcScreen);
-    HBITMAP alpha_bitmap = CreateDIBSection(alpha_dc, &bmi, DIB_RGB_COLORS, &pvBits, nullptr, 0);
-    HBITMAP old_alpha_bitmap = (HBITMAP)SelectObject(alpha_dc, alpha_bitmap);
-
     // Copy opaque content into the ARGB surface
     BitBlt(alpha_dc, 0, 0, width, height, mem_dc, 0, 0, SRCCOPY);
 
@@ -2849,10 +2914,11 @@ void control_panel::composite_layered_content() {
     if (is_rounded) {
         apply_rounded_corner_alpha(pvBits, width, height, 12.0f);
     } else if (pvBits) {
-        // Square corners - fully opaque
-        BYTE* px = static_cast<BYTE*>(pvBits);
-        for (int i = 0; i < width * height; i++) {
-            px[i * 4 + 3] = 255;
+        // Square corners - fast bulk opaque fill
+        uint32_t* p32 = reinterpret_cast<uint32_t*>(pvBits);
+        const int total_pixels = width * height;
+        for (int i = 0; i < total_pixels; i++) {
+            p32[i] |= 0xFF000000;
         }
     }
 
@@ -2872,13 +2938,6 @@ void control_panel::composite_layered_content() {
     blend.AlphaFormat = AC_SRC_ALPHA;
     UpdateLayeredWindow(m_control_window, hdcScreen, &ptDst, &size, alpha_dc, &ptSrc, 0, &blend, ULW_ALPHA);
 
-    // Cleanup
-    SelectObject(alpha_dc, old_alpha_bitmap);
-    DeleteObject(alpha_bitmap);
-    DeleteDC(alpha_dc);
-    SelectObject(mem_dc, old_bitmap);
-    DeleteObject(mem_bitmap);
-    DeleteDC(mem_dc);
     ReleaseDC(nullptr, hdcScreen);
     ReleaseDC(m_control_window, hdc);
 }
@@ -3381,7 +3440,7 @@ void control_panel::start_slide_out_animation() {
 }
 
 void control_panel::update_ticker() {
-    if (!m_control_window || !m_visible) {
+    if (!m_control_window || !m_visible || m_is_slid_to_side || m_sliding_animation) {
         KillTimer(m_control_window, TICKER_TIMER_ID);
         m_ticker_active = false;
         m_artist_ticker_active = false;
@@ -3416,7 +3475,7 @@ void control_panel::update_ticker() {
 }
 
 void control_panel::sync_ticker_timer() {
-    bool want_ticker = m_ticker_active || m_artist_ticker_active;
+    bool want_ticker = (m_ticker_active || m_artist_ticker_active) && m_visible && !m_is_slid_to_side && !m_sliding_animation;
     if (want_ticker) {
         int speed = get_ticker_speed();
         UINT interval;
@@ -3454,37 +3513,71 @@ void control_panel::update_text_ticker_internal(HDC hdc, const pfc::string8& tex
     SIZE text_size = {};
     GetTextExtentPoint32W(hdc, wide_text.get_ptr(), (int)wcslen(wide_text.get_ptr()), &text_size);
 
-    bool overflow = text_size.cx > area_width;
-    if (overflow) {
-        if (text != ticker_text) {
-            ticker_text = text;
-            offset = 0;
-            direction = 1;
-        }
-    } else {
-        ticker_text = text;
+    if (text_size.cx <= area_width) {
+        // Text fits without scrolling - draw normally
+        active = false;
         offset = 0;
-        direction = 1;
+        sync_ticker_timer();
+        RECT fit_rect = rect;
+        DrawText(hdc, wide_text.get_ptr(), -1, &fit_rect, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+        return;
     }
 
-    int max_offset = text_size.cx - area_width;
-    if (max_offset < 0) max_offset = 0;
-    if (offset < 0.0f) { offset = 0.0f; direction = 1; }
-    if (offset > (float)max_offset) { offset = (float)max_offset; direction = -1; }
-
-    active = overflow && (get_ticker_speed() != 0) && !is_short_title(text);
-    sync_ticker_timer();
-
-    SetBkMode(hdc, TRANSPARENT);
-    if (active) {
-        int text_y = rect.top + ((rect.bottom - rect.top - text_size.cy) / 2);
-        int rounded_offset = (int)(offset + 0.5f);
-        RECT text_clip = rect;
-        ExtTextOutW(hdc, rect.left - rounded_offset, text_y, ETO_CLIPPED, &text_clip, wide_text.get_ptr(), (UINT)wcslen(wide_text.get_ptr()), nullptr);
-    } else {
+    // Text exceeds available width - scrolling ticker needed if enabled
+    if (get_ticker_speed() == 0 || is_short_title(text)) {
+        // Ticker disabled in preferences or short title - draw with ellipsis
+        active = false;
+        offset = 0;
+        sync_ticker_timer();
         RECT fit_rect = rect;
         DrawText(hdc, wide_text.get_ptr(), -1, &fit_rect, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
+        return;
     }
+
+    // Detect text changes and reset offset
+    if (strcmp(ticker_text.c_str(), text.c_str()) != 0) {
+        ticker_text = text;
+        offset = 0;
+        direction = 1; // Start moving left
+    }
+
+    float max_offset = (float)(text_size.cx - area_width);
+    const float pause_distance = 15.0f; // Pixels of virtual pause distance at edges
+
+    if (direction > 0) {
+        // Moving left (offset increasing)
+        if (offset >= max_offset + pause_distance) {
+            direction = -1; // Reverse direction after right-edge pause
+            offset = max_offset;
+        }
+    } else {
+        // Moving right (offset decreasing)
+        if (offset <= -pause_distance) {
+            direction = 1; // Reverse direction after left-edge pause
+            offset = 0;
+        }
+    }
+
+    // Clip rendering to the available rect
+    int saved_dc = SaveDC(hdc);
+    HRGN clip_rgn = CreateRectRgn(rect.left, rect.top, rect.right, rect.bottom);
+    SelectClipRgn(hdc, clip_rgn);
+    DeleteObject(clip_rgn);
+
+    float draw_offset = offset;
+    if (draw_offset < 0) draw_offset = 0;
+    if (draw_offset > max_offset) draw_offset = max_offset;
+
+    RECT draw_rect = rect;
+    draw_rect.left -= (int)draw_offset;
+    draw_rect.right = draw_rect.left + text_size.cx;
+
+    DrawText(hdc, wide_text.get_ptr(), -1, &draw_rect, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+    RestoreDC(hdc, saved_dc);
+
+    // Activate ticker and ensure timer is running
+    active = true;
+    sync_ticker_timer();
 }
 
 void control_panel::update_title_ticker(HDC hdc, const pfc::string8& title, HFONT font, const RECT& rect) {
@@ -3521,9 +3614,9 @@ void control_panel::update_animation() {
         int current_x = m_start_x + (int)((m_final_x - m_start_x) * eased_progress);
         int current_y = m_start_y + (int)((m_final_y - m_start_y) * eased_progress);
         
-        // Move window to current position
-        SetWindowPos(m_control_window, HWND_TOPMOST, current_x, current_y, 0, 0, 
-                     SWP_NOSIZE | SWP_NOACTIVATE);
+        // Move window to current position without triggering desktop Z-order re-evaluation
+        SetWindowPos(m_control_window, nullptr, current_x, current_y, 0, 0, 
+                     SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOREDRAW | SWP_NOCOPYBITS);
     }
 }
 
@@ -3532,6 +3625,9 @@ void control_panel::slide_to_side() {
         return;
     }
     
+    // Stop text ticker during slide animation and while slid to side
+    KillTimer(m_control_window, TICKER_TIMER_ID);
+
     // Get current window position
     RECT window_rect;
     GetWindowRect(m_control_window, &window_rect);
@@ -3563,6 +3659,9 @@ void control_panel::slide_back_from_side() {
         return;
     }
     
+    // Stop text ticker during slide animation
+    KillTimer(m_control_window, TICKER_TIMER_ID);
+
     // Get current window position
     RECT window_rect;
     GetWindowRect(m_control_window, &window_rect);
@@ -3594,8 +3693,10 @@ void control_panel::update_slide_animation() {
         
         if (m_sliding_to_side) {
             m_is_slid_to_side = true;
+            KillTimer(m_control_window, TICKER_TIMER_ID);
         } else {
             m_is_slid_to_side = false;
+            sync_ticker_timer();
         }
         
         // Final position
@@ -3613,9 +3714,9 @@ void control_panel::update_slide_animation() {
         
         int current_x = m_slide_start_x + (int)((m_slide_target_x - m_slide_start_x) * eased_progress);
         
-        // Move window to current position
-        SetWindowPos(m_control_window, HWND_TOPMOST, current_x, m_pre_slide_y, 0, 0, 
-                     SWP_NOSIZE | SWP_NOACTIVATE);
+        // Move window to current position without triggering desktop Z-order re-evaluation or GDI screen blits
+        SetWindowPos(m_control_window, nullptr, current_x, m_pre_slide_y, 0, 0, 
+                     SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOREDRAW | SWP_NOCOPYBITS);
     }
 }
 
@@ -5122,78 +5223,86 @@ void control_panel::paint_background_style(HDC hdc, const RECT& rect) {
     int h = rect.bottom - rect.top;
     if (w <= 0 || h <= 0) return;
 
-    Gdiplus::Graphics g(hdc);
-    g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
-    g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
+    // Check if cached background bitmap is already valid
+    bool cache_valid = m_cached_bg_bitmap && 
+                       m_cached_bg_w == w && 
+                       m_cached_bg_h == h && 
+                       m_cached_bg_style == bg_style && 
+                       m_cached_bg_source_art == art_bm && 
+                       m_cached_bg_dark == m_is_dark_mode;
 
-    float stroke = 1.0f;
-    float pad = stroke * 0.5f;
-    float radius = 8.0f;
-    Gdiplus::GraphicsPath card_path;
-    if (is_rounded) {
-        add_rounded_rect_path(card_path, pad, pad, (float)w - stroke, (float)h - stroke, radius);
-    }
+    if (!cache_valid) {
+        m_cached_bg_bitmap = std::make_unique<Gdiplus::Bitmap>(w, h, PixelFormat32bppARGB);
+        Gdiplus::Graphics g(m_cached_bg_bitmap.get());
+        g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+        g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
 
-    if (bg_style == 1 && art_bm) {
-        BITMAP bmp;
-        if (GetObject(art_bm, sizeof(bmp), &bmp) && bmp.bmWidth > 0 && bmp.bmHeight > 0) {
-            HDC mem_dc = CreateCompatibleDC(hdc);
-            HBITMAP old_bm = (HBITMAP)SelectObject(mem_dc, art_bm);
+        float stroke = 1.0f;
+        float pad = stroke * 0.5f;
+        float radius = 8.0f;
+        Gdiplus::GraphicsPath card_path;
+        if (is_rounded) {
+            add_rounded_rect_path(card_path, pad, pad, (float)w - stroke, (float)h - stroke, radius);
+        }
 
-            long total_r = 0, total_g = 0, total_b = 0;
-            int pixel_count = 0;
-            const int grid_size = 8;
+        bool rendered = false;
+        if (bg_style == 1 && art_bm) {
+            BITMAP bmp;
+            if (GetObject(art_bm, sizeof(bmp), &bmp) && bmp.bmWidth > 0 && bmp.bmHeight > 0) {
+                HDC mem_dc = CreateCompatibleDC(hdc);
+                HBITMAP old_bm = (HBITMAP)SelectObject(mem_dc, art_bm);
 
-            for (int y = 0; y < grid_size; y++) {
-                int sample_y = (bmp.bmHeight * (y + 1)) / (grid_size + 1);
-                for (int x = 0; x < grid_size; x++) {
-                    int sample_x = (bmp.bmWidth * (x + 1)) / (grid_size + 1);
-                    COLORREF c = GetPixel(mem_dc, sample_x, sample_y);
-                    if (c != CLR_INVALID) {
-                        total_r += GetRValue(c);
-                        total_g += GetGValue(c);
-                        total_b += GetBValue(c);
-                        pixel_count++;
+                long total_r = 0, total_g = 0, total_b = 0;
+                int pixel_count = 0;
+                const int grid_size = 8;
+
+                for (int y = 0; y < grid_size; y++) {
+                    int sample_y = (bmp.bmHeight * (y + 1)) / (grid_size + 1);
+                    for (int x = 0; x < grid_size; x++) {
+                        int sample_x = (bmp.bmWidth * (x + 1)) / (grid_size + 1);
+                        COLORREF c = GetPixel(mem_dc, sample_x, sample_y);
+                        if (c != CLR_INVALID) {
+                            total_r += GetRValue(c);
+                            total_g += GetGValue(c);
+                            total_b += GetBValue(c);
+                            pixel_count++;
+                        }
                     }
                 }
-            }
 
-            SelectObject(mem_dc, old_bm);
-            DeleteDC(mem_dc);
+                SelectObject(mem_dc, old_bm);
+                DeleteDC(mem_dc);
 
-            if (pixel_count > 0) {
-                int avg_r = total_r / pixel_count;
-                int avg_g = total_g / pixel_count;
-                int avg_b = total_b / pixel_count;
+                if (pixel_count > 0) {
+                    int avg_r = total_r / pixel_count;
+                    int avg_g = total_g / pixel_count;
+                    int avg_b = total_b / pixel_count;
 
-                Gdiplus::Color primary(255, avg_r, avg_g, avg_b);
-                Gdiplus::Color secondary(255, avg_r * 65 / 100, avg_g * 65 / 100, avg_b * 65 / 100);
+                    Gdiplus::Color primary(255, avg_r, avg_g, avg_b);
+                    Gdiplus::Color secondary(255, avg_r * 65 / 100, avg_g * 65 / 100, avg_b * 65 / 100);
 
-                Gdiplus::Rect g_rect(rect.left, rect.top, w, h);
-                Gdiplus::LinearGradientBrush brush(
-                    Gdiplus::Point(rect.left, rect.top),
-                    Gdiplus::Point(rect.left + w, rect.top),
-                    secondary,
-                    primary
-                );
+                    Gdiplus::Rect g_rect(0, 0, w, h);
+                    Gdiplus::LinearGradientBrush brush(
+                        Gdiplus::Point(0, 0),
+                        Gdiplus::Point(w, 0),
+                        secondary,
+                        primary
+                    );
 
-                BYTE overlay_alpha = m_is_dark_mode ? 70 : 30;
-                Gdiplus::SolidBrush overlay(Gdiplus::Color(overlay_alpha, 0, 0, 0));
+                    BYTE overlay_alpha = m_is_dark_mode ? 70 : 30;
+                    Gdiplus::SolidBrush overlay(Gdiplus::Color(overlay_alpha, 0, 0, 0));
 
-                if (is_rounded) {
-                    g.FillPath(&brush, &card_path);
-                    g.FillPath(&overlay, &card_path);
-                } else {
-                    g.FillRectangle(&brush, g_rect);
-                    g.FillRectangle(&overlay, g_rect);
+                    if (is_rounded) {
+                        g.FillPath(&brush, &card_path);
+                        g.FillPath(&overlay, &card_path);
+                    } else {
+                        g.FillRectangle(&brush, g_rect);
+                        g.FillRectangle(&overlay, g_rect);
+                    }
+                    rendered = true;
                 }
-                return;
             }
-        }
-    } else if (bg_style == 2 && art_bm) {
-        int target_width = rect.right - rect.left;
-        int target_height = rect.bottom - rect.top;
-        if (target_width > 0 && target_height > 0) {
+        } else if (bg_style == 2 && art_bm) {
             std::unique_ptr<Gdiplus::Bitmap> src_bitmap = create_gdiplus_bitmap_from_hbitmap(hdc, art_bm);
             if (src_bitmap && src_bitmap->GetLastStatus() == Gdiplus::Ok) {
                 const int blur_size = 64;
@@ -5264,14 +5373,14 @@ void control_panel::paint_background_style(HDC hdc, const RECT& rect) {
                         }
                     }
 
-                    Gdiplus::Bitmap blurred_artwork(target_width, target_height, PixelFormat32bppARGB);
-                    Gdiplus::Rect outRect(0, 0, target_width, target_height);
+                    Gdiplus::Bitmap blurred_artwork(w, h, PixelFormat32bppARGB);
+                    Gdiplus::Rect outRect(0, 0, w, h);
                     Gdiplus::BitmapData outData;
                     if (blurred_artwork.LockBits(&outRect, Gdiplus::ImageLockModeWrite, PixelFormat32bppARGB, &outData) == Gdiplus::Ok) {
                         BYTE* outPixels = static_cast<BYTE*>(outData.Scan0);
                         int outStride = outData.Stride;
 
-                        float targetAspect = static_cast<float>(target_width) / static_cast<float>(target_height);
+                        float targetAspect = static_cast<float>(w) / static_cast<float>(h);
                         float srcX = 0, srcY = 0, srcW = static_cast<float>(blur_size), srcH = static_cast<float>(blur_size);
 
                         if (targetAspect > 1.0f) {
@@ -5282,12 +5391,12 @@ void control_panel::paint_background_style(HDC hdc, const RECT& rect) {
                             srcX = (blur_size - srcW) / 2.0f;
                         }
 
-                        for (int y = 0; y < target_height; y++) {
+                        for (int y = 0; y < h; y++) {
                             BYTE* outRow = outPixels + y * outStride;
-                            float sy_base = srcY + (y / static_cast<float>(target_height)) * srcH;
+                            float sy_base = srcY + (y / static_cast<float>(h)) * srcH;
 
-                            for (int x = 0; x < target_width; x++) {
-                                float sx = srcX + (x / static_cast<float>(target_width)) * srcW;
+                            for (int x = 0; x < w; x++) {
+                                float sx = srcX + (x / static_cast<float>(w)) * srcW;
                                 float sy = sy_base;
 
                                 int x0 = static_cast<int>(sx);
@@ -5326,23 +5435,34 @@ void control_panel::paint_background_style(HDC hdc, const RECT& rect) {
                             g.FillPath(&texBrush, &card_path);
                             g.FillPath(&overlayBrush, &card_path);
                         } else {
-                            g.DrawImage(&blurred_artwork, rect.left, rect.top, target_width, target_height);
-                            g.FillRectangle(&overlayBrush, rect.left, rect.top, target_width, target_height);
+                            g.DrawImage(&blurred_artwork, 0, 0, w, h);
+                            g.FillRectangle(&overlayBrush, 0, 0, w, h);
                         }
-                        return;
+                        rendered = true;
                     }
                 }
             }
         }
+
+        if (!rendered) {
+            Gdiplus::SolidBrush bg_brush(Gdiplus::Color(255, GetRValue(m_bg_color), GetGValue(m_bg_color), GetBValue(m_bg_color)));
+            if (is_rounded) {
+                g.FillPath(&bg_brush, &card_path);
+            } else {
+                g.FillRectangle(&bg_brush, 0, 0, w, h);
+            }
+        }
+
+        m_cached_bg_w = w;
+        m_cached_bg_h = h;
+        m_cached_bg_style = bg_style;
+        m_cached_bg_source_art = art_bm;
+        m_cached_bg_dark = m_is_dark_mode;
     }
 
-    Gdiplus::SolidBrush bg_brush(Gdiplus::Color(255, GetRValue(m_bg_color), GetGValue(m_bg_color), GetBValue(m_bg_color)));
-    if (is_rounded) {
-        g.FillPath(&bg_brush, &card_path);
-    } else {
-        HBRUSH h_brush = CreateSolidBrush(m_bg_color);
-        FillRect(hdc, &rect, h_brush);
-        DeleteObject(h_brush);
+    if (m_cached_bg_bitmap) {
+        Gdiplus::Graphics g_out(hdc);
+        g_out.DrawImage(m_cached_bg_bitmap.get(), rect.left, rect.top, w, h);
     }
 }
 
@@ -5352,69 +5472,75 @@ void control_panel::draw_cover_art_styled(HDC hdc, HBITMAP hbmp, const RECT& rec
     if (w <= 0 || h <= 0) return;
 
     if (is_rounded) {
-        float radius = (w < h ? (float)w : (float)h) * 0.10f;
-        if (radius < 4.0f) radius = 4.0f;
-        if (radius > 12.0f) radius = 12.0f;
-        float d = radius * 2.0f;
+        bool cache_valid = m_cached_rounded_art && 
+                           m_cached_rounded_art_w == w && 
+                           m_cached_rounded_art_h == h && 
+                           m_cached_rounded_art_source == hbmp;
 
-        // Draw artwork into an off-screen GDI+ bitmap for smooth anti-aliased corner rendering
-        Gdiplus::Bitmap offscreen(w, h, PixelFormat32bppPARGB);
-        {
-            Gdiplus::Graphics og(&offscreen);
-            og.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
-            og.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHighQuality);
+        if (!cache_valid) {
+            float radius = (w < h ? (float)w : (float)h) * 0.10f;
+            if (radius < 4.0f) radius = 4.0f;
+            if (radius > 12.0f) radius = 12.0f;
+            float d = radius * 2.0f;
 
-            if (hbmp) {
-                Gdiplus::Bitmap srcBitmap(hbmp, nullptr);
-                int srcW = srcBitmap.GetWidth();
-                int srcH = srcBitmap.GetHeight();
-                if (srcW > 0 && srcH > 0) {
-                    float srcAspect = (float)srcW / (float)srcH;
-                    float dstAspect = (float)w / (float)h;
-                    int cropX = 0, cropY = 0, cropW = srcW, cropH = srcH;
-                    if (srcAspect > dstAspect) {
-                        cropH = srcH;
-                        cropW = (int)(srcH * dstAspect);
-                        cropX = (srcW - cropW) / 2;
+            m_cached_rounded_art = std::make_unique<Gdiplus::Bitmap>(w, h, PixelFormat32bppPARGB);
+            Gdiplus::Bitmap offscreen(w, h, PixelFormat32bppPARGB);
+            {
+                Gdiplus::Graphics og(&offscreen);
+                og.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+                og.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHighQuality);
+
+                if (hbmp) {
+                    Gdiplus::Bitmap srcBitmap(hbmp, nullptr);
+                    int srcW = srcBitmap.GetWidth();
+                    int srcH = srcBitmap.GetHeight();
+                    if (srcW > 0 && srcH > 0) {
+                        float srcAspect = (float)srcW / (float)srcH;
+                        float dstAspect = (float)w / (float)h;
+                        int cropX = 0, cropY = 0, cropW = srcW, cropH = srcH;
+                        if (srcAspect > dstAspect) {
+                            cropH = srcH;
+                            cropW = (int)(srcH * dstAspect);
+                            cropX = (srcW - cropW) / 2;
+                        } else {
+                            cropW = srcW;
+                            cropH = (int)(srcW / dstAspect);
+                            cropY = (srcH - cropH) / 2;
+                        }
+                        Gdiplus::Rect destRect(0, 0, w, h);
+                        og.DrawImage(&srcBitmap, destRect, cropX, cropY, cropW, cropH, Gdiplus::UnitPixel);
                     } else {
-                        cropW = srcW;
-                        cropH = (int)(srcW / dstAspect);
-                        cropY = (srcH - cropH) / 2;
+                        Gdiplus::SolidBrush brush(Gdiplus::Color(255, GetRValue(m_placeholder_color), GetGValue(m_placeholder_color), GetBValue(m_placeholder_color)));
+                        og.FillRectangle(&brush, 0, 0, w, h);
                     }
-                    Gdiplus::Rect destRect(0, 0, w, h);
-                    og.DrawImage(&srcBitmap, destRect, cropX, cropY, cropW, cropH, Gdiplus::UnitPixel);
                 } else {
                     Gdiplus::SolidBrush brush(Gdiplus::Color(255, GetRValue(m_placeholder_color), GetGValue(m_placeholder_color), GetBValue(m_placeholder_color)));
                     og.FillRectangle(&brush, 0, 0, w, h);
                 }
-            } else {
-                Gdiplus::SolidBrush brush(Gdiplus::Color(255, GetRValue(m_placeholder_color), GetGValue(m_placeholder_color), GetBValue(m_placeholder_color)));
-                og.FillRectangle(&brush, 0, 0, w, h);
             }
+
+            // Build rounded-rect path
+            Gdiplus::GraphicsPath roundedPath;
+            roundedPath.AddArc(0.0f, 0.0f, d, d, 180, 90);
+            roundedPath.AddArc((float)w - d, 0.0f, d, d, 270, 90);
+            roundedPath.AddArc((float)w - d, (float)h - d, d, d, 0, 90);
+            roundedPath.AddArc(0.0f, (float)h - d, d, d, 90, 90);
+            roundedPath.CloseFigure();
+
+            Gdiplus::Graphics cg(m_cached_rounded_art.get());
+            cg.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+            Gdiplus::TextureBrush texBrush(&offscreen, Gdiplus::WrapModeClamp);
+            cg.FillPath(&texBrush, &roundedPath);
+
+            m_cached_rounded_art_w = w;
+            m_cached_rounded_art_h = h;
+            m_cached_rounded_art_source = hbmp;
         }
 
-        // Build rounded-rect path in destination coordinates
-        float x = (float)rect.left;
-        float y = (float)rect.top;
-        float fw = (float)w;
-        float fh = (float)h;
-
-        Gdiplus::GraphicsPath roundedPath;
-        roundedPath.AddArc(x, y, d, d, 180, 90);
-        roundedPath.AddArc(x + fw - d, y, d, d, 270, 90);
-        roundedPath.AddArc(x + fw - d, y + fh - d, d, d, 0, 90);
-        roundedPath.AddArc(x, y + fh - d, d, d, 90, 90);
-        roundedPath.CloseFigure();
-
-        // TextureBrush + FillPath with AntiAlias produces silky-smooth rounded corners
-        Gdiplus::Graphics g(hdc);
-        Gdiplus::TextureBrush texBrush(&offscreen, Gdiplus::WrapModeClamp);
-        texBrush.TranslateTransform((float)rect.left, (float)rect.top);
-
-        Gdiplus::SmoothingMode prevSmoothing = g.GetSmoothingMode();
-        g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
-        g.FillPath(&texBrush, &roundedPath);
-        g.SetSmoothingMode(prevSmoothing);
+        if (m_cached_rounded_art) {
+            Gdiplus::Graphics g(hdc);
+            g.DrawImage(m_cached_rounded_art.get(), rect.left, rect.top, w, h);
+        }
     } else {
         if (hbmp) {
             HDC cover_dc = CreateCompatibleDC(hdc);
@@ -5896,8 +6022,8 @@ void control_panel::paint_compact_mode(HDC hdc, const RECT& rect) {
         // Track title with ticker animation (right-to-left and back) for long titles
         update_title_ticker(hdc, m_current_title, title_font, title_rect);
         
-                        int artist_top = margin + (int)(window_height * 0.31);
-        int artist_bottom = margin + (int)(window_height * 0.63);
+        int artist_top = margin + (int)(window_height * 0.38);
+        int artist_bottom = margin + (int)(window_height * 0.70);
         RECT artist_rect = {text_left, artist_top, text_right, artist_bottom};
         update_artist_ticker(hdc, m_current_artist, artist_font, artist_rect, m_text_dim_color);
     }
