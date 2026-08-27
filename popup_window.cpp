@@ -1471,7 +1471,7 @@ void popup_window::draw_track_info(HDC hdc, const RECT& client_rect) {
     HFONT old_font = (HFONT)SelectObject(hdc, title_font);
     SetTextColor(hdc, title_color);
     
-    RECT title_rect = {text_left, 15, client_rect.right - 10, 35};
+    RECT title_rect = {text_left, 13, client_rect.right - 10, 39};
     pfc::stringcvt::string_wide_from_utf8 wide_title(title.c_str());
     DrawText(hdc, wide_title.get_ptr(), -1, &title_rect, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
     
@@ -1479,7 +1479,7 @@ void popup_window::draw_track_info(HDC hdc, const RECT& client_rect) {
     SelectObject(hdc, artist_font);
     SetTextColor(hdc, artist_color);
     
-    RECT artist_rect = {text_left, 40, client_rect.right - 10, 60};
+    RECT artist_rect = {text_left, 44, client_rect.right - 10, 68};
     pfc::stringcvt::string_wide_from_utf8 wide_artist(artist.c_str());
     DrawText(hdc, wide_artist.get_ptr(), -1, &artist_rect, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
     
