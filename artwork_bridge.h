@@ -29,6 +29,9 @@ void shutdown_artwork_bridge();
 
 // Check if foo_artwork integration is available
 inline bool is_artwork_bridge_available() {
+    if (!g_artwork_search) {
+        init_artwork_bridge();
+    }
     return g_artwork_search != nullptr;
 }
 
