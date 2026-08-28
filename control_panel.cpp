@@ -957,21 +957,64 @@ void control_panel::update_stream_metadata(const file_info & p_info) {
         }
 
         if (stream_title) {
-            const char* dash = strstr(stream_title, " - ");
-            if (dash) {
+            const char* tilde = strchr(stream_title, '~');
+            if (tilde) {
                 if (!p_artist) {
-                    artist.set_string(stream_title, dash - stream_title);
+                    artist.set_string(stream_title, tilde - stream_title);
                 }
                 if (!p_title) {
-                    title.set_string(dash + 3);
+                    const char* next_tilde = strchr(tilde + 1, '~');
+                    if (next_tilde) {
+                        title.set_string(tilde + 1, next_tilde - (tilde + 1));
+                    } else {
+                        title.set_string(tilde + 1);
+                    }
                 }
-            } else if (!p_title) {
-                title = stream_title;
+            } else {
+                const char* dash = strstr(stream_title, " - ");
+                if (!dash) dash = strstr(stream_title, " ˗ ");
+                if (!dash) dash = strstr(stream_title, " – ");
+                if (!dash) dash = strstr(stream_title, " / ");
+                if (dash) {
+                    if (!p_artist) {
+                        artist.set_string(stream_title, dash - stream_title);
+                    }
+                    if (!p_title) {
+                        size_t delim_len = (strstr(stream_title, " - ") == dash || strstr(stream_title, " / ") == dash) ? 3 : 4;
+                        title.set_string(dash + delim_len);
+                    }
+                } else if (!p_title) {
+                    title = stream_title;
+                }
             }
         }
 
         if (p_artist && artist.is_empty()) artist = p_artist;
         if (p_title && title.is_empty()) title = p_title;
+
+        if (artist.is_empty() && !title.is_empty()) {
+            pfc::string8 temp = title;
+            const char* tilde = strchr(temp.get_ptr(), '~');
+            if (tilde) {
+                artist.set_string(temp.get_ptr(), tilde - temp.get_ptr());
+                const char* next_tilde = strchr(tilde + 1, '~');
+                if (next_tilde) {
+                    title.set_string(tilde + 1, next_tilde - (tilde + 1));
+                } else {
+                    title.set_string(tilde + 1);
+                }
+            } else {
+                const char* dash = strstr(temp.get_ptr(), " - ");
+                if (!dash) dash = strstr(temp.get_ptr(), " ˗ ");
+                if (!dash) dash = strstr(temp.get_ptr(), " – ");
+                if (!dash) dash = strstr(temp.get_ptr(), " / ");
+                if (dash) {
+                    artist.set_string(temp.get_ptr(), dash - temp.get_ptr());
+                    size_t delim_len = (strstr(temp.get_ptr(), " - ") == dash || strstr(temp.get_ptr(), " / ") == dash) ? 3 : 4;
+                    title = dash + delim_len;
+                }
+            }
+        }
 
         if (artist.is_empty()) {
             const char* val = safe_meta_get(p_info, "ALBUMARTIST");
@@ -1283,16 +1326,14 @@ void control_panel::load_cover_art(metadb_handle_ptr p_track) {
             }
 
             // 2. Try online artwork via foo_artwork bridge
-            cleanup_cover_art();
-            m_last_loaded_track = track;
-            m_last_loaded_artist = artist;
-            m_last_loaded_title = title;
-
             if (is_artwork_bridge_available() && !is_bypass_stream(track)) {
-                // If restoring/reopening MiniPlayer for the same track and foo_artwork already has active artwork, grab it
-                if (!track_changed && !metadata_changed) {
+                if (is_stream) {
                     HBITMAP current_online = get_current_online_artwork();
                     if (current_online) {
+                        cleanup_cover_art();
+                        m_last_loaded_track = track;
+                        m_last_loaded_artist = artist;
+                        m_last_loaded_title = title;
                         m_cover_art_bitmap = current_online;
                         m_artwork_from_bridge = false;
                         m_online_artwork_pending = false;
@@ -1306,10 +1347,20 @@ void control_panel::load_cover_art(metadb_handle_ptr p_track) {
                     }
                 }
 
+                cleanup_cover_art();
+                m_last_loaded_track = track;
+                m_last_loaded_artist = artist;
+                m_last_loaded_title = title;
+
                 if (!artist.is_empty() || !title.is_empty()) {
                     request_online_artwork(artist.c_str(), title.c_str());
                     m_online_artwork_pending = true;
                 }
+            } else {
+                cleanup_cover_art();
+                m_last_loaded_track = track;
+                m_last_loaded_artist = artist;
+                m_last_loaded_title = title;
             }
             if (m_control_window) InvalidateRect(m_control_window, nullptr, FALSE);
             return;
