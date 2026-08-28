@@ -52,18 +52,24 @@ static HBITMAP copy_hbitmap(HBITMAP source) {
 // Called on foo_artwork's worker thread - must synchronize and marshal to main thread.
 static void artwork_result_callback(bool success, HBITMAP bitmap) {
     if (success && bitmap) {
-        {
-            std::lock_guard<std::mutex> lock(g_pending_mutex);
-            g_pending_artwork_bitmap = bitmap;
-            g_has_pending_artwork_popup = true;
-            g_has_pending_artwork_panel = true;
-        }
+        HBITMAP copy = copy_hbitmap(bitmap);
+        if (copy) {
+            {
+                std::lock_guard<std::mutex> lock(g_pending_mutex);
+                if (g_pending_artwork_bitmap) {
+                    DeleteObject(g_pending_artwork_bitmap);
+                }
+                g_pending_artwork_bitmap = copy;
+                g_has_pending_artwork_popup = true;
+                g_has_pending_artwork_panel = true;
+            }
 
-        // Marshal notification to main thread
-        fb2k::inMainThread([]() {
-            control_panel::get_instance().on_online_artwork_received();
-            popup_window::get_instance().on_online_artwork_received();
-        });
+            // Marshal notification to main thread
+            fb2k::inMainThread([]() {
+                control_panel::get_instance().on_online_artwork_received();
+                popup_window::get_instance().on_online_artwork_received();
+            });
+        }
     }
 }
 
@@ -108,7 +114,10 @@ void shutdown_artwork_bridge() {
         g_artwork_set_callback(nullptr); // Fallback for older foo_artwork
     }
     std::lock_guard<std::mutex> lock(g_pending_mutex);
-    g_pending_artwork_bitmap = nullptr;
+    if (g_pending_artwork_bitmap) {
+        DeleteObject(g_pending_artwork_bitmap);
+        g_pending_artwork_bitmap = nullptr;
+    }
     g_has_pending_artwork_popup = false;
     g_has_pending_artwork_panel = false;
 }
@@ -119,14 +128,18 @@ static std::string g_last_requested_title;
 
 void clear_pending_online_artwork() {
     std::lock_guard<std::mutex> lock(g_pending_mutex);
-    g_pending_artwork_bitmap = nullptr;
+    if (g_pending_artwork_bitmap) {
+        DeleteObject(g_pending_artwork_bitmap);
+        g_pending_artwork_bitmap = nullptr;
+    }
     g_has_pending_artwork_popup = false;
     g_has_pending_artwork_panel = false;
 }
 
 void request_online_artwork(const char* artist, const char* title) {
     if (!g_artwork_search) {
-        return;
+        init_artwork_bridge();
+        if (!g_artwork_search) return;
     }
 
     const char* safe_artist = artist ? artist : "";
@@ -136,15 +149,18 @@ void request_online_artwork(const char* artist, const char* title) {
         return;
     }
 
-    // Deduplicate: If already searching or searched for this exact artist & title, don't re-issue search
+    // Deduplicate: If already searching or searched for this exact artist & title and artwork is pending, don't re-issue search
     {
         std::lock_guard<std::mutex> lock(g_pending_mutex);
-        if (g_last_requested_artist == safe_artist && g_last_requested_title == safe_title) {
+        if (g_last_requested_artist == safe_artist && g_last_requested_title == safe_title && (g_has_pending_artwork_popup || g_has_pending_artwork_panel)) {
             return;
         }
         g_last_requested_artist = safe_artist;
         g_last_requested_title = safe_title;
-        g_pending_artwork_bitmap = nullptr;
+        if (g_pending_artwork_bitmap) {
+            DeleteObject(g_pending_artwork_bitmap);
+            g_pending_artwork_bitmap = nullptr;
+        }
         g_has_pending_artwork_popup = false;
         g_has_pending_artwork_panel = false;
     }
