@@ -409,16 +409,35 @@ void tray_manager::update_tooltip_with_dynamic_info(const file_info & p_info) {
         }
 
         if (stream_title) {
-            const char* dash = strstr(stream_title, " - ");
-            if (dash) {
+            const char* tilde = strchr(stream_title, '~');
+            if (tilde) {
                 if (!p_artist) {
-                    artist.set_string(stream_title, dash - stream_title);
+                    artist.set_string(stream_title, tilde - stream_title);
                 }
                 if (!p_title) {
-                    title.set_string(dash + 3);
+                    const char* next_tilde = strchr(tilde + 1, '~');
+                    if (next_tilde) {
+                        title.set_string(tilde + 1, next_tilde - (tilde + 1));
+                    } else {
+                        title.set_string(tilde + 1);
+                    }
                 }
-            } else if (!p_title) {
-                title = stream_title;
+            } else {
+                const char* dash = strstr(stream_title, " - ");
+                if (!dash) dash = strstr(stream_title, " ˗ ");
+                if (!dash) dash = strstr(stream_title, " – ");
+                if (!dash) dash = strstr(stream_title, " / ");
+                if (dash) {
+                    if (!p_artist) {
+                        artist.set_string(stream_title, dash - stream_title);
+                    }
+                    if (!p_title) {
+                        size_t delim_len = (strstr(stream_title, " - ") == dash || strstr(stream_title, " / ") == dash) ? 3 : 4;
+                        title.set_string(dash + delim_len);
+                    }
+                } else if (!p_title) {
+                    title = stream_title;
+                }
             }
         }
 
@@ -427,10 +446,25 @@ void tray_manager::update_tooltip_with_dynamic_info(const file_info & p_info) {
 
         if (artist.is_empty() && !title.is_empty()) {
             pfc::string8 temp = title;
-            const char* dash = strstr(temp.get_ptr(), " - ");
-            if (dash) {
-                artist.set_string(temp.get_ptr(), dash - temp.get_ptr());
-                title = dash + 3;
+            const char* tilde = strchr(temp.get_ptr(), '~');
+            if (tilde) {
+                artist.set_string(temp.get_ptr(), tilde - temp.get_ptr());
+                const char* next_tilde = strchr(tilde + 1, '~');
+                if (next_tilde) {
+                    title.set_string(tilde + 1, next_tilde - (tilde + 1));
+                } else {
+                    title.set_string(tilde + 1);
+                }
+            } else {
+                const char* dash = strstr(temp.get_ptr(), " - ");
+                if (!dash) dash = strstr(temp.get_ptr(), " ˗ ");
+                if (!dash) dash = strstr(temp.get_ptr(), " – ");
+                if (!dash) dash = strstr(temp.get_ptr(), " / ");
+                if (dash) {
+                    artist.set_string(temp.get_ptr(), dash - temp.get_ptr());
+                    size_t delim_len = (strstr(temp.get_ptr(), " - ") == dash || strstr(temp.get_ptr(), " / ") == dash) ? 3 : 4;
+                    title = dash + delim_len;
+                }
             }
         }
 
